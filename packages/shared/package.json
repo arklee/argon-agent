@@ -1,0 +1,17 @@
+{
+	"name": "@argon/shared",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Wire protocol, client interface and transcript reducer shared by Argon backend and frontends. No Node, Electron or React dependencies.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"vitest": "^4.1.0"
+	}
+}

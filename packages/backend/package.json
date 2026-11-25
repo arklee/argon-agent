@@ -1,0 +1,31 @@
+{
+	"name": "@argon/backend",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Argon backend: hosts pi SDK sessions and serves the Argon protocol over WebSocket. Pure Node, no Electron.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"bin": {
+		"argon-backend": "./src/main.ts"
+	},
+	"scripts": {
+		"dev": "tsx watch --clear-screen=false src/main.ts",
+		"start": "tsx src/main.ts",
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "vitest run --passWithNoTests"
+	},
+	"dependencies": {
+		"@argon/shared": "*",
+		"@earendil-works/pi-ai": "1.6.1",
+		"@earendil-works/pi-coding-agent": "1.6.1",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"@types/ws": "^8.18.0",
+		"tsx": "^4.20.0",
+		"vitest": "^4.1.0"
+	}
+}
