@@ -2,6 +2,9 @@
 
 Argon 是基于 pi coding agent（`@earendil-works/pi-coding-agent`）的 GUI agent。它不只是给 pi 套一个图形界面，必要时也会改动 pi 的行为。目标外观对标 ChatGPT / Claude 桌面应用。
 
+- 选型和架构决策的来龙去脉：[docs/decisions.md](docs/decisions.md)。要推翻其中某条决定前，先读对应小节。
+- 路线图和 TODO：[docs/roadmap.md](docs/roadmap.md)。完成一项就勾选；发现的新问题记到对应阶段或"技术债"一节。
+
 ## 架构
 
 ```

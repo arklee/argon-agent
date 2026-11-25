@@ -18,3 +18,9 @@ npm run dev
 ```
 
 打开终端里打印的 `http://localhost:5173/#token=...` 链接。
+
+## 文档
+
+- [CLAUDE.md](CLAUDE.md)：架构边界与开发约定
+- [docs/decisions.md](docs/decisions.md)：技术选型与架构决策
+- [docs/roadmap.md](docs/roadmap.md)：路线图与 TODO
