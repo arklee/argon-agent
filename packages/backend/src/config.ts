@@ -20,7 +20,8 @@ export interface BackendConfig {
 	token: string;
 	/** Allowed Origin headers for WebSocket upgrades. Requests without Origin (non-browser) are allowed. */
 	allowedOrigins: string[];
-	defaultPermissionMode: PermissionMode;
+	/** ARGON_PERMISSION_MODE, when set; otherwise the default comes from Argon settings. */
+	permissionModeOverride?: PermissionMode;
 	environment: EnvironmentInfo;
 }
 
@@ -51,7 +52,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 		.split(",")
 		.map((s) => s.trim())
 		.filter(Boolean);
-	const defaultPermissionMode: PermissionMode = env.ARGON_PERMISSION_MODE === "auto" ? "auto" : "ask";
+	const permissionModeOverride: PermissionMode | undefined =
+		env.ARGON_PERMISSION_MODE === "auto" ? "auto" : env.ARGON_PERMISSION_MODE === "ask" ? "ask" : undefined;
 	return {
 		argonHome,
 		agentDir: env.ARGON_PI_AGENT_DIR ?? getAgentDir(),
@@ -59,7 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 		port,
 		token,
 		allowedOrigins,
-		defaultPermissionMode,
+		permissionModeOverride,
 		environment: {
 			id: loadEnvironmentId(argonHome),
 			name: env.ARGON_ENV_NAME ?? hostname(),

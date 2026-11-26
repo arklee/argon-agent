@@ -84,13 +84,16 @@ export type Interaction =
 			args: unknown;
 			/** Preview of the file change, for edit/write (see ToolCallState.diff). */
 			diff?: string;
+			/** The rule "Always allow" would save, e.g. { tool: "bash", command: "npm test" }. */
+			suggestedRule?: PermissionRule;
 	  });
 
 export type InteractionResponse =
 	| { cancelled: true }
 	| { value: string }
 	| { confirmed: boolean }
-	| { decision: "allow" | "allow_session" | "deny"; reason?: string };
+	/** allow_always: also save a rule (`rule`, or the suggestion in the request) to Argon settings. */
+	| { decision: "allow" | "allow_session" | "allow_always" | "deny"; reason?: string; rule?: PermissionRule };
 
 // --- MCP (per session: each session loads its own MCP servers, including the project's mcp.json) ---
 
@@ -173,6 +176,101 @@ export interface ProjectPrefs {
 	pinned?: boolean;
 	/** Hidden from the sidebar; its sessions are kept. */
 	hidden?: boolean;
+}
+
+// --- Providers and accounts (backend-wide, shared with the pi CLI through auth.json) ---
+
+export type AuthType = "api_key" | "oauth";
+
+export interface ProviderInfo {
+	id: string;
+	name: string;
+	/** "plugin": a magpie community plugin provider. */
+	origin: "builtin" | "plugin";
+	/** Whether requests can authenticate, and from where (stored credential, env var, ...). */
+	auth: { configured: boolean; source?: string; label?: string };
+	/** Stored credential type, when one is stored (logout removes it). */
+	stored?: AuthType;
+	/** Interactive login methods. Empty: configured through the environment only. */
+	methods: { type: AuthType; name: string; label?: string; subscription?: boolean }[];
+	modelCount: number;
+}
+
+/** A question a login flow waits on. `select` answers with an option id. */
+export interface AuthPromptInfo {
+	id: string;
+	type: "text" | "secret" | "select" | "manual_code";
+	message: string;
+	placeholder?: string;
+	options?: { id: string; label: string; description?: string }[];
+}
+
+export type AuthFlowEvent =
+	| { type: "info"; message: string; links?: { url: string; label?: string }[] }
+	| { type: "auth_url"; url: string; instructions?: string }
+	| { type: "device_code"; userCode: string; verificationUri: string; expiresInSeconds?: number }
+	| { type: "progress"; message: string };
+
+/** A login in progress (or just finished). Owned by the backend: any client can answer it. */
+export interface AuthFlow {
+	flowId: string;
+	providerId: string;
+	providerName: string;
+	type: AuthType;
+	status: "running" | "succeeded" | "failed" | "cancelled";
+	prompt?: AuthPromptInfo;
+	events: AuthFlowEvent[];
+	error?: string;
+	startedAt: number;
+}
+
+/** magpie community plugins (installed into magpie's own state directory on the backend machine). */
+export interface PluginInfo {
+	spec: string;
+	/** Installed by the plugin manager (removable); false = configured by hand. */
+	managed: boolean;
+}
+
+// --- Settings ---
+
+/** The agent-relevant subset of pi's settings (global scope, ~/.pi/agent/settings.json). */
+export interface PiSettings {
+	defaultModel?: ModelRef;
+	defaultThinkingLevel?: ThinkingLevel;
+	/** Model patterns offered for cycling/selection; undefined = all. */
+	enabledModels?: string[];
+	steeringMode: "all" | "one-at-a-time";
+	followUpMode: "all" | "one-at-a-time";
+	compaction: boolean;
+	retry: boolean;
+	shellPath?: string;
+	shellCommandPrefix?: string;
+	imageAutoResize: boolean;
+	blockImages: boolean;
+	enableSkillCommands: boolean;
+	defaultProjectTrust: string;
+}
+
+/** Resources a scope loads (read-only view; edit with pi's own commands or the settings files). */
+export interface ResourceSettings {
+	scope: "global" | "project";
+	/** Backend path of the settings file. */
+	path: string;
+	packages: string[];
+	extensions: string[];
+	skills: string[];
+	prompts: string[];
+}
+
+/** A persisted "always allow" rule. `command` (bash only) matches commands equal to it or starting with it plus a space. */
+export interface PermissionRule {
+	tool: string;
+	command?: string;
+}
+
+/** Argon's own settings, per backend environment ($ARGON_HOME/settings.json). */
+export interface ArgonSettings {
+	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
 }
 
 export interface StatusEntry {
@@ -279,6 +377,9 @@ export type GlobalEvent =
 	| { type: "sessions_changed" }
 	| { type: "session_unloaded"; sessionId: string }
 	| { type: "projects_changed" }
+	/** Providers, their auth state or their models changed (login, logout, plugin changes). */
+	| { type: "providers_changed" }
+	| { type: "auth_flow"; flow: AuthFlow }
 	/**
 	 * An extension in `fromSessionId` started or switched to another session (pi's newSession / fork /
 	 * switchSession). Clients showing `fromSessionId` should open `sessionPath`.
@@ -399,6 +500,39 @@ export interface Methods {
 	"sessions.fork": { params: { sessionId: string; itemId: string }; result: { sessionPath: string; text: string } };
 	/** New session with a copy of the current branch (pi's /clone). */
 	"sessions.clone": { params: { sessionId: string }; result: { sessionPath: string } };
+	"providers.list": { params: Record<string, never>; result: { providers: ProviderInfo[] } };
+	/** Start a login; progress and prompts arrive as `auth_flow` events. */
+	"auth.login": { params: { providerId: string; type: AuthType }; result: { flowId: string } };
+	/** Running and recently finished flows (for clients that (re)connect mid-login). */
+	"auth.flows": { params: Record<string, never>; result: { flows: AuthFlow[] } };
+	"auth.respond": { params: { flowId: string; promptId: string; value: string }; result: { accepted: boolean } };
+	"auth.cancel": { params: { flowId: string }; result: Record<string, never> };
+	"auth.logout": { params: { providerId: string }; result: Record<string, never> };
+	"plugins.list": {
+		params: Record<string, never>;
+		result: { plugins: PluginInfo[]; errors: string[]; available: boolean };
+	};
+	"plugins.search": {
+		params: { query: string };
+		result: { results: { name: string; version: string; description?: string }[] };
+	};
+	/**
+	 * Install or remove a community plugin, then restart the plugin host. `confirmed` must be true:
+	 * plugins run with the backend user's privileges, so the client has to ask the user first.
+	 */
+	"plugins.change": {
+		params: { action: "install" | "remove"; spec: string; confirmed: boolean };
+		result: { message: string };
+	};
+	"settings.get": {
+		params: { cwd?: string };
+		result: { pi: PiSettings; resources: ResourceSettings[]; argon: ArgonSettings };
+	};
+	/** Changes apply to sessions started afterwards (loaded sessions keep their settings until reopened). */
+	"settings.update": {
+		params: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> };
+		result: Record<string, never>;
+	};
 	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };
 	"projects.update": {
 		params: { cwd: string; pinned?: boolean; hidden?: boolean };

@@ -5,16 +5,27 @@
 import { existsSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { GlobalEvent, ModelInfo, ModelRef, PermissionMode, ProjectPrefs, SessionSummary } from "@argon/shared";
+import type {
+	ArgonSettings,
+	GlobalEvent,
+	ModelInfo,
+	ModelRef,
+	PiSettings,
+	ProjectPrefs,
+	SessionSummary,
+} from "@argon/shared";
 import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import { AuthFlows } from "./auth-flows.ts";
 import { log } from "./log.ts";
+import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
+import { type ArgonSettingsStore, readPiSettings, writePiSettings } from "./settings.ts";
 
 export interface RegistryOptions {
 	agentDir: string;
 	/** Argon's own state directory (project preferences live here). */
 	argonHome: string;
-	defaultPermissionMode: PermissionMode;
+	settings: ArgonSettingsStore;
 }
 
 export class SessionRegistry {
@@ -23,10 +34,42 @@ export class SessionRegistry {
 	private readonly opening = new Map<string, Promise<ManagedSession>>();
 	private readonly globalListeners = new Set<(event: GlobalEvent) => void>();
 
+	readonly magpie: MagpieHost;
+	readonly auth: AuthFlows;
+
 	private constructor(
 		private readonly options: RegistryOptions,
 		readonly modelRuntime: ModelRuntime,
-	) {}
+	) {
+		// Before any session loads: a magpie-pi extension from the user's pi packages must stay
+		// inactive in this process (magpie runs once, backend-wide; see magpie-host.ts).
+		process.env.MAGPIE_PI_EMBEDDED = "1";
+		this.magpie = new MagpieHost(modelRuntime);
+		this.auth = new AuthFlows(
+			modelRuntime,
+			(flow) => this.broadcast({ type: "auth_flow", flow }),
+			() => this.broadcast({ type: "providers_changed" }),
+			(providerId) => this.magpie.isPluginProvider(providerId),
+		);
+		// Plugin hosts can take a few seconds; sessions do not wait for them.
+		void this.magpie.start().then(() => this.broadcast({ type: "providers_changed" }));
+	}
+
+	readSettings(cwd: string | undefined) {
+		return { ...readPiSettings(this.options.agentDir, cwd), argon: this.options.settings.get() };
+	}
+
+	async updateSettings(update: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> }): Promise<void> {
+		if (update.pi) await writePiSettings(this.options.agentDir, update.pi);
+		if (update.argon) await this.options.settings.update(update.argon);
+	}
+
+	/** Restart magpie after plugin changes; providers appear/disappear for all sessions. */
+	async changePlugin(action: "install" | "remove", spec: string): Promise<string> {
+		const message = await this.magpie.change(action, spec);
+		this.broadcast({ type: "providers_changed" });
+		return message;
+	}
 
 	static async create(options: RegistryOptions): Promise<SessionRegistry> {
 		const modelRuntime = await ModelRuntime.create({
@@ -217,6 +260,8 @@ export class SessionRegistry {
 		const sessions = [...this.sessions.values()];
 		this.sessions.clear();
 		await Promise.allSettled(sessions.map((s) => s.dispose()));
+		this.auth.dispose();
+		await this.magpie.dispose().catch(() => undefined);
 		await this.modelRuntime.settleCredentialWrites().catch(() => undefined);
 	}
 
@@ -224,7 +269,7 @@ export class SessionRegistry {
 		return {
 			agentDir: this.options.agentDir,
 			modelRuntime: this.modelRuntime,
-			defaultPermissionMode: this.options.defaultPermissionMode,
+			settings: this.options.settings,
 			sessionHost: this.sessionHost,
 		};
 	}

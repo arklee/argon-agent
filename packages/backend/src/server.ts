@@ -201,6 +201,33 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		},
 		"sessions.fork": async (params) => registry.fork(params.sessionId, params.itemId),
 		"sessions.clone": async (params) => registry.clone(params.sessionId),
+		"providers.list": async () => ({ providers: registry.auth.listProviders() }),
+		"auth.login": async (params) => ({ flowId: registry.auth.start(params.providerId, params.type) }),
+		"auth.flows": async () => ({ flows: registry.auth.list() }),
+		"auth.respond": async (params) => ({
+			accepted: registry.auth.respond(params.flowId, params.promptId, params.value),
+		}),
+		"auth.cancel": async (params) => {
+			registry.auth.cancel(params.flowId);
+			return empty;
+		},
+		"auth.logout": async (params) => {
+			await registry.auth.logout(params.providerId);
+			return empty;
+		},
+		"plugins.list": async () => ({ ...(await registry.magpie.list()), available: true }),
+		"plugins.search": async (params) => ({ results: await registry.magpie.search(params.query) }),
+		"plugins.change": async (params) => {
+			if (params.confirmed !== true) {
+				throw new RequestError("bad_request", "Plugin changes must be confirmed by the user (confirmed: true)");
+			}
+			return { message: await registry.changePlugin(params.action, params.spec) };
+		},
+		"settings.get": async (params) => registry.readSettings(params.cwd),
+		"settings.update": async (params) => {
+			await registry.updateSettings(params);
+			return empty;
+		},
 		"projects.list": async () => ({ projects: await registry.listProjects() }),
 		"projects.update": async (params) => {
 			if (!params.cwd) throw new RequestError("bad_request", "cwd is required");

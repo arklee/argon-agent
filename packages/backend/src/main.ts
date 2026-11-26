@@ -5,13 +5,16 @@ import { loadConfig } from "./config.ts";
 import { log } from "./log.ts";
 import { SessionRegistry } from "./registry.ts";
 import { startServer } from "./server.ts";
+import { ArgonSettingsStore } from "./settings.ts";
 
 async function main(): Promise<void> {
 	const config = loadConfig();
+	const settings = new ArgonSettingsStore(config.argonHome, config.permissionModeOverride);
+	await settings.load();
 	const registry = await SessionRegistry.create({
+		settings,
 		argonHome: config.argonHome,
 		agentDir: config.agentDir,
-		defaultPermissionMode: config.defaultPermissionMode,
 	});
 	const server = await startServer(registry, config);
 

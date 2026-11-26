@@ -52,16 +52,20 @@ import {
 	type ToolCallCheck,
 	type ToolCallDecision,
 } from "./permissions.ts";
+import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
 
 const REPLAY_BUFFER_SIZE = 5000;
+/** Custom session entry recording the session's permission mode. */
+const PERMISSION_ENTRY = "argon.permission_mode";
 const IDEMPOTENCY_CACHE_SIZE = 200;
 
 export interface ManagedSessionDeps {
 	agentDir: string;
 	modelRuntime: ModelRuntime;
-	defaultPermissionMode: PermissionMode;
+	/** Default permission mode and persisted "always allow" rules. */
+	settings: ArgonSettingsStore;
 	/**
 	 * Session switches started by extensions (pi's newSession / fork / switchSession). The registry
 	 * loads the target and tells clients to follow; Argon keeps one ManagedSession per session.
@@ -111,6 +115,7 @@ export class ManagedSession {
 		permissionMode: PermissionMode,
 		private readonly sessionHost?: ExtensionSessionHost,
 		private readonly modelRuntime?: ModelRuntime,
+		private readonly settings?: ArgonSettingsStore,
 	) {
 		const session = runtime.session;
 		this.state = createEmptySessionState({
@@ -176,9 +181,10 @@ export class ManagedSession {
 			runtime,
 			mcp,
 			deps.agentDir,
-			deps.defaultPermissionMode,
+			ManagedSession.storedPermissionMode(sessionManager) ?? deps.settings.defaultPermissionMode,
 			deps.sessionHost,
 			deps.modelRuntime,
+			deps.settings,
 		);
 		self = managed;
 		await managed.bind();
@@ -503,6 +509,20 @@ export class ManagedSession {
 
 	setPermissionMode(mode: PermissionMode): void {
 		this.emit({ type: "permission_mode_changed", mode });
+		// Stored in the session file, so reopening the session restores it.
+		this.session.sessionManager.appendCustomEntry(PERMISSION_ENTRY, { mode });
+	}
+
+	/** The permission mode last chosen in this session, if any (see setPermissionMode). */
+	static storedPermissionMode(sessionManager: SessionManager): PermissionMode | undefined {
+		const entries = sessionManager.getEntries();
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i] as { type?: string; customType?: string; data?: { mode?: unknown } };
+			if (entry.type === "custom" && entry.customType === PERMISSION_ENTRY) {
+				return entry.data?.mode === "auto" ? "auto" : entry.data?.mode === "ask" ? "ask" : undefined;
+			}
+		}
+		return undefined;
 	}
 
 	rename(name: string): void {
@@ -751,13 +771,26 @@ export class ManagedSession {
 		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff });
 		if (this.state.permissionMode === "auto") return { allow: true };
 		if (READ_ONLY_TOOLS.has(check.toolName) || this.sessionAllowedTools.has(check.toolName)) return { allow: true };
+		if (this.settings?.allows(check.toolName, check.input)) return { allow: true };
+		const suggestedRule = suggestRule(check.toolName, check.input);
 		const response = await this.broker.request(
-			{ kind: "tool_approval", toolCallId: check.toolCallId, toolName: check.toolName, args: check.input, diff },
+			{
+				kind: "tool_approval",
+				toolCallId: check.toolCallId,
+				toolName: check.toolName,
+				args: check.input,
+				diff,
+				suggestedRule,
+			},
 			{ signal: check.signal, fallback: { decision: "deny", reason: "Cancelled" } },
 		);
 		const decision = "decision" in response ? response.decision : "deny";
 		if (decision === "allow_session") this.sessionAllowedTools.add(check.toolName);
-		if (decision === "allow" || decision === "allow_session") return { allow: true };
+		if (decision === "allow_always") {
+			const rule = ("rule" in response && response.rule) || suggestedRule;
+			if (rule) await this.settings?.addRule(rule).catch((e) => log.warn(`could not save permission rule: ${e}`));
+		}
+		if (decision === "allow" || decision === "allow_session" || decision === "allow_always") return { allow: true };
 		const reason = "decision" in response && response.reason ? `Denied by user: ${response.reason}` : "Denied by user";
 		this.emit({ type: "tool_blocked", toolCallId: check.toolCallId, reason });
 		return { allow: false, reason };
