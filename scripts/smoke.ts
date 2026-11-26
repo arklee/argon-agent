@@ -367,6 +367,29 @@ async function main() {
 			assert.match(lastReplyText(after).toLowerCase(), /red/, "Model did not see the image after editing");
 		});
 
+		await check("Write diff", async (signal) => {
+			assert(cwd, "Missing temporary project");
+			// Auto mode for this one call, so only the write tool's own behaviour is exercised.
+			await client().request("sessions.setPermissionMode", { sessionId, mode: "auto" });
+			try {
+				await runPrompt(
+					client(),
+					{
+						sessionId,
+						clientMessageId: randomUUID(),
+						text: "Use the write tool to create notes.txt in the current project directory containing exactly the line: hello argon",
+					},
+					signal,
+				);
+			} finally {
+				await client().request("sessions.setPermissionMode", { sessionId, mode: "ask" });
+			}
+			assert.match(await readFile(join(cwd, "notes.txt"), "utf8"), /hello argon/);
+			const state = await snapshot(client(), sessionId);
+			const write = Object.values(state.tools).find((tool) => tool.name === "write");
+			assert(write?.diff?.includes("hello argon"), "Write call has no diff");
+		});
+
 		await check("Reconnect", async (signal) => {
 			const sinceSeq = lastSeq;
 			client().close();
@@ -401,6 +424,8 @@ async function main() {
 				itemId: withImage.id,
 			});
 			assert.equal(images.length, 1, "Reopened session could not load the image");
+			const write = Object.values(state.tools).find((tool) => tool.name === "write");
+			assert(write?.diff?.includes("hello argon"), "Reopened session lost the write diff");
 		});
 
 		await check("Cleanup", async () => {

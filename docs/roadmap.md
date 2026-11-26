@@ -28,7 +28,7 @@
 - [x] pi TUI 的内置命令在 SDK 的 `prompt()` 里不会被处理：`/compact`、`/name`、`/new` 由 Argon 原生实现，其余在输入框里拦截并提示（`web/src/lib/builtin-commands.ts`，名单对应 pi 1.6.1）
 - [x] `@文件` 补全：`sessions.completeFile` 直接复用 pi-tui 的 `CombinedAutocompleteProvider`（fd 搜索、引号、目录续补与 pi 编辑器一致）
 - [x] edit / write 工具展示 diff 视图：审批卡片里显示预览（backend 读原文件生成，`diff-preview.ts`），执行后用 edit 返回的 `details.diff`；小 diff 默认展开
-- [ ] write 的 diff 不会持久化（pi 的 write 结果没有 details），重新加载会话后只能看到参数。可以考虑在 `tool_result` 钩子里把预览写进 details
+- [x] write 的 diff 持久化：独立的 inline extension `argon-write-diff`（`backend/src/write-diff.ts`）在 `tool_result` 里把执行前的预览 diff（审批后重新计算）写进 `details.diff`，重新打开会话后和 edit 一样显示。pi 的工具体系变化时整体删除即可；没有 write 工具、参数结构变了或 pi 自带 diff 时它不做任何事。`npm run smoke` 覆盖
 - [x] 消息操作：复制；从某条用户消息开始编辑重发（`sessions.editMessage`，经 `navigateTree` 分支，旧分支保留）；重新生成最后一条回复
 - [x] 排队消息的取消和编辑（`sessions.clearQueue`；pi 只能整体清空，所以"编辑"是把全部排队消息撤回输入框）
 - [x] 上下文用量指示（占 context window 的百分比），提供手动压缩按钮（`sessions.compact`，后台执行；成功压缩的路径还没在真实长会话上验证）

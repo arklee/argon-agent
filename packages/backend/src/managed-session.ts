@@ -60,11 +60,13 @@ import type { ResolvedProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
+import { createWriteDiffExtension } from "./write-diff.ts";
 
 const REPLAY_BUFFER_SIZE = 5000;
 /** Custom session entry recording the session's permission mode. */
 const PERMISSION_ENTRY = "argon.permission_mode";
 const IDEMPOTENCY_CACHE_SIZE = 200;
+const MAX_PENDING_WRITE_DIFFS = 100;
 const MAX_DIAGNOSTICS = 100;
 
 export interface ManagedSessionDeps {
@@ -110,6 +112,7 @@ export class ManagedSession {
 	private readonly broker: InteractionBroker;
 	private readonly promptResults = new Map<string, Promise<PromptDisposition>>();
 	private readonly sessionAllowedTools = new Set<string>();
+	private readonly writeDiffs = new Map<string, string>();
 	private unsubscribe: (() => void) | undefined;
 	private liveItemCounter = 0;
 	private currentAssistantItemId: string | undefined;
@@ -159,6 +162,9 @@ export class ManagedSession {
 			checkToolCall: (check) =>
 				self ? self.checkToolCall(check) : Promise.resolve({ allow: false, reason: "Session not ready" }),
 		});
+		const writeDiffExtension = createWriteDiffExtension({
+			takeWriteDiff: (toolCallId) => self?.takeWriteDiff(toolCallId),
+		});
 		const mcp = createMcpBridge();
 		let projectTrust: ResolvedProjectTrust | undefined;
 
@@ -183,7 +189,7 @@ export class ManagedSession {
 				},
 				// The permission gate goes first so its tool_call handler runs before any other extension's.
 				resourceLoaderOptions: {
-					extensionFactories: [permissionExtension, ...createBuiltinExtensions(), mcp.extension],
+					extensionFactories: [permissionExtension, writeDiffExtension, ...createBuiltinExtensions(), mcp.extension],
 				},
 			});
 			return {
@@ -950,13 +956,43 @@ export class ManagedSession {
 		return `live-${++this.liveItemCounter}`;
 	}
 
+	/** Diff of an executed `write`, for the argon-write-diff extension to store in the result (see write-diff.ts). */
+	takeWriteDiff(toolCallId: string): string | undefined {
+		const diff = this.writeDiffs.get(toolCallId);
+		this.writeDiffs.delete(toolCallId);
+		return diff;
+	}
+
 	private async checkToolCall(check: ToolCallCheck): Promise<ToolCallDecision> {
 		// Preview file changes first, in every mode: the tool card shows them while the tool runs.
 		const diff = await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined);
 		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff });
-		if (this.state.permissionMode === "auto") return { allow: true };
-		if (READ_ONLY_TOOLS.has(check.toolName) || this.sessionAllowedTools.has(check.toolName)) return { allow: true };
-		if (this.settings?.allows(check.toolName, check.input)) return { allow: true };
+		const decision = await this.decideToolCall(check, diff);
+		if (decision.allow && check.toolName === "write" && diff) {
+			// The file may have changed while the approval was pending: diff again right before the write.
+			const latest = decision.waited
+				? ((await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined)) ?? diff)
+				: diff;
+			if (latest !== diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff: latest });
+			this.writeDiffs.set(check.toolCallId, latest);
+			// Results that never arrive (aborted runs) must not accumulate.
+			if (this.writeDiffs.size > MAX_PENDING_WRITE_DIFFS) {
+				const oldest = this.writeDiffs.keys().next().value;
+				if (oldest !== undefined) this.writeDiffs.delete(oldest);
+			}
+		}
+		return decision.allow ? { allow: true } : { allow: false, reason: decision.reason };
+	}
+
+	private async decideToolCall(
+		check: ToolCallCheck,
+		diff: string | undefined,
+	): Promise<{ allow: true; waited: boolean } | { allow: false; reason: string }> {
+		if (this.state.permissionMode === "auto") return { allow: true, waited: false };
+		if (READ_ONLY_TOOLS.has(check.toolName) || this.sessionAllowedTools.has(check.toolName)) {
+			return { allow: true, waited: false };
+		}
+		if (this.settings?.allows(check.toolName, check.input)) return { allow: true, waited: false };
 		const suggestedRule = suggestRule(check.toolName, check.input);
 		const response = await this.broker.request(
 			{
@@ -975,7 +1011,9 @@ export class ManagedSession {
 			const rule = ("rule" in response && response.rule) || suggestedRule;
 			if (rule) await this.settings?.addRule(rule).catch((e) => log.warn(`could not save permission rule: ${e}`));
 		}
-		if (decision === "allow" || decision === "allow_session" || decision === "allow_always") return { allow: true };
+		if (decision === "allow" || decision === "allow_session" || decision === "allow_always") {
+			return { allow: true, waited: true };
+		}
 		const reason = "decision" in response && response.reason ? `Denied by user: ${response.reason}` : "Denied by user";
 		this.emit({ type: "tool_blocked", toolCallId: check.toolCallId, reason });
 		return { allow: false, reason };
