@@ -12,10 +12,48 @@ export interface UsageInfo {
 	costTotal: number;
 }
 
+/**
+ * How a tool call should be shown (decisions D13). The backend describes each call by meaning, not by
+ * tool name, so a new tool that fits an existing kind needs no frontend change. Frontends render by
+ * `kind`, may override per tool (source + name), and must treat an unknown `kind` like "generic",
+ * using `title` / `summary` and the raw args and output.
+ */
+export type ToolDisplay = ToolDisplayBase &
+	(
+		| { kind: "shell"; command: string; cwd?: string }
+		| { kind: "file_read"; path: string; offset?: number; limit?: number }
+		/** One entry per file, so multi-file patches fit. The diff itself is `ToolCallState.diff` for now. */
+		| { kind: "file_change"; files: { path: string; op?: "add" | "update" | "delete" | "move"; movePath?: string }[] }
+		/** content: grep-like; files: find-like; list: ls-like. */
+		| { kind: "search"; mode: "content" | "files" | "list"; pattern?: string; path?: string }
+		/** Code that calls other tools (codemode). Its nested calls are shown under it. */
+		| { kind: "script"; language: string; source: string }
+		| { kind: "generic" }
+	);
+
+export interface ToolDisplayBase {
+	/** Short label for the card header, usually the tool name. */
+	title: string;
+	/** One line describing this call, e.g. the command or the path. */
+	summary?: string;
+}
+
+export type ToolDisplayKind = ToolDisplay["kind"];
+
 export type AssistantBlock =
 	| { type: "text"; text: string }
 	| { type: "thinking"; text: string; redacted?: boolean }
-	| { type: "toolCall"; toolCallId: string; name: string; args: unknown; argsText?: string };
+	| {
+			type: "toolCall";
+			toolCallId: string;
+			name: string;
+			args: unknown;
+			argsText?: string;
+			/** Set once the call is complete (not while its arguments stream). */
+			display?: ToolDisplay;
+			/** Where the tool comes from (pi's ToolInfo.sourceInfo.source); absent when the tool is gone. */
+			source?: string;
+	  };
 
 export type ToolStatus = "pending" | "running" | "done" | "error" | "blocked";
 
