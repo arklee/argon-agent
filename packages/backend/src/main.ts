@@ -9,6 +9,7 @@ import { startServer } from "./server.ts";
 async function main(): Promise<void> {
 	const config = loadConfig();
 	const registry = await SessionRegistry.create({
+		argonHome: config.argonHome,
 		agentDir: config.agentDir,
 		defaultPermissionMode: config.defaultPermissionMode,
 	});

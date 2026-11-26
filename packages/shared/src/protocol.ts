@@ -160,6 +160,21 @@ export interface ContextUsageInfo {
 	percent: number | null;
 }
 
+/** Where a user message sits among its siblings in the session tree (edits create siblings). */
+export interface BranchPoint {
+	/** 0-based position among the sibling user messages, oldest first. */
+	index: number;
+	count: number;
+}
+
+/** Per-environment project preferences, stored on the backend. */
+export interface ProjectPrefs {
+	cwd: string;
+	pinned?: boolean;
+	/** Hidden from the sidebar; its sessions are kept. */
+	hidden?: boolean;
+}
+
 export interface StatusEntry {
 	key: string;
 	text: string;
@@ -184,6 +199,11 @@ export interface SessionState {
 	compacting: boolean;
 	retry?: { attempt: number; maxAttempts: number; errorMessage: string };
 	lastUsage?: UsageInfo;
+	/**
+	 * Branch info for the user messages of the current branch, in transcript order (aligned with the
+	 * user items, not keyed by id, so live items are covered too). null = no siblings.
+	 */
+	userBranches?: (BranchPoint | null)[];
 	/** How full the model's context window is. Undefined without a model. */
 	contextUsage?: ContextUsageInfo;
 	/** Undefined until the MCP extension reports (or when it is disabled). */
@@ -244,6 +264,7 @@ export type SessionEvent =
 	| { type: "notification"; level: "info" | "warning" | "error"; message: string }
 	| { type: "mcp_changed"; mcp: McpStatus }
 	| { type: "context_usage_changed"; usage?: ContextUsageInfo }
+	| { type: "branches_changed"; userBranches: (BranchPoint | null)[] }
 	/** Replace the whole state (used after operations that rebuild history, e.g. compaction). */
 	| { type: "reset"; state: SessionState };
 
@@ -254,7 +275,15 @@ export interface SessionEventEnvelope {
 }
 
 /** Backend-wide events, not tied to one session. */
-export type GlobalEvent = { type: "sessions_changed" } | { type: "session_unloaded"; sessionId: string };
+export type GlobalEvent =
+	| { type: "sessions_changed" }
+	| { type: "session_unloaded"; sessionId: string }
+	| { type: "projects_changed" }
+	/**
+	 * An extension in `fromSessionId` started or switched to another session (pi's newSession / fork /
+	 * switchSession). Clients showing `fromSessionId` should open `sessionPath`.
+	 */
+	| { type: "session_requested"; fromSessionId: string; sessionPath: string };
 
 // ---------------------------------------------------------------------------
 // Request/response methods
@@ -355,6 +384,25 @@ export interface Methods {
 	"sessions.completeFile": {
 		params: { sessionId: string; textBeforeCursor: string };
 		result: { prefix: string; items: (CompletionItem & { isDirectory: boolean })[] } | null;
+	};
+	/** Delete a session file (unloading it first). Only paths of listed sessions are accepted. */
+	"sessions.delete": { params: { sessionPath: string }; result: Record<string, never> };
+	/** Show the previous/next sibling of a user message (its latest continuation). Idle sessions only. */
+	"sessions.switchBranch": {
+		params: { sessionId: string; itemId: string; direction: -1 | 1 };
+		result: Record<string, never>;
+	};
+	/**
+	 * New session with the history before a user message (pi's /fork). Returns its path (open it with
+	 * sessions.open) and the message text, for the composer.
+	 */
+	"sessions.fork": { params: { sessionId: string; itemId: string }; result: { sessionPath: string; text: string } };
+	/** New session with a copy of the current branch (pi's /clone). */
+	"sessions.clone": { params: { sessionId: string }; result: { sessionPath: string } };
+	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };
+	"projects.update": {
+		params: { cwd: string; pinned?: boolean; hidden?: boolean };
+		result: Record<string, never>;
 	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };
 	"interactions.respond": {

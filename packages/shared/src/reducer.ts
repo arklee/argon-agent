@@ -237,6 +237,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				statusEntries: event.text === undefined ? rest : [...rest, { key: event.key, text: event.text }],
 			};
 		}
+		case "branches_changed":
+			return { ...state, userBranches: event.userBranches };
 		case "context_usage_changed":
 			return { ...state, contextUsage: event.usage };
 		case "mcp_changed":

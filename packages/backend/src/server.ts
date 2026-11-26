@@ -191,6 +191,22 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		}),
 		"sessions.completeFile": async (params) =>
 			(await registry.require(params.sessionId).completeFile(params.textBeforeCursor)) ?? null,
+		"sessions.delete": async (params) => {
+			await registry.delete(params.sessionPath);
+			return empty;
+		},
+		"sessions.switchBranch": async (params) => {
+			await registry.require(params.sessionId).switchBranch(params.itemId, params.direction);
+			return empty;
+		},
+		"sessions.fork": async (params) => registry.fork(params.sessionId, params.itemId),
+		"sessions.clone": async (params) => registry.clone(params.sessionId),
+		"projects.list": async () => ({ projects: await registry.listProjects() }),
+		"projects.update": async (params) => {
+			if (!params.cwd) throw new RequestError("bad_request", "cwd is required");
+			await registry.updateProject(params);
+			return empty;
+		},
 		"sessions.unload": async (params) => {
 			await registry.unload(params.sessionId);
 			return empty;

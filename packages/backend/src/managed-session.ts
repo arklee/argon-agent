@@ -7,8 +7,10 @@
  * while no client is attached.
  */
 
+import { existsSync } from "node:fs";
 import {
 	applySessionEvent,
+	type BranchPoint,
 	type CompletionItem,
 	type ContextUsageInfo,
 	createEmptySessionState,
@@ -37,6 +39,7 @@ import {
 	type ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { generateTitle, titleModel } from "./auto-title.ts";
 import { createBuiltinExtensions } from "./builtin-extensions.ts";
 import { previewDiff, resultDiff } from "./diff-preview.ts";
 import { completeFile, type FileCompletion } from "./file-completion.ts";
@@ -49,7 +52,7 @@ import {
 	type ToolCallCheck,
 	type ToolCallDecision,
 } from "./permissions.ts";
-import { messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
+import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
 
 const REPLAY_BUFFER_SIZE = 5000;
@@ -59,7 +62,32 @@ export interface ManagedSessionDeps {
 	agentDir: string;
 	modelRuntime: ModelRuntime;
 	defaultPermissionMode: PermissionMode;
+	/**
+	 * Session switches started by extensions (pi's newSession / fork / switchSession). The registry
+	 * loads the target and tells clients to follow; Argon keeps one ManagedSession per session.
+	 */
+	sessionHost?: ExtensionSessionHost;
 }
+
+export interface ExtensionSessionHost {
+	createSession(
+		cwd: string,
+		options: { parentSession?: string; setup?: (sessionManager: SessionManager) => Promise<void> },
+	): Promise<ManagedSession>;
+	openSession(sessionPath: string): Promise<ManagedSession>;
+	/** Clients showing `from` should switch to `to`. */
+	announce(from: ManagedSession, to: ManagedSession): void;
+}
+
+/** What a new session should be created from (see ManagedSession.load). */
+export type SessionTarget =
+	| {
+			kind: "new";
+			cwd: string;
+			parentSession?: string;
+			setup?: (sessionManager: SessionManager) => Promise<void>;
+	  }
+	| { kind: "open"; sessionPath: string };
 
 export type PromptDisposition = "started" | "queued" | "handled";
 
@@ -81,6 +109,8 @@ export class ManagedSession {
 		private readonly mcp: McpBridge,
 		private readonly agentDir: string,
 		permissionMode: PermissionMode,
+		private readonly sessionHost?: ExtensionSessionHost,
+		private readonly modelRuntime?: ModelRuntime,
 	) {
 		const session = runtime.session;
 		this.state = createEmptySessionState({
@@ -97,10 +127,7 @@ export class ManagedSession {
 	}
 
 	/** Create a new session in `cwd`, or open an existing session file. */
-	static async load(
-		target: { kind: "new"; cwd: string } | { kind: "open"; sessionPath: string },
-		deps: ManagedSessionDeps,
-	): Promise<ManagedSession> {
+	static async load(target: SessionTarget, deps: ManagedSessionDeps): Promise<ManagedSession> {
 		// The permission extension is created before the ManagedSession exists; it calls through this ref.
 		let self: ManagedSession | undefined;
 		const permissionExtension = createPermissionExtension({
@@ -132,13 +159,27 @@ export class ManagedSession {
 		};
 
 		const sessionManager =
-			target.kind === "new" ? SessionManager.create(target.cwd) : SessionManager.open(target.sessionPath);
+			target.kind === "new"
+				? SessionManager.create(
+						target.cwd,
+						undefined,
+						target.parentSession ? { parentSession: target.parentSession } : undefined,
+					)
+				: SessionManager.open(target.sessionPath);
+		if (target.kind === "new" && target.setup) await target.setup(sessionManager);
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: sessionManager.getCwd(),
 			agentDir: deps.agentDir,
 			sessionManager,
 		});
-		const managed = new ManagedSession(runtime, mcp, deps.agentDir, deps.defaultPermissionMode);
+		const managed = new ManagedSession(
+			runtime,
+			mcp,
+			deps.agentDir,
+			deps.defaultPermissionMode,
+			deps.sessionHost,
+			deps.modelRuntime,
+		);
 		self = managed;
 		await managed.bind();
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
@@ -238,8 +279,7 @@ export class ManagedSession {
 		if (!entryId) throw new Error("That message is no longer in this branch");
 		const result = await this.session.navigateTree(entryId, {});
 		if (result.cancelled) throw new Error("Editing was cancelled by an extension");
-		this.resetFromSession();
-		this.emit({ type: "reset", state: this.state });
+		this.rebuildState();
 		return this.prompt({ clientMessageId: params.clientMessageId, text: params.text });
 	}
 
@@ -278,6 +318,153 @@ export class ManagedSession {
 				? [{ mimeType: part.mimeType, data: part.data }]
 				: [],
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Session tree
+	// -------------------------------------------------------------------------
+
+	/** Show the previous/next sibling of a user message, continuing at its latest leaf. */
+	async switchBranch(itemId: string, direction: -1 | 1): Promise<void> {
+		if (this.isRunning || this.session.isStreaming) throw new Error("Wait for the current turn to finish");
+		const entryId = this.userEntryIdFor(itemId);
+		if (!entryId) throw new Error("That message is no longer in this branch");
+		const siblings = this.userSiblings(entryId);
+		const target = siblings[siblings.findIndex((e) => e.id === entryId) + direction];
+		if (!target) return;
+		const result = await this.session.navigateTree(this.latestLeaf(target.id), {});
+		if (result.cancelled) throw new Error("Switching branches was cancelled by an extension");
+		this.rebuildState();
+	}
+
+	/**
+	 * Where a fork before a user message starts: the entry to branch from (undefined: the message is
+	 * the first one, so the fork is an empty session) and the message text for the composer.
+	 */
+	forkPoint(itemId: string): { leafId: string | undefined; text: string } {
+		const entryId = this.userEntryIdFor(itemId);
+		const entry = entryId ? this.session.sessionManager.getEntry(entryId) : undefined;
+		if (!entry || entry.type !== "message") throw new Error("That message is no longer in this branch");
+		const { text } = contentToText((entry.message as { content?: never }).content);
+		return { leafId: entry.parentId ?? undefined, text };
+	}
+
+	/** Current leaf, for cloning the branch (undefined: nothing to copy yet). */
+	get leafId(): string | undefined {
+		return this.session.sessionManager.getLeafId() ?? undefined;
+	}
+
+	/**
+	 * Write the branch ending at `leafId` to a new session file and return its path. Uses a separate
+	 * SessionManager: createBranchedSession() switches the manager it runs on to the new file.
+	 */
+	branchToNewFile(leafId: string | null | undefined): string | undefined {
+		if (!leafId) return undefined;
+		const file = this.session.sessionFile;
+		if (!file) throw new Error("This session has not been saved yet");
+		const path = SessionManager.open(file).createBranchedSession(leafId);
+		// pi writes a session file only once it has an assistant message; a branch without one is
+		// equivalent to a new empty session (callers create one).
+		return path && existsSync(path) ? path : undefined;
+	}
+
+	private userSiblings(entryId: string): { id: string; timestamp: string }[] {
+		const manager = this.session.sessionManager;
+		const entry = manager.getEntry(entryId);
+		if (!entry) return [];
+		const candidates = entry.parentId
+			? manager.getChildren(entry.parentId)
+			: manager.getTree().map((node) => node.entry);
+		return candidates
+			.filter((e) => e.type === "message" && (e.message as { role?: string }).role === "user")
+			.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+	}
+
+	/** Follow the most recent child down to a leaf. */
+	private latestLeaf(entryId: string): string {
+		const manager = this.session.sessionManager;
+		let current = entryId;
+		for (;;) {
+			const children = manager.getChildren(current);
+			const latest = children.reduce<(typeof children)[number] | undefined>(
+				(best, child) => (!best || child.timestamp > best.timestamp ? child : best),
+				undefined,
+			);
+			if (!latest) return current;
+			current = latest.id;
+		}
+	}
+
+	private computeUserBranches(): (BranchPoint | null)[] {
+		return this.session.sessionManager
+			.getBranch()
+			.filter((e) => e.type === "message" && (e.message as { role?: string }).role === "user")
+			.map((entry) => {
+				const siblings = this.userSiblings(entry.id);
+				return siblings.length > 1
+					? { index: siblings.findIndex((s) => s.id === entry.id), count: siblings.length }
+					: null;
+			});
+	}
+
+	private emitBranches(): void {
+		const next = this.computeUserBranches();
+		if (JSON.stringify(next) === JSON.stringify(this.state.userBranches ?? [])) return;
+		this.emit({ type: "branches_changed", userBranches: next });
+	}
+
+	/** After the session's history changed underneath (tree navigation): send everyone a fresh state. */
+	private rebuildState(): void {
+		this.resetFromSession();
+		this.emit({ type: "reset", state: this.state });
+	}
+
+	private titleRequested = false;
+
+	/** Name an unnamed session after its first completed turn (once per load). */
+	private async maybeNameSession(): Promise<void> {
+		if (this.titleRequested || this.state.name || this.disposed || !this.modelRuntime) return;
+		const firstUser = this.state.items.find((item) => item.kind === "user");
+		const firstReply = this.state.items.find((item) => item.kind === "assistant" && !item.errorMessage);
+		if (firstUser?.kind !== "user" || firstReply?.kind !== "assistant" || !firstUser.text.trim()) return;
+		const model = titleModel(this.modelRuntime, this.session.model);
+		if (!model) return;
+		this.titleRequested = true;
+		try {
+			const replyText = firstReply.blocks.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
+			const title = await generateTitle(
+				this.modelRuntime,
+				model,
+				firstUser.text,
+				replyText,
+				AbortSignal.timeout(30_000),
+			);
+			// The user may have named it meanwhile.
+			if (title && !this.state.name && !this.disposed) this.session.setSessionName(title);
+		} catch (error) {
+			log.debug(`auto title failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private requireHost(): ExtensionSessionHost {
+		if (!this.sessionHost) throw new Error("Switching sessions is not available");
+		return this.sessionHost;
+	}
+
+	private async switchTo(
+		load: () => Promise<ManagedSession>,
+		withSession: ((ctx: ReturnType<AgentSession["createReplacedSessionContext"]>) => Promise<void>) | undefined,
+	): Promise<{ cancelled: boolean }> {
+		try {
+			const target = await load();
+			this.requireHost().announce(this, target);
+			if (withSession) await withSession(target.session.createReplacedSessionContext());
+			return { cancelled: false };
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.emit({ type: "notification", level: "error", message: `Could not switch sessions: ${message}` });
+			return { cancelled: true };
+		}
 	}
 
 	clearQueue(): { steering: string[]; followUp: string[] } {
@@ -441,17 +628,32 @@ export class ManagedSession {
 			mode: "rpc",
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
-				newSession: async () => {
-					this.emit({
-						type: "notification",
-						level: "warning",
-						message: "Starting a new session from an extension is not supported yet",
-					});
-					return { cancelled: true };
+				newSession: async (options) =>
+					this.switchTo(
+						() =>
+							this.requireHost().createSession(this.state.cwd, {
+								parentSession: options?.parentSession,
+								setup: options?.setup,
+							}),
+						options?.withSession,
+					),
+				fork: async (entryId, options) =>
+					this.switchTo(async () => {
+						const entry = this.session.sessionManager.getEntry(entryId);
+						if (!entry) throw new Error(`Entry ${entryId} not found`);
+						const leafId = options?.position === "at" ? entryId : entry.parentId;
+						const path = this.branchToNewFile(leafId);
+						return path
+							? this.requireHost().openSession(path)
+							: this.requireHost().createSession(this.state.cwd, { parentSession: this.sessionPath });
+					}, options?.withSession),
+				navigateTree: async (targetId, options) => {
+					const result = await session.navigateTree(targetId, options);
+					if (!result.cancelled) this.rebuildState();
+					return { cancelled: result.cancelled };
 				},
-				fork: async () => ({ cancelled: true }),
-				navigateTree: async () => ({ cancelled: true }),
-				switchSession: async () => ({ cancelled: true }),
+				switchSession: async (sessionPath, options) =>
+					this.switchTo(() => this.requireHost().openSession(sessionPath), options?.withSession),
 				reload: async () => {
 					await session.reload();
 					this.reportDiagnostics();
@@ -496,7 +698,7 @@ export class ManagedSession {
 		for (const result of history.toolResults) {
 			state = applySessionEvent(state, { type: "tool_ended", ...result });
 		}
-		this.state = { ...state, contextUsage: this.readContextUsage() };
+		this.state = { ...state, contextUsage: this.readContextUsage(), userBranches: this.computeUserBranches() };
 	}
 
 	private readContextUsage(): ContextUsageInfo | undefined {
@@ -578,6 +780,8 @@ export class ManagedSession {
 				this.currentAssistantItemId = undefined;
 				this.emit({ type: "run_settled", aborted: event.aborted });
 				this.emitContextUsage();
+				this.emitBranches();
+				if (!event.aborted) void this.maybeNameSession();
 				return;
 			case "message_start": {
 				const message = event.message as { role: string };
@@ -645,6 +849,7 @@ export class ManagedSession {
 				if (!id) return;
 				const item = messageToItem(message, id, false);
 				if (item) this.emit({ type: "item_replaced", item });
+				if (message.role === "user") this.emitBranches();
 				if (message.role === "assistant") {
 					this.currentAssistantItemId = undefined;
 					this.emitContextUsage();

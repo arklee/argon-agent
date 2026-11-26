@@ -2,14 +2,18 @@
  * Registry of loaded sessions plus backend-wide pi services (shared ModelRuntime).
  */
 
+import { existsSync } from "node:fs";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { GlobalEvent, ModelInfo, ModelRef, PermissionMode, SessionSummary } from "@argon/shared";
+import type { GlobalEvent, ModelInfo, ModelRef, PermissionMode, ProjectPrefs, SessionSummary } from "@argon/shared";
 import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { log } from "./log.ts";
-import { ManagedSession } from "./managed-session.ts";
+import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
 
 export interface RegistryOptions {
 	agentDir: string;
+	/** Argon's own state directory (project preferences live here). */
+	argonHome: string;
 	defaultPermissionMode: PermissionMode;
 }
 
@@ -47,8 +51,11 @@ export class SessionRegistry {
 		return session;
 	}
 
-	async create(cwd: string): Promise<ManagedSession> {
-		const session = await ManagedSession.load({ kind: "new", cwd }, this.deps());
+	async create(
+		cwd: string,
+		options: Omit<Extract<SessionTarget, { kind: "new" }>, "kind" | "cwd"> = {},
+	): Promise<ManagedSession> {
+		const session = await ManagedSession.load({ kind: "new", cwd, ...options }, this.deps());
 		this.register(session);
 		return session;
 	}
@@ -57,6 +64,8 @@ export class SessionRegistry {
 		for (const session of this.sessions.values()) {
 			if (session.sessionPath === sessionPath) return session;
 		}
+		// pi would silently start a new session at a missing path (with the backend's cwd).
+		if (!existsSync(sessionPath)) throw new NotFoundError(`Session file not found: ${sessionPath}`);
 		const inFlight = this.opening.get(sessionPath);
 		if (inFlight) return inFlight;
 		const loading = ManagedSession.load({ kind: "open", sessionPath }, this.deps())
@@ -77,6 +86,67 @@ export class SessionRegistry {
 		this.broadcast({ type: "session_unloaded", sessionId });
 	}
 
+	/** Delete a session file. Only files pi lists as sessions are accepted, so clients cannot delete anything else. */
+	async delete(sessionPath: string): Promise<void> {
+		const known = (await SessionManager.listAll()).some((info) => info.path === sessionPath);
+		if (!known) throw new NotFoundError(`Not a known session: ${sessionPath}`);
+		for (const session of [...this.sessions.values()]) {
+			if (session.sessionPath === sessionPath) {
+				if (session.isRunning) await session.abort();
+				await this.unload(session.sessionId);
+			}
+		}
+		await unlink(sessionPath);
+		this.broadcast({ type: "sessions_changed" });
+	}
+
+	/** New session with the history before a user message; returns its path and the message text. */
+	async fork(sessionId: string, itemId: string): Promise<{ sessionPath: string; text: string }> {
+		const source = this.require(sessionId);
+		const { leafId, text } = source.forkPoint(itemId);
+		const path = source.branchToNewFile(leafId);
+		const target = path
+			? await this.open(path)
+			: await this.create(source.snapshot().state.cwd, { parentSession: source.sessionPath });
+		return { sessionPath: target.sessionPath ?? "", text };
+	}
+
+	/** New session with a copy of the current branch. */
+	async clone(sessionId: string): Promise<{ sessionPath: string }> {
+		const source = this.require(sessionId);
+		const path = source.branchToNewFile(source.leafId);
+		const target = path
+			? await this.open(path)
+			: await this.create(source.snapshot().state.cwd, { parentSession: source.sessionPath });
+		return { sessionPath: target.sessionPath ?? "" };
+	}
+
+	// -------------------------------------------------------------------------
+	// Project preferences ($ARGON_HOME/projects.json, per backend environment)
+	// -------------------------------------------------------------------------
+
+	private get projectsPath(): string {
+		return join(this.options.argonHome, "projects.json");
+	}
+
+	async listProjects(): Promise<ProjectPrefs[]> {
+		try {
+			const data = JSON.parse(await readFile(this.projectsPath, "utf8")) as { projects?: ProjectPrefs[] };
+			return Array.isArray(data.projects) ? data.projects : [];
+		} catch {
+			return [];
+		}
+	}
+
+	async updateProject(update: ProjectPrefs): Promise<void> {
+		const projects = (await this.listProjects()).filter((p) => p.cwd !== update.cwd);
+		const previous = (await this.listProjects()).find((p) => p.cwd === update.cwd);
+		const next: ProjectPrefs = { ...previous, ...update };
+		if (next.pinned || next.hidden) projects.push(next);
+		await writeFile(this.projectsPath, `${JSON.stringify({ projects }, null, 2)}\n`, { mode: 0o600 });
+		this.broadcast({ type: "projects_changed" });
+	}
+
 	async list(cwd?: string): Promise<SessionSummary[]> {
 		const infos = cwd ? await SessionManager.list(cwd) : await SessionManager.listAll();
 		const byId = new Map<string, SessionSummary>();
@@ -87,7 +157,8 @@ export class SessionRegistry {
 				sessionPath: info.path,
 				cwd: info.cwd,
 				name: loaded ? (loaded.snapshot().state.name ?? info.name) : info.name,
-				firstMessage: info.firstMessage,
+				// For loaded sessions, the current branch's first message (it changes when an edit branches).
+				firstMessage: (loaded && firstUserText(loaded)) || info.firstMessage,
 				messageCount: info.messageCount,
 				createdAt: info.created.getTime(),
 				modifiedAt: info.modified.getTime(),
@@ -143,8 +214,19 @@ export class SessionRegistry {
 			agentDir: this.options.agentDir,
 			modelRuntime: this.modelRuntime,
 			defaultPermissionMode: this.options.defaultPermissionMode,
+			sessionHost: this.sessionHost,
 		};
 	}
+
+	private readonly sessionHost: ExtensionSessionHost = {
+		createSession: (cwd, options) => this.create(cwd, options),
+		openSession: (sessionPath) => this.open(sessionPath),
+		announce: (from, to) => {
+			if (to.sessionPath) {
+				this.broadcast({ type: "session_requested", fromSessionId: from.sessionId, sessionPath: to.sessionPath });
+			}
+		},
+	};
 
 	private register(session: ManagedSession): void {
 		this.sessions.set(session.sessionId, session);
@@ -162,6 +244,11 @@ export class SessionRegistry {
 	private broadcast(event: GlobalEvent): void {
 		for (const listener of this.globalListeners) listener(event);
 	}
+}
+
+function firstUserText(session: ManagedSession): string | undefined {
+	const first = session.snapshot().state.items.find((item) => item.kind === "user");
+	return first?.kind === "user" ? first.text : undefined;
 }
 
 export class NotFoundError extends Error {
