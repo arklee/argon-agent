@@ -1,7 +1,6 @@
 import type { SessionSummary } from "@argon/shared";
-import { Ellipsis, FolderOpen, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
+import { Ellipsis, FolderOpen, FolderPlus, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
 import { useMemo, useState } from "react";
-import { NewSessionDialog } from "@/components/NewSessionDialog";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,8 +68,8 @@ export function Sidebar() {
 	const sessions = useApp((s) => s.sessions);
 	const environment = useApp((s) => s.environment);
 	const connection = useApp((s) => s.connection);
-	const dialog = useApp((s) => s.newSessionDialog);
-	const setDialog = useApp((s) => s.setNewSessionDialog);
+	const setAddProjectOpen = useApp((s) => s.setAddProjectOpen);
+	const newSession = useApp((s) => s.newSession);
 	const projects = useApp((s) => s.projects);
 	const search = useApp((s) => s.search);
 	const showHidden = useApp((s) => s.showHidden);
@@ -83,20 +82,36 @@ export function Sidebar() {
 		<aside className="flex w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
 			<div className="flex h-12 items-center justify-between px-3">
 				<span className="text-sm font-semibold tracking-tight">Argon</span>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							aria-label="New session"
-							onClick={() => setDialog({ open: true })}
-							disabled={!environment}
-						>
-							<SquarePen />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>New session ({shortcutLabels.newSession})</TooltipContent>
-				</Tooltip>
+				<div className="flex items-center">
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								aria-label="Add project"
+								onClick={() => setAddProjectOpen(true)}
+								disabled={!environment}
+							>
+								<FolderPlus />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Add project</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								aria-label="New session"
+								onClick={() => void newSession()}
+								disabled={!environment}
+							>
+								<SquarePen />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>New session in the current project ({shortcutLabels.newSession})</TooltipContent>
+					</Tooltip>
+				</div>
 			</div>
 
 			<div className="px-3 pb-3">
@@ -112,9 +127,25 @@ export function Sidebar() {
 			</div>
 			<nav className="flex-1 overflow-y-auto px-2 pb-2">
 				{groups.length === 0 && (
-					<p className="px-2 py-6 text-center text-sm text-muted-foreground">
-						{search ? "No matching sessions" : "No sessions to show"}
-					</p>
+					<div className="flex flex-col items-center px-2 py-6 text-center text-sm text-muted-foreground">
+						{search ? (
+							"No matching sessions"
+						) : (
+							<>
+								No projects yet.
+								<Button
+									variant="outline"
+									size="sm"
+									className="mt-3"
+									onClick={() => setAddProjectOpen(true)}
+									disabled={!environment}
+								>
+									<FolderPlus />
+									Add project
+								</Button>
+							</>
+						)}
+					</div>
 				)}
 				{groups.map((group) => (
 					<section key={group.cwd} className="mb-3">
@@ -141,6 +172,11 @@ export function Sidebar() {
 										<DropdownMenuItem onSelect={() => void updateProject({ cwd: group.cwd, hidden: !group.hidden })}>
 											{group.hidden ? "Unhide" : "Hide project"}
 										</DropdownMenuItem>
+										{group.addedAt !== undefined && group.sessions.length === 0 && !search && (
+											<DropdownMenuItem onSelect={() => void updateProject({ cwd: group.cwd, addedAt: 0 })}>
+												Remove project
+											</DropdownMenuItem>
+										)}
 									</DropdownMenuContent>
 								</DropdownMenu>
 								<Button
@@ -148,12 +184,15 @@ export function Sidebar() {
 									size="icon-xs"
 									aria-label={`New session in ${group.cwd}`}
 									className="opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100"
-									onClick={() => setDialog({ open: true, path: group.cwd })}
+									onClick={() => void newSession(group.cwd)}
 								>
 									<Plus />
 								</Button>
 							</div>
 						</div>
+						{group.sessions.length === 0 && (
+							<p className="px-2 pb-1 text-xs text-muted-foreground/70">No sessions yet</p>
+						)}
 						<ul>
 							{group.sessions.map((session) => (
 								<SessionRow key={session.sessionId} session={session} />
@@ -196,12 +235,6 @@ export function Sidebar() {
 					<Settings />
 				</Button>
 			</div>
-
-			<NewSessionDialog
-				open={dialog.open}
-				initialPath={dialog.path}
-				onOpenChange={(open) => setDialog({ ...dialog, open })}
-			/>
 		</aside>
 	);
 }

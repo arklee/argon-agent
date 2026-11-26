@@ -1,6 +1,6 @@
 import type { DirEntry } from "@argon/shared";
-import { ChevronUp, Folder, History, Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronUp, Folder, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -11,25 +11,19 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { basename, displayPath } from "@/lib/format";
+import { displayPath } from "@/lib/format";
 import { getClient, useApp } from "@/stores/app";
 
 /**
- * Pick a project folder on the backend machine. Browsing goes through the backend (fs.listDir),
- * so this works the same for a local or a remote backend.
+ * Add a project: pick a folder on the backend machine, then start a session in it. Browsing goes
+ * through the backend (fs.listDir), so this works the same for a local or a remote backend.
  */
-export function NewSessionDialog({
-	open,
-	onOpenChange,
-	initialPath,
-}: {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-	initialPath?: string;
-}) {
+export function AddProjectDialog() {
+	const open = useApp((s) => s.addProjectOpen);
+	const onOpenChange = useApp((s) => s.setAddProjectOpen);
 	const environment = useApp((s) => s.environment);
 	const sessions = useApp((s) => s.sessions);
-	const createSession = useApp((s) => s.createSession);
+	const addProject = useApp((s) => s.addProject);
 	const [path, setPath] = useState("");
 	const [pathInput, setPathInput] = useState("");
 	const [entries, setEntries] = useState<DirEntry[]>([]);
@@ -38,23 +32,17 @@ export function NewSessionDialog({
 	const [loading, setLoading] = useState(false);
 	const [creating, setCreating] = useState(false);
 
-	const recent = useMemo(() => {
-		const seen = new Set<string>();
-		const result: string[] = [];
-		for (const s of sessions) {
-			if (s.cwd && !seen.has(s.cwd)) {
-				seen.add(s.cwd);
-				result.push(s.cwd);
-			}
-		}
-		return result.slice(0, 6);
-	}, [sessions]);
+	// Start next to the most recent project: new projects usually sit beside existing ones.
+	const latestCwd = sessions[0]?.cwd;
 
-	const browse = async (target?: string) => {
+	/** `up`: show the folder containing `target` (projects usually sit next to each other). */
+	const browse = async (target?: string, up = false) => {
 		setLoading(true);
 		setError(undefined);
 		try {
-			const result = await getClient().request("fs.listDir", { path: target, dirsOnly: true });
+			let result = await getClient().request("fs.listDir", { path: target, dirsOnly: true });
+			if (up && result.parent)
+				result = await getClient().request("fs.listDir", { path: result.parent, dirsOnly: true });
 			setPath(result.path);
 			setPathInput(result.path);
 			setEntries(result.entries);
@@ -68,16 +56,16 @@ export function NewSessionDialog({
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: browse when the dialog opens
 	useEffect(() => {
-		if (open) void browse(initialPath ?? recent[0]);
+		if (open) void browse(latestCwd, latestCwd !== undefined);
 	}, [open]);
 
 	const create = async (cwd: string) => {
 		setCreating(true);
 		try {
-			await createSession(cwd);
+			await addProject(cwd);
 			onOpenChange(false);
-		} catch {
-			// toast already shown by the store
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setCreating(false);
 		}
@@ -87,24 +75,12 @@ export function NewSessionDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>New session</DialogTitle>
-					<DialogDescription>Choose a project folder{environment ? ` on ${environment.name}` : ""}.</DialogDescription>
+					<DialogTitle>Add project</DialogTitle>
+					<DialogDescription>
+						Choose a folder{environment ? ` on ${environment.name}` : ""}. It is added to the sidebar and a new session
+						starts in it.
+					</DialogDescription>
 				</DialogHeader>
-
-				{recent.length > 0 && (
-					<div className="space-y-1.5">
-						<div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-							<History className="size-3.5" /> Recent
-						</div>
-						<div className="flex flex-wrap gap-1.5">
-							{recent.map((cwd) => (
-								<Button key={cwd} variant="outline" size="sm" onClick={() => void browse(cwd)} title={cwd}>
-									{basename(cwd)}
-								</Button>
-							))}
-						</div>
-					</div>
-				)}
 
 				<form
 					className="flex gap-2"
@@ -113,7 +89,14 @@ export function NewSessionDialog({
 						void browse(pathInput);
 					}}
 				>
-					<Input value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="font-mono text-xs" />
+					<Input
+						value={pathInput}
+						onChange={(e) => setPathInput(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
+						}}
+						className="font-mono text-xs"
+					/>
 					<Button type="button" variant="outline" size="icon" disabled={!parent} onClick={() => void browse(parent)}>
 						<ChevronUp />
 					</Button>
@@ -152,7 +135,7 @@ export function NewSessionDialog({
 					</span>
 					<Button onClick={() => void create(path)} disabled={!path || creating}>
 						{creating && <Loader2 className="animate-spin" />}
-						Start here
+						Add project
 					</Button>
 				</DialogFooter>
 			</DialogContent>

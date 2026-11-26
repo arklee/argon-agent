@@ -176,6 +176,8 @@ export interface ProjectPrefs {
 	pinned?: boolean;
 	/** Hidden from the sidebar; its sessions are kept. */
 	hidden?: boolean;
+	/** Added explicitly (epoch ms): listed even before it has sessions. */
+	addedAt?: number;
 }
 
 // --- Providers and accounts (backend-wide, shared with the pi CLI through auth.json) ---
@@ -535,7 +537,7 @@ export interface Methods {
 	};
 	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };
 	"projects.update": {
-		params: { cwd: string; pinned?: boolean; hidden?: boolean };
+		params: ProjectPrefs;
 		result: Record<string, never>;
 	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };

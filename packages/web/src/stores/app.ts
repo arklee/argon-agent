@@ -24,13 +24,16 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 import { type ConnectionConfig, clearConnectionConfig } from "@/lib/connection";
+import { groupByProject, visibleProjects } from "@/lib/session-order";
 import { useSettings } from "@/stores/settings";
 
-type NewSessionDialogState = { open: boolean; path?: string };
-
 interface AppState {
-	newSessionDialog: NewSessionDialogState;
-	setNewSessionDialog(dialog: NewSessionDialogState): void;
+	addProjectOpen: boolean;
+	setAddProjectOpen(open: boolean): void;
+	/** Add a project folder (backend path) and start a session in it. */
+	addProject(cwd: string): Promise<void>;
+	/** New session in `cwd`, else the current project; with no project yet, asks for one. */
+	newSession(cwd?: string): Promise<void>;
 	connection: ConnectionState | undefined;
 	environment: EnvironmentInfo | undefined;
 	sessions: SessionSummary[];
@@ -108,8 +111,26 @@ async function activatePath(path: string, draft?: string, fromSessionId?: string
 }
 
 export const useApp = create<AppState>((set, get) => ({
-	newSessionDialog: { open: false },
-	setNewSessionDialog: (newSessionDialog) => set({ newSessionDialog }),
+	addProjectOpen: false,
+	setAddProjectOpen: (addProjectOpen) => set({ addProjectOpen }),
+	async addProject(cwd) {
+		await getClient().request("projects.update", { cwd, addedAt: Date.now(), hidden: false });
+		await get().refreshProjects();
+		await get().createSession(cwd);
+	},
+	async newSession(cwd) {
+		const s = get();
+		if (s.openingSession) return;
+		const target = cwd ?? currentProject();
+		const active = s.activeSessionId ? s.sessionStates[s.activeSessionId] : undefined;
+		// Already on an empty session there: reuse it instead of piling up blank ones.
+		if (target && active?.cwd === target && active.items.length === 0 && active.status === "idle") {
+			document.querySelector<HTMLTextAreaElement>("#argon-composer")?.focus();
+			return;
+		}
+		if (target) await s.createSession(target).catch(() => undefined);
+		else s.setAddProjectOpen(true);
+	},
 	connection: undefined,
 	environment: undefined,
 	sessions: [],
@@ -195,7 +216,7 @@ export const useApp = create<AppState>((set, get) => ({
 		set({
 			connection: undefined,
 			environment: undefined,
-			newSessionDialog: { open: false },
+			addProjectOpen: false,
 			sessionStates: {},
 			activeSessionId: undefined,
 			sessions: [],
@@ -422,6 +443,14 @@ export const useApp = create<AppState>((set, get) => ({
 		}
 	},
 }));
+
+/** The active session's project, else the top project in the sidebar. */
+function currentProject(): string | undefined {
+	const s = useApp.getState();
+	const active = s.activeSessionId ? s.sessionStates[s.activeSessionId] : undefined;
+	if (active?.cwd) return active.cwd;
+	return visibleProjects(groupByProject(s.sessions, s.projects, ""), false)[0]?.cwd;
+}
 
 export function useActiveSession(): SessionState | undefined {
 	return useApp((s) => (s.activeSessionId ? s.sessionStates[s.activeSessionId] : undefined));

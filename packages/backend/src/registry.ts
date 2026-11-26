@@ -196,7 +196,7 @@ export class SessionRegistry {
 		const projects = (await this.listProjects()).filter((p) => p.cwd !== update.cwd);
 		const previous = (await this.listProjects()).find((p) => p.cwd === update.cwd);
 		const next: ProjectPrefs = { ...previous, ...update };
-		if (next.pinned || next.hidden) projects.push(next);
+		if (next.pinned || next.hidden || next.addedAt) projects.push(next);
 		await writeFile(this.projectsPath, `${JSON.stringify({ projects }, null, 2)}\n`, { mode: 0o600 });
 		this.broadcast({ type: "projects_changed" });
 	}

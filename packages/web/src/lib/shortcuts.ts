@@ -35,7 +35,7 @@ export function useGlobalShortcuts() {
 			} else if (mod && event.shiftKey && !event.altKey) {
 				if (event.key.toLowerCase() === "o" && state.environment) {
 					event.preventDefault();
-					state.setNewSessionDialog({ open: true });
+					void state.newSession();
 				} else if (event.key.toLowerCase() === "l" && composer) {
 					event.preventDefault();
 					composer.focus();

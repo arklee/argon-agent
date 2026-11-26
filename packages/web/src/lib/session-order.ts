@@ -9,6 +9,11 @@ export function groupByProject(sessions: SessionSummary[], projects: ProjectPref
 	const groups = new Map<string, ProjectGroup>();
 	const prefs = new Map(projects.map((p) => [p.cwd, p]));
 	const query = search.trim().toLowerCase();
+	// Added projects are listed even before their first session (while searching: when the path matches).
+	for (const project of projects) {
+		if (!project.addedAt || (query && !project.cwd.toLowerCase().includes(query))) continue;
+		groups.set(project.cwd, { ...project, sessions: [], latest: project.addedAt });
+	}
 	for (const session of sessions) {
 		if (
 			query &&

@@ -7,6 +7,7 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import {
 	type ClientFrame,
@@ -231,6 +232,10 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		"projects.list": async () => ({ projects: await registry.listProjects() }),
 		"projects.update": async (params) => {
 			if (!params.cwd) throw new RequestError("bad_request", "cwd is required");
+			if (params.addedAt !== undefined) {
+				const info = await stat(params.cwd).catch(() => undefined);
+				if (!info?.isDirectory()) throw new RequestError("bad_request", `Not a directory: ${params.cwd}`);
+			}
 			await registry.updateProject(params);
 			return empty;
 		},

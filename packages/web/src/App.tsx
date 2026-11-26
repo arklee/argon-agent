@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { ChatView } from "@/components/ChatView";
 import { ConnectScreen } from "@/components/ConnectScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -62,6 +63,7 @@ function Shell() {
 		<div className="flex h-full">
 			<KeyboardShortcuts />
 			<SettingsDialog />
+			<AddProjectDialog />
 			<Sidebar />
 			<main className="flex min-w-0 flex-1 flex-col">
 				{(connection?.status === "disconnected" || (connection?.status === "connecting" && connection.attempt > 0)) && (
