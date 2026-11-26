@@ -61,10 +61,10 @@
 
 ### 质量
 
-- [ ] backend 测试：用 fake session 测 `translate.ts` 和 `managed-session.ts` 的事件转换
-- [ ] `SessionMirror` 测试：缺口、重复事件、重连、后端重启
+- [x] backend 测试：用 fake session 测 `translate.ts` 和 `managed-session.ts` 的事件转换
+- [x] `SessionMirror` 测试：缺口、重复事件、重连、后端重启
 - [ ] 带真实会话的端到端冒烟脚本（参考第一版手动跑过的 smoke 脚本）
-- [ ] CI：typecheck、test、lint
+- [x] CI：typecheck、test、lint
 - [ ] i18n（中文 / 英文）
 
 ## 阶段 2：Electron 桌面壳

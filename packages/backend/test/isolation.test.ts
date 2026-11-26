@@ -1,11 +1,14 @@
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
-test("bootstrap isolates SDK defaults and project settings from pi CLI", () => {
+const runFile = promisify(execFile);
+
+test("bootstrap isolates SDK defaults and project settings from pi CLI", async () => {
 	const home = mkdtempSync(join(tmpdir(), "argon-isolation-"));
 	try {
 		const bootstrap = new URL("../src/bootstrap.ts", import.meta.url).href;
@@ -22,14 +25,14 @@ test("bootstrap isolates SDK defaults and project settings from pi CLI", () => {
 				writeFileSync(join(cwd, dir, "settings.json"), JSON.stringify({ defaultModel: model }));
 			}
 			const manager = SessionManager.create(cwd);
-			console.log(JSON.stringify({
+			writeFileSync(join(home, "result.json"), JSON.stringify({
 				agentDir: getAgentDir(),
 				sessionDir: manager.getSessionDir(),
 				model: SettingsManager.create(cwd).getDefaultModel(),
 				sessions: (await SessionManager.listAll()).length,
 			}));
 		`;
-		const output = execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
+		await runFile(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
 			cwd: fileURLToPath(new URL("..", import.meta.url)),
 			env: {
 				...process.env,
@@ -37,9 +40,8 @@ test("bootstrap isolates SDK defaults and project settings from pi CLI", () => {
 				PI_CODING_AGENT_DIR: join(home, "forbidden-pi"),
 				PI_CODING_AGENT_SESSION_DIR: join(home, "forbidden-sessions"),
 			},
-			encoding: "utf8",
 		});
-		const result = JSON.parse(output);
+		const result = JSON.parse(readFileSync(join(home, "result.json"), "utf8"));
 		expect(result.agentDir).toBe(join(home, "agent"));
 		expect(result.sessionDir.startsWith(join(home, "agent", "sessions"))).toBe(true);
 		expect(result.model).toBe("argon");

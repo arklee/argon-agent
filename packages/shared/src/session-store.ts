@@ -132,6 +132,7 @@ export class SessionMirror {
 		const tracked = this.tracked.get(sessionId);
 		if (!tracked || tracked.resyncing) return;
 		tracked.resyncing = true;
+		const startSeq = tracked.seq;
 		try {
 			const result = await this.client.request("sessions.attach", { sessionId, sinceSeq: tracked.seq });
 			const current = this.tracked.get(sessionId);
@@ -150,6 +151,13 @@ export class SessionMirror {
 			}
 			tracked.resyncing = false;
 			this.emit(sessionId);
+			// Still a gap before some buffered events: keep them and replay again, as long as this
+			// round made progress (otherwise the next live event retries).
+			const ahead = buffered.filter((envelope) => envelope.seq > tracked.seq + 1);
+			if (ahead.length > 0 && tracked.seq > startSeq) {
+				tracked.buffered.push(...ahead);
+				void this.resync(sessionId);
+			}
 		} catch (error) {
 			tracked.resyncing = false;
 			if (this.client.connection.status !== "connected") return;

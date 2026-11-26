@@ -139,7 +139,8 @@ export function projectHistory(entries: SessionEntry[]): HistoryProjection {
 	const items: TranscriptItem[] = [];
 	const toolResults: HistoryProjection["toolResults"] = [];
 	for (const entry of entries) {
-		const timestamp = Date.parse(entry.timestamp) || Date.now();
+		const parsed = Date.parse(entry.timestamp);
+		const timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
 		switch (entry.type) {
 			case "message": {
 				const message = entry.message as AnyMessage;
