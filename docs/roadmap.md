@@ -114,6 +114,15 @@
 - [x] 3. 预设选择：传统 / Codemode / 仅 Codemode（`backend/src/tool-presets.ts`），设置里选默认，顶栏按会话切换（存为 `argon.tool_preset` 记录，运行中切换则本轮结束后生效）。实现上不用 pi 的配置覆盖（reload 会丢）：用 `setActiveToolsByName` 增减 `codemode` 工具，codemode 的 on/only 通过 Argon 注册扩展时传入的 `mode` getter 每轮读取；加载和 reload 后都会按预设校正
 - [ ] ~~4. 审批策略按显示类型~~：不做。权限控制交给沙箱（见下一节），审批维持现有的基本机制（只读工具放行、其余询问、本会话允许、简单的命令前缀规则），不再细化；codemode 的嵌套调用继续随父调用一起审批
 
+后续待办（按优先级）：
+
+- [ ] 预设控制显示偏好（D13 第 4 条）：例如“仅 Codemode”下脚本卡片的子调用默认展开；现在所有预设一样，默认折叠、标题显示“N 次调用”
+- [ ] shell 显示退出码：`ToolDisplay` 的 shell 类型加退出码（以及是否后台运行），卡片标题和输出区显示
+- [ ] 多文件 diff：`file_change.files` 已支持多个文件，但 diff 仍是单份的 `ToolCallState.diff`，每个文件不能单独带 diff。接 pi-codex-conversion 的 `apply_patch` 时需要
+- [ ] 各类型的显示细节（按需）：read 内容语法高亮；search 结果做成列表；MCP 工具标题带上服务器名（可用 `source` 或命名空间）；按需注册第一个“来源 + 工具名”覆盖渲染器
+- [ ] pi-codex-conversion 的预设（Structured、Code、TS Notebook、VM Code）：设计上已预留，暂不实现
+- 已知限制：重新打开会话后看不到子调用的输出（pi 只记录名字、参数、状态、耗时，不记录结果）；diff 已由 `argon-nested-diffs` 保存
+
 ## 阶段 4：对 pi 的深度定制（按需）
 
 按 D7 的优先级处理，先确认官方是否已有等价入口。
