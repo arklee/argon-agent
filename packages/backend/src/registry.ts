@@ -112,9 +112,7 @@ export class SessionRegistry {
 		const source = this.require(sessionId);
 		const { leafId, text } = source.forkPoint(itemId);
 		const path = source.branchToNewFile(leafId);
-		const target = path
-			? await this.open(path)
-			: await this.create(source.snapshot().state.cwd, { parentSession: source.sessionPath });
+		const target = path ? await this.open(path) : await this.emptyCopyOf(source);
 		return { sessionPath: target.sessionPath ?? "", text };
 	}
 
@@ -122,10 +120,16 @@ export class SessionRegistry {
 	async clone(sessionId: string): Promise<{ sessionPath: string }> {
 		const source = this.require(sessionId);
 		const path = source.branchToNewFile(source.leafId);
-		const target = path
-			? await this.open(path)
-			: await this.create(source.snapshot().state.cwd, { parentSession: source.sessionPath });
+		const target = path ? await this.open(path) : await this.emptyCopyOf(source);
 		return { sessionPath: target.sessionPath ?? "" };
+	}
+
+	/** A fork/clone with no history: a new session in the same project, keeping the source's model. */
+	private async emptyCopyOf(source: ManagedSession): Promise<ManagedSession> {
+		const { cwd, model } = source.snapshot().state;
+		const target = await this.create(cwd, { parentSession: source.sessionPath });
+		if (model) await target.setModel(model, this.modelRuntime).catch(() => undefined);
+		return target;
 	}
 
 	// -------------------------------------------------------------------------

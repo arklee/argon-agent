@@ -165,7 +165,7 @@ export function ChatView({ session }: { session: SessionState }) {
 					<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>
 				</div>
 			) : (
-				<Transcript key={session.sessionId} session={session} />
+				<Transcript key={`transcript:${session.sessionId}`} session={session} />
 			)}
 
 			{session.pendingInteractions.length > 0 && (
@@ -180,7 +180,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				</div>
 			)}
 
-			<Composer key={session.sessionId} session={session} />
+			<Composer key={`composer:${session.sessionId}`} session={session} />
 		</>
 	);
 }
