@@ -42,6 +42,7 @@ interface AppState {
 	clearActiveSession(): void;
 	setMcpPanelOpen(open: boolean): void;
 	compact(customInstructions?: string): Promise<void>;
+	editMessage(itemId: string, text: string): Promise<void>;
 	renameSession(name: string): Promise<void>;
 	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
 	abort(): Promise<void>;
@@ -208,6 +209,18 @@ export const useApp = create<AppState>((set, get) => ({
 		await client
 			.request("sessions.compact", { sessionId, customInstructions })
 			.catch((e) => toast.error(errorMessage(e)));
+	},
+
+	async editMessage(itemId, text) {
+		const sessionId = get().activeSessionId;
+		if (!client || !sessionId) return;
+		const clientMessageId = crypto.randomUUID();
+		try {
+			await client.request("sessions.editMessage", { sessionId, itemId, text, clientMessageId });
+		} catch (error) {
+			toast.error(errorMessage(error));
+			throw error;
+		}
 	},
 
 	async renameSession(name) {

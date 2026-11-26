@@ -295,6 +295,15 @@ export interface Methods {
 		};
 		result: { disposition: "started" | "queued" | "handled" };
 	};
+	/**
+	 * Re-send a user message with new text: the conversation branches off before that message (the old
+	 * branch stays in the session tree). The client gets a `reset` event with the new history, then the
+	 * turn's events. Idempotent per `clientMessageId`, like `sessions.prompt`.
+	 */
+	"sessions.editMessage": {
+		params: { sessionId: string; itemId: string; text: string; clientMessageId: string };
+		result: { disposition: "started" | "queued" | "handled" };
+	};
 	"sessions.abort": { params: { sessionId: string }; result: Record<string, never> };
 	"sessions.setModel": { params: { sessionId: string; model: ModelRef }; result: Record<string, never> };
 	"sessions.setThinkingLevel": {

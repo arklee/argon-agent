@@ -220,6 +220,33 @@ export class ManagedSession {
 		return result;
 	}
 
+	async editMessage(params: { itemId: string; text: string; clientMessageId: string }): Promise<PromptDisposition> {
+		// A retried request must not branch a second time.
+		const existing = this.promptResults.get(params.clientMessageId);
+		if (existing) return existing;
+		if (this.isRunning || this.session.isStreaming) throw new Error("Wait for the current turn to finish");
+		const entryId = this.userEntryIdFor(params.itemId);
+		if (!entryId) throw new Error("That message is no longer in this branch");
+		const result = await this.session.navigateTree(entryId, {});
+		if (result.cancelled) throw new Error("Editing was cancelled by an extension");
+		this.resetFromSession();
+		this.emit({ type: "reset", state: this.state });
+		return this.prompt({ clientMessageId: params.clientMessageId, text: params.text });
+	}
+
+	/**
+	 * Session entry id of a user item. History items already use entry ids; live items ("live-N") are
+	 * matched by position, since the transcript's user items follow the branch's user messages 1:1.
+	 */
+	private userEntryIdFor(itemId: string): string | undefined {
+		const userEntries = this.session.sessionManager
+			.getBranch()
+			.filter((entry) => entry.type === "message" && (entry.message as { role?: string }).role === "user");
+		if (userEntries.some((entry) => entry.id === itemId)) return itemId;
+		const index = this.state.items.filter((item) => item.kind === "user").findIndex((item) => item.id === itemId);
+		return index === -1 ? undefined : userEntries[index]?.id;
+	}
+
 	async abort(): Promise<void> {
 		this.broker.cancelAll();
 		await this.session.abort();

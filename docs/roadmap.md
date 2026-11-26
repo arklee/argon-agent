@@ -27,7 +27,7 @@
 - [ ] `@文件` 补全：后端提供按项目搜索文件的 API
 - [x] edit / write 工具展示 diff 视图：审批卡片里显示预览（backend 读原文件生成，`diff-preview.ts`），执行后用 edit 返回的 `details.diff`；小 diff 默认展开
 - [ ] write 的 diff 不会持久化（pi 的 write 结果没有 details），重新加载会话后只能看到参数。可以考虑在 `tool_result` 钩子里把预览写进 details
-- [ ] 消息操作：复制；从某条消息开始编辑重发（会话树分支）
+- [x] 消息操作：复制；从某条用户消息开始编辑重发（`sessions.editMessage`，经 `navigateTree` 分支，旧分支保留）；重新生成最后一条回复
 - [ ] 排队消息的取消和编辑（对应 pi 的 `clear_queue`）
 - [x] 上下文用量指示（占 context window 的百分比），提供手动压缩按钮（`sessions.compact`，后台执行；成功压缩的路径还没在真实长会话上验证）
 - [ ] 长会话的虚拟滚动（列表虚拟化）
@@ -111,4 +111,5 @@
 - [ ] "本会话总是允许"只保存在内存中，会话卸载后就丢失
 - [ ] pi 没有导出 `builtin:llama.cpp`，Argon 暂未加载（CLI 会加载）
 - [ ] 扩展调用 `ctx.shutdown()`（`bindExtensions` 的 `shutdownHandler`）还没接
+- [ ] 编辑重发后，侧栏标题仍取会话文件里的第一条用户消息（pi `SessionInfo.firstMessage`），而不是当前分支的
 - [ ] 后端没启动或连接断开时，只在侧边栏底部显示一个黄点，没有明显的离线提示；断线期间点击发送会一直等到请求超时
