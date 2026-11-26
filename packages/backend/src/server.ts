@@ -173,6 +173,10 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 				.mcpAction({ server: params.server, action: params.action, exposure: params.exposure });
 			return error ? { error } : {};
 		},
+		"sessions.commands": async (params) => ({ commands: registry.require(params.sessionId).listCommands() }),
+		"sessions.completeCommand": async (params) => ({
+			items: await registry.require(params.sessionId).completeCommand(params.name, params.argumentPrefix),
+		}),
 		"sessions.unload": async (params) => {
 			await registry.unload(params.sessionId);
 			return empty;

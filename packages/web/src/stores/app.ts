@@ -31,6 +31,7 @@ interface AppState {
 	activeSessionId: string | undefined;
 	models: ModelInfo[];
 	openingSession: boolean;
+	mcpPanelOpen: boolean;
 
 	connect(config: ConnectionConfig): void;
 	disconnect(): void;
@@ -39,6 +40,7 @@ interface AppState {
 	openSession(summary: SessionSummary): Promise<void>;
 	createSession(cwd: string): Promise<void>;
 	clearActiveSession(): void;
+	setMcpPanelOpen(open: boolean): void;
 	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
 	abort(): Promise<void>;
 	respond(interactionId: string, response: InteractionResponse): Promise<void>;
@@ -71,6 +73,7 @@ export const useApp = create<AppState>((set, get) => ({
 	activeSessionId: undefined,
 	models: [],
 	openingSession: false,
+	mcpPanelOpen: false,
 
 	connect(config) {
 		get().disconnect();
@@ -191,6 +194,10 @@ export const useApp = create<AppState>((set, get) => ({
 
 	clearActiveSession() {
 		set({ activeSessionId: undefined });
+	},
+
+	setMcpPanelOpen(open) {
+		set({ mcpPanelOpen: open });
 	},
 
 	async sendPrompt(text, streamingBehavior) {

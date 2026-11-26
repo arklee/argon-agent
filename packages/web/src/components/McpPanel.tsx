@@ -85,7 +85,7 @@ function ServerRow({ server }: { server: McpServerStatus }) {
 	const problem = server.state === "connected" ? server.message : (server.error ?? server.message);
 
 	return (
-		<div className="rounded-lg border p-3">
+		<div className="min-w-0 rounded-lg border p-3">
 			<div className="flex items-center gap-2">
 				<span className={cn("size-2 shrink-0 rounded-full", DOT[tone])} />
 				<span className="min-w-0 truncate font-medium">{server.name}</span>
@@ -105,7 +105,7 @@ function ServerRow({ server }: { server: McpServerStatus }) {
 					disabled={busy !== undefined}
 				>
 					<SelectTrigger size="sm" className="h-7 text-xs" title="How the model reaches this server's tools">
-						<SelectValue />
+						<SelectValue>{server.exposure}</SelectValue>
 					</SelectTrigger>
 					<SelectContent position="popper" align="end">
 						{EXPOSURES.map((e) => (
@@ -129,7 +129,7 @@ function ServerRow({ server }: { server: McpServerStatus }) {
 			</div>
 
 			{problem && (
-				<pre className="mt-2 max-h-32 overflow-auto rounded-md bg-destructive/10 p-2 font-mono text-xs whitespace-pre-wrap text-destructive">
+				<pre className="mt-2 max-h-32 overflow-auto rounded-md bg-destructive/10 p-2 font-mono text-xs break-all whitespace-pre-wrap text-destructive">
 					{problem}
 				</pre>
 			)}
@@ -166,15 +166,22 @@ function ServerRow({ server }: { server: McpServerStatus }) {
 }
 
 /** Header button + dialog with the session's MCP servers. Hidden when the session has none. */
+/** Whether the panel has anything to show (`/mcp` falls back to pi's text status otherwise). */
+export function hasMcpPanel(mcp: McpStatus | undefined): mcp is McpStatus {
+	return mcp !== undefined && (mcp.servers.length > 0 || mcp.configErrors.length > 0);
+}
+
 export function McpPanel({ mcp }: { mcp: McpStatus | undefined }) {
-	if (!mcp || (mcp.servers.length === 0 && mcp.configErrors.length === 0)) return null;
+	const open = useApp((s) => s.mcpPanelOpen);
+	const setOpen = useApp((s) => s.setMcpPanelOpen);
+	if (!hasMcpPanel(mcp)) return null;
 	const tone = overallTone(mcp);
 	const connected = mcp.servers.filter((s) => s.state === "connected").length;
 	const enabled = mcp.servers.filter((s) => s.enabled).length;
 	const notices = [...mcp.configErrors.map((e) => `Config: ${e}`), ...mcp.overridden.map((o) => `Overridden: ${o}`)];
 
 	return (
-		<Dialog>
+		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
 				<Button variant="ghost" size="sm" className="text-muted-foreground" title="MCP servers">
 					<span className="relative">
@@ -184,7 +191,7 @@ export function McpPanel({ mcp }: { mcp: McpStatus | undefined }) {
 					MCP {connected}/{enabled}
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+			<DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>MCP servers</DialogTitle>
 					<DialogDescription>
@@ -193,11 +200,11 @@ export function McpPanel({ mcp }: { mcp: McpStatus | undefined }) {
 					</DialogDescription>
 				</DialogHeader>
 				{notices.length > 0 && (
-					<pre className="rounded-md bg-destructive/10 p-2 font-mono text-xs whitespace-pre-wrap text-destructive">
+					<pre className="min-w-0 rounded-md bg-destructive/10 p-2 font-mono text-xs break-all whitespace-pre-wrap text-destructive">
 						{notices.join("\n")}
 					</pre>
 				)}
-				<div className="space-y-2">
+				<div className="min-w-0 space-y-2">
 					{mcp.servers.map((server) => (
 						<ServerRow key={server.name} server={server} />
 					))}

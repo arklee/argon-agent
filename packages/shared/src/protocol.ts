@@ -131,6 +131,25 @@ export interface McpStatus {
 
 export type McpAction = "reconnect" | "enable" | "disable" | "signin" | "signout";
 
+/** A `/command` the session accepts: an extension command, a prompt template, or a skill (`skill:<name>`). */
+export interface SlashCommand {
+	/** Without the leading slash. */
+	name: string;
+	description?: string;
+	source: "extension" | "prompt" | "skill";
+	/** Where it comes from, for display (package name, "builtin", "local"). */
+	origin: string;
+	/** Whether `sessions.completeCommand` can suggest arguments. */
+	completesArguments: boolean;
+}
+
+export interface CompletionItem {
+	/** Replaces the whole argument text. */
+	value: string;
+	label: string;
+	description?: string;
+}
+
 export interface StatusEntry {
 	key: string;
 	text: string;
@@ -275,6 +294,11 @@ export interface Methods {
 	"sessions.mcpAction": {
 		params: { sessionId: string; server: string; action: McpAction | "exposure"; exposure?: McpExposure };
 		result: { error?: string };
+	};
+	"sessions.commands": { params: { sessionId: string }; result: { commands: SlashCommand[] } };
+	"sessions.completeCommand": {
+		params: { sessionId: string; name: string; argumentPrefix: string };
+		result: { items: CompletionItem[] };
 	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };
 	"interactions.respond": {

@@ -1,6 +1,8 @@
 import type { SessionState } from "@argon/shared";
 import { ArrowUp, Square } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { hasMcpPanel } from "@/components/McpPanel";
+import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
@@ -10,13 +12,34 @@ export function Composer({ session }: { session: SessionState }) {
 	const [sending, setSending] = useState(false);
 	const sendPrompt = useApp((s) => s.sendPrompt);
 	const abort = useApp((s) => s.abort);
+	const setMcpPanelOpen = useApp((s) => s.setMcpPanelOpen);
 	const ref = useRef<HTMLTextAreaElement>(null);
+	const { suggestions, dismiss } = useSlashCompletion(session.sessionId, text);
+	const [activeIndex, setActiveIndex] = useState(0);
+	/** Whether the user moved the highlight since the text last changed. */
+	const [navigated, setNavigated] = useState(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset the highlight when the list changes
+	useEffect(() => {
+		setActiveIndex(0);
+		setNavigated(false);
+	}, [suggestions.length, text]);
+
+	const pick = (suggestion: Suggestion) => {
+		setText(suggestion.apply);
+		ref.current?.focus();
+	};
 	const running = session.status === "running";
 	const queued = [...session.queue.steering, ...session.queue.followUp];
 
 	const submit = async (behavior?: "steer" | "followUp") => {
 		const value = text.trim();
 		if (!value || sending) return;
+		// The GUI has a real MCP manager; pi would only print a text status for a bare /mcp.
+		if (value === "/mcp" && hasMcpPanel(session.mcp)) {
+			setMcpPanelOpen(true);
+			setText("");
+			return;
+		}
 		setSending(true);
 		try {
 			await sendPrompt(value, running ? (behavior ?? "followUp") : undefined);
@@ -44,14 +67,47 @@ export function Composer({ session }: { session: SessionState }) {
 					))}
 				</div>
 			)}
-			<div className="rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+			<div className="relative rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+				<SlashCompletionMenu
+					suggestions={suggestions}
+					activeIndex={activeIndex}
+					onHover={setActiveIndex}
+					onPick={pick}
+				/>
 				<textarea
 					ref={ref}
 					value={text}
 					onChange={(e) => setText(e.target.value)}
 					onKeyDown={(e) => {
-						// Never submit while an IME composition is active (Chinese/Japanese input).
-						if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+						// Never act while an IME composition is active (Chinese/Japanese input).
+						if (e.nativeEvent.isComposing) return;
+						if (suggestions.length > 0) {
+							const current = suggestions[Math.min(activeIndex, suggestions.length - 1)];
+							if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+								e.preventDefault();
+								const step = e.key === "ArrowDown" ? 1 : -1;
+								setActiveIndex((i) => (i + step + suggestions.length) % suggestions.length);
+								setNavigated(true);
+								return;
+							}
+							if (e.key === "Escape") {
+								e.preventDefault();
+								dismiss();
+								return;
+							}
+							// Tab always accepts. Enter accepts a command name (unless already typed in full), but an
+							// argument only after the user picked one, so "/cmd ⏎" still sends "/cmd".
+							const enterAccepts =
+								current !== undefined &&
+								current.apply.trimEnd() !== text.trimEnd() &&
+								(current.kind === "command" || navigated);
+							if (current && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && enterAccepts))) {
+								e.preventDefault();
+								pick(current);
+								return;
+							}
+						}
+						if (e.key === "Enter" && !e.shiftKey) {
 							e.preventDefault();
 							void submit(e.altKey ? "steer" : "followUp");
 						}

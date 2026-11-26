@@ -9,6 +9,7 @@
 
 import {
 	applySessionEvent,
+	type CompletionItem,
 	createEmptySessionState,
 	type Interaction,
 	type InteractionResponse,
@@ -20,6 +21,7 @@ import {
 	type SessionEventEnvelope,
 	type SessionSnapshot,
 	type SessionState,
+	type SlashCommand,
 	type ThinkingLevel,
 } from "@argon/shared";
 import {
@@ -240,6 +242,54 @@ export class ManagedSession {
 
 	rename(name: string): void {
 		this.session.setSessionName(name);
+	}
+
+	/** Same set pi's RPC `get_commands` returns. */
+	listCommands(): SlashCommand[] {
+		const session = this.session;
+		const commands: SlashCommand[] = [];
+		for (const command of session.extensionRunner.getRegisteredCommands()) {
+			commands.push({
+				name: command.invocationName,
+				description: command.description,
+				source: "extension",
+				origin: originLabel(command.sourceInfo.source),
+				completesArguments: Boolean(command.getArgumentCompletions),
+			});
+		}
+		for (const template of session.promptTemplates) {
+			commands.push({
+				name: template.name,
+				description: template.description,
+				source: "prompt",
+				origin: originLabel(template.sourceInfo.source),
+				completesArguments: false,
+			});
+		}
+		for (const skill of session.resourceLoader.getSkills().skills) {
+			commands.push({
+				name: `skill:${skill.name}`,
+				description: skill.description,
+				source: "skill",
+				origin: originLabel(skill.sourceInfo.source),
+				completesArguments: false,
+			});
+		}
+		return commands;
+	}
+
+	async completeCommand(name: string, argumentPrefix: string): Promise<CompletionItem[]> {
+		const command = this.session.extensionRunner
+			.getRegisteredCommands()
+			.find((candidate) => candidate.invocationName === name);
+		if (!command?.getArgumentCompletions) return [];
+		try {
+			const items = (await command.getArgumentCompletions(argumentPrefix)) ?? [];
+			return items.map((item) => ({ value: item.value, label: item.label, description: item.description }));
+		} catch (error) {
+			log.warn(`argument completion for /${name} failed`, error);
+			return [];
+		}
 	}
 
 	/** Returns an error message, or undefined on success. */
@@ -561,6 +611,12 @@ export class ManagedSession {
 		}
 		return undefined;
 	}
+}
+
+/** "npm:@scope/pkg" -> "@scope/pkg", "auto" -> "local". */
+function originLabel(source: string): string {
+	if (source === "auto") return "local";
+	return source.replace(/^npm:/, "").replace(/^extension:/, "");
 }
 
 export type { Interaction };
