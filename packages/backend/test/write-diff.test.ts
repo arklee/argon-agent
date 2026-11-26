@@ -6,7 +6,11 @@ type Handler = (event: Record<string, unknown>) => unknown;
 
 function load(diffs: Record<string, string>) {
 	let handler: Handler | undefined;
-	const pi = { on: (name: string, h: Handler) => name === "tool_result" && (handler = h) };
+	const pi = {
+		on: (name: string, h: Handler) => {
+			if (name === "tool_result") handler = h;
+		},
+	};
 	const extension = createWriteDiffExtension({
 		takeWriteDiff: (id) => {
 			const diff = diffs[id];
