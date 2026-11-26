@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /** Argon backend entry point: `tsx src/main.ts` (dev) or spawned by the desktop shell (later). */
 
+import "./bootstrap.ts";
+
 import { loadConfig } from "./config.ts";
 import { log } from "./log.ts";
 import { SessionRegistry } from "./registry.ts";

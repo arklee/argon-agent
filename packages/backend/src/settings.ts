@@ -2,7 +2,7 @@
  * Settings shown in the GUI.
  *
  * - pi settings: a curated, agent-relevant subset read and written through pi's SettingsManager (its
- *   own validation and file locking), so the pi CLI sees the same values. Resource lists are read-only.
+ *   own validation and file locking), using Argon’s private agent directory. Resource lists are read-only.
  * - Argon settings: $ARGON_HOME/settings.json (default permission mode, persisted "always allow" rules).
  */
 
@@ -56,7 +56,7 @@ export function readPiSettings(
 	];
 	if (cwd) {
 		resources.push(
-			scope("project", manager.getProjectSettings() as Record<string, unknown>, join(cwd, ".pi", "settings.json")),
+			scope("project", manager.getProjectSettings() as Record<string, unknown>, join(cwd, ".argon", "settings.json")),
 		);
 	}
 	return { pi, resources };

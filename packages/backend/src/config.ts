@@ -1,14 +1,14 @@
 /**
  * Backend configuration and environment identity. Everything lives under ARGON_HOME (default
- * ~/.argon) on the machine the backend runs on; pi's own config stays in its agentDir (~/.pi/agent).
+ * ~/.argon) on the machine the backend runs on; embedded pi data lives in its private agent/ subdirectory.
  */
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname, platform } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { EnvironmentInfo, PermissionMode } from "@argon/shared";
-import { getAgentDir, VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
+import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 
 export const ARGON_VERSION = "0.1.0";
 
@@ -43,7 +43,7 @@ function loadEnvironmentId(argonHome: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig {
-	const argonHome = env.ARGON_HOME ?? join(homedir(), ".argon");
+	const argonHome = resolve(env.ARGON_HOME ?? join(homedir(), ".argon"));
 	mkdirSync(argonHome, { recursive: true, mode: 0o700 });
 	const port = Number(env.ARGON_PORT ?? 7878);
 	const host = env.ARGON_HOST ?? "127.0.0.1";
@@ -56,7 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 		env.ARGON_PERMISSION_MODE === "auto" ? "auto" : env.ARGON_PERMISSION_MODE === "ask" ? "ask" : undefined;
 	return {
 		argonHome,
-		agentDir: env.ARGON_PI_AGENT_DIR ?? getAgentDir(),
+		agentDir: join(argonHome, "agent"),
 		host,
 		port,
 		token,

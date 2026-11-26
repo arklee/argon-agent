@@ -10,7 +10,7 @@ packages/web      React 前端（现在跑在浏览器，以后作为 Electron r
 
 ## 开发
 
-需要 Node ≥ 22.19，以及已配置好的 pi（`~/.pi/agent` 里的登录/API key）。
+需要 Node ≥ 22.19。Argon 使用独立的 `~/.argon/agent` 保存配置、登录凭据和会话；首次使用需单独配置模型或登录，不会读取或迁移 pi CLI 数据。项目级配置使用 `.argon/`。设置 `ARGON_HOME` 可迁移整个数据根目录；不再支持 `ARGON_PI_AGENT_DIR`。
 
 ```bash
 npm install
