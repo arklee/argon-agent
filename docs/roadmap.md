@@ -134,6 +134,7 @@
 
 ## 技术债与已知问题
 
+- [ ] 其他客户端（或 API）卸载会话时，正在查看该会话的标签页会退回首页（`session_unloaded` 的处理方式），应改为保留视图并在需要时重新打开
 - [ ] 被拒绝的工具调用在历史回放中显示为 error，而不是 blocked（blocked 状态没有持久化）
 - [ ] 某些机器上 `os.hostname()` 返回 IP，环境名应改用 `scutil --get ComputerName` 等更友好的值
 - [ ] 每次 `sessions.list` 都全量扫描 `~/.argon/agent/sessions`，会话多了以后需要加索引或缓存
