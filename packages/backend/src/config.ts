@@ -12,6 +12,9 @@ import { join, resolve } from "node:path";
 import type { EnvironmentInfo, PermissionMode } from "@argon/shared";
 import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 
+import { log } from "./log.ts";
+import { effectiveMode, sandboxSupport } from "./sandbox-policy.ts";
+
 export const ARGON_VERSION = "0.1.0";
 
 export interface BackendConfig {
@@ -83,8 +86,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 		.split(",")
 		.map((s) => s.trim())
 		.filter(Boolean);
-	const permissionModeOverride: PermissionMode | undefined =
+	let permissionModeOverride: PermissionMode | undefined =
 		env.ARGON_PERMISSION_MODE === "auto" ? "auto" : env.ARGON_PERMISSION_MODE === "ask" ? "ask" : undefined;
+	if (permissionModeOverride === "ask" && !sandboxSupport().supported) {
+		log.warn("ARGON_PERMISSION_MODE=ask is unavailable on this platform; using auto");
+		permissionModeOverride = effectiveMode(permissionModeOverride);
+	}
 	return {
 		argonHome,
 		agentDir: join(argonHome, "agent"),
@@ -101,6 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 			homeDir: homedir(),
 			argonVersion: ARGON_VERSION,
 			piVersion: PI_VERSION,
+			sandbox: sandboxSupport(),
 		},
 	};
 }

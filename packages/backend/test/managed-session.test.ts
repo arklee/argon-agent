@@ -33,6 +33,7 @@ async function loadSession(
 		setup?: (sessionManager: SessionManager) => void;
 		activeTools?: string[];
 		defaultPreset?: string;
+		sandboxSupported?: boolean;
 		toolSources?: Record<string, string>;
 	} = {},
 ) {
@@ -93,7 +94,10 @@ async function loadSession(
 	// The SDK classes are nominal. The fake implements the runtime surface used by load and these events.
 	vi.mocked(createAgentSessionRuntime).mockResolvedValueOnce(runtime as unknown as AgentSessionRuntime);
 	let trustStatus: ProjectTrustStatus = "undecided";
-	const settings = new ArgonSettingsStore("/argon");
+	const settings = new ArgonSettingsStore("/argon", undefined, {
+		supported: options.sandboxSupported ?? true,
+		mechanism: "seatbelt",
+	});
 	if (options.defaultPreset)
 		vi.spyOn(settings, "get").mockReturnValue({ ...settings.get(), defaultToolPreset: options.defaultPreset });
 	const managed = await ManagedSession.load(
@@ -117,6 +121,7 @@ async function loadSession(
 		diagnostics,
 		reload,
 		settingsManager,
+		settings,
 		bindings,
 		session: runtime.session as Record<string, unknown>,
 		sessionManager,
@@ -301,7 +306,7 @@ describe("ManagedSession diagnostics, notifications and approvals", () => {
 
 	it("stores allow-for-session choices and denied calls in the session file", async () => {
 		type Check = { checkToolCall(check: unknown): Promise<unknown> };
-		const check = (managed: unknown, toolCallId: string, toolName = "bash") =>
+		const check = (managed: unknown, toolCallId: string, toolName = "extension_tool") =>
 			(managed as Check).checkToolCall({ toolCallId, toolName, input: { command: "make" }, signal: undefined });
 		const answer = async (managed: ManagedSession, response: Parameters<ManagedSession["respond"]>[1]) => {
 			await vi.waitFor(() => expect(managed.snapshot().state.pendingInteractions).toHaveLength(1));
@@ -320,7 +325,7 @@ describe("ManagedSession diagnostics, notifications and approvals", () => {
 			.getEntries()
 			.flatMap((e) => (e.type === "custom" ? [{ type: e.customType, data: e.data }] : []));
 		expect(custom).toEqual([
-			{ type: "argon.session_allow", data: { tool: "bash" } },
+			{ type: "argon.session_allow", data: { tool: "extension_tool" } },
 			{ type: "argon.tool_blocked", data: { toolCallId: "t3", reason: "Denied by user: not now" } },
 		]);
 
@@ -606,4 +611,76 @@ describe("session tool presets", () => {
 		expect(managed.snapshot().state.toolPreset).toBe(expected);
 		expect(setActiveToolsByName).toHaveBeenCalledWith(["read", "custom", "codemode"]);
 	});
+});
+
+describe("sandbox permission boundary", () => {
+	type Check = { checkToolCall(check: unknown): Promise<unknown> };
+	const check = (managed: ManagedSession, input: unknown, toolName = "bash") =>
+		(managed as unknown as Check).checkToolCall({ toolCallId: "sandbox-check", toolName, input, signal: undefined });
+	const answer = async (managed: ManagedSession, decision: "allow" | "allow_session" | "deny") => {
+		await vi.waitFor(() => expect(managed.snapshot().state.pendingInteractions).toHaveLength(1));
+		const interaction = managed.snapshot().state.pendingInteractions[0]!;
+		managed.respond(interaction.id, { decision });
+		return interaction;
+	};
+
+	it("auto-allows sandbox bash but never reuses ordinary bash grants for unsandboxed calls", async () => {
+		const { managed, settings } = await loadSession({
+			setup(manager) {
+				manager.appendCustomEntry("argon.session_allow", { tool: "bash" });
+			},
+		});
+		vi.spyOn(settings, "allows").mockReturnValue(true);
+		await expect(check(managed, { command: "make" })).resolves.toEqual({ allow: true });
+		const denied = check(managed, { command: "make", dangerouslyDisableSandbox: true });
+		expect(await answer(managed, "deny")).toMatchObject({
+			kind: "tool_approval",
+			unsandboxed: true,
+			suggestedRule: undefined,
+		});
+		await expect(denied).resolves.toMatchObject({ allow: false });
+		const allowed = check(managed, { command: "make", dangerouslyDisableSandbox: true });
+		await answer(managed, "allow_session");
+		await expect(allowed).resolves.toEqual({ allow: true });
+		await expect(check(managed, { command: "other", dangerouslyDisableSandbox: true })).resolves.toEqual({
+			allow: true,
+		});
+	});
+
+	it("allows workspace writes and asks for protected reads and writes", async () => {
+		const { managed } = await loadSession();
+		await expect(check(managed, { path: "/project/new.txt", content: "test" }, "write")).resolves.toEqual({
+			allow: true,
+		});
+		for (const [tool, path] of [
+			["write", "/project/.git/config"],
+			["read", "~/.npmrc"],
+			["grep", "~"],
+			["find", "/"],
+			["edit", "/outside/file"],
+		]) {
+			const pending = check(managed, { path }, tool);
+			await answer(managed, "deny");
+			await expect(pending).resolves.toMatchObject({ allow: false });
+		}
+	});
+
+	it("auto mode bypasses approvals even for unsandboxed requests", async () => {
+		const { managed } = await loadSession();
+		managed.setPermissionMode("auto");
+		await expect(check(managed, { command: "make", dangerouslyDisableSandbox: true })).resolves.toEqual({
+			allow: true,
+		});
+	});
+});
+
+it("loads stored ask as auto on unsupported platforms and rejects switching back", async () => {
+	const { managed } = await loadSession({
+		sandboxSupported: false,
+		setup(manager) {
+			manager.appendCustomEntry("argon.permission_mode", { mode: "ask" });
+		},
+	});
+	expect(managed.snapshot().state.permissionMode).toBe("auto");
+	expect(() => managed.setPermissionMode("ask")).toThrow("not available");
 });

@@ -227,7 +227,29 @@ void app
 				});
 			}
 		}
-		session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+		// Copy uses Chromium's write-only permission; never grant clipboard reads or subframe access.
+		const canWriteClipboard = (
+			contents: Electron.WebContents | null,
+			permission: string,
+			isMainFrame: boolean,
+			requestingUrl: string | undefined,
+		): boolean => {
+			if (!window || window.isDestroyed() || contents !== window.webContents) return false;
+			if (permission !== "clipboard-sanitized-write" || !isMainFrame || !requestingUrl) return false;
+			try {
+				const target = new URL(requestingUrl);
+				const local = new URL(rendererUrl ?? origin);
+				return target.protocol === local.protocol && target.host === local.host;
+			} catch {
+				return false;
+			}
+		};
+		session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+			canWriteClipboard(contents, permission, details.isMainFrame, details.requestingUrl),
+		);
+		session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+			callback(canWriteClipboard(contents, permission, details.isMainFrame, details.requestingUrl));
+		});
 		const rendererRoot = resolve(directory, "../renderer");
 		protocol.handle("argon", (request) => {
 			const url = new URL(request.url);

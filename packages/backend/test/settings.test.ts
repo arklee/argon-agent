@@ -61,7 +61,7 @@ describe("ArgonSettingsStore", () => {
 		const b = new ArgonSettingsStore(dir);
 		await b.load();
 		expect(b.defaultPermissionMode).toBe("auto");
-		const c = new ArgonSettingsStore(dir, "ask");
+		const c = new ArgonSettingsStore(dir, "ask", { supported: true, mechanism: "seatbelt" });
 		await c.load();
 		expect(c.defaultPermissionMode).toBe("ask");
 	});

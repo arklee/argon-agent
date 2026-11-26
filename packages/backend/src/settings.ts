@@ -21,6 +21,8 @@ import type {
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import lockfile from "proper-lockfile";
 
+import { validateAllowedDomains } from "./sandbox.ts";
+import { effectiveMode, sandboxSupport } from "./sandbox-policy.ts";
 import { resolveToolPreset } from "./tool-presets.ts";
 
 type ThinkingArg = Parameters<SettingsManager["setDefaultThinkingLevel"]>[0];
@@ -270,18 +272,28 @@ export function writeProjectSettings(
 // Argon settings
 // ---------------------------------------------------------------------------
 
-const DEFAULT_ARGON: ArgonSettings = { defaultToolPreset: "classic", permissions: { defaultMode: "ask", rules: [] } };
+const DEFAULT_ARGON: ArgonSettings = {
+	defaultToolPreset: "classic",
+	permissions: { defaultMode: "ask", rules: [] },
+	sandbox: { allowedDomains: [] },
+};
 
 export class ArgonSettingsStore {
 	private current: ArgonSettings = DEFAULT_ARGON;
 	private readonly path: string;
+	private writes: Promise<void> = Promise.resolve();
 
 	constructor(
-		argonHome: string,
+		readonly argonHome: string,
 		/** ARGON_PERMISSION_MODE, when set, wins over the stored default. */
 		private readonly envMode?: PermissionMode,
+		readonly support = sandboxSupport(),
 	) {
 		this.path = join(argonHome, "settings.json");
+		this.current = {
+			...DEFAULT_ARGON,
+			permissions: { ...DEFAULT_ARGON.permissions, defaultMode: effectiveMode("ask", support) },
+		};
 	}
 
 	async load(): Promise<void> {
@@ -290,15 +302,21 @@ export class ArgonSettingsStore {
 			const permissions = (data.permissions ?? {}) as Partial<ArgonSettings["permissions"]>;
 			this.current = {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
+				sandbox: {
+					allowedDomains: validateAllowedDomains(data.sandbox?.allowedDomains) ? data.sandbox.allowedDomains : [],
+				},
 				permissions: {
-					defaultMode: permissions.defaultMode === "auto" ? "auto" : "ask",
+					defaultMode: effectiveMode(permissions.defaultMode === "auto" ? "auto" : "ask", this.support),
 					rules: Array.isArray(permissions.rules)
 						? permissions.rules.filter((r): r is PermissionRule => typeof r?.tool === "string")
 						: [],
 				},
 			};
 		} catch {
-			this.current = DEFAULT_ARGON;
+			this.current = {
+				...DEFAULT_ARGON,
+				permissions: { ...DEFAULT_ARGON.permissions, defaultMode: effectiveMode("ask", this.support) },
+			};
 		}
 	}
 
@@ -307,19 +325,34 @@ export class ArgonSettingsStore {
 	}
 
 	get defaultPermissionMode(): PermissionMode {
-		return this.envMode ?? this.current.permissions.defaultMode;
+		return effectiveMode(this.envMode ?? this.current.permissions.defaultMode, this.support);
 	}
 
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
+		if (patch.permissions?.defaultMode === "ask" && !this.support.supported) throw new Error(this.support.reason);
+		if (patch.sandbox && !validateAllowedDomains(patch.sandbox.allowedDomains))
+			throw new Error("Invalid sandbox allowedDomains");
 		this.current = {
 			...this.current,
 			...patch,
 			defaultToolPreset: resolveToolPreset(patch.defaultToolPreset ?? this.current.defaultToolPreset).id,
 			permissions: { ...this.current.permissions, ...patch.permissions },
 		};
-		const tmp = `${this.path}.tmp`;
-		await writeFile(tmp, `${JSON.stringify(this.current, null, 2)}\n`, { mode: 0o600 });
-		await rename(tmp, this.path);
+		const data = `${JSON.stringify(this.current, null, 2)}\n`;
+		const write = this.writes
+			.catch(() => {})
+			.then(async () => {
+				const tmp = `${this.path}.tmp`;
+				await writeFile(tmp, data, { mode: 0o600 });
+				await rename(tmp, this.path);
+			});
+		this.writes = write;
+		await write;
+	}
+
+	async addAllowedDomain(host: string): Promise<void> {
+		const domains = this.current.sandbox.allowedDomains;
+		if (!domains.includes(host)) await this.update({ sandbox: { allowedDomains: [...domains, host] } });
 	}
 
 	async addRule(rule: PermissionRule): Promise<void> {

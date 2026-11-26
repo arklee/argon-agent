@@ -77,23 +77,67 @@ export function InteractionCard({
 			const renderer = rendererFor(view);
 			const summary = renderer.summary?.(view) ?? view.display.summary ?? "";
 			// The path belongs in the question for file changes; other previews show the call themselves.
-			const title =
-				view.display.kind === "file_change" && summary
+			const title = interaction.unsandboxed
+				? t("approval.unsandboxedQuestion", { tool: interaction.toolName })
+				: view.display.kind === "file_change" && summary
 					? t("approval.questionWithSummary", { tool: interaction.toolName, summary })
 					: t("approval.question", { tool: interaction.toolName });
 			const Preview = renderer.Preview;
 			return frame(
 				title,
-				<div className="max-h-80 overflow-auto rounded-md bg-muted p-2">
-					{Preview ? (
-						<Preview view={view} diff={interaction.diff} />
-					) : (
-						<pre className="font-mono text-xs whitespace-pre-wrap break-all">
-							{summary || JSON.stringify(interaction.args, null, 2)}
-						</pre>
+				<>
+					{interaction.unsandboxed && (
+						<p className="mb-2 text-sm text-muted-foreground">{t("approval.unsandboxedDescription")}</p>
 					)}
-				</div>,
-				approvalActions(interaction.toolName, interaction.suggestedRule),
+					<div className="max-h-80 overflow-auto rounded-md bg-muted p-2">
+						{Preview ? (
+							<Preview view={view} diff={interaction.diff} />
+						) : (
+							<pre className="font-mono text-xs whitespace-pre-wrap break-all">
+								{summary || JSON.stringify(interaction.args, null, 2)}
+							</pre>
+						)}
+					</div>
+				</>,
+				// A saved rule never covers running unsandboxed, so do not offer one.
+				approvalActions(interaction.toolName, interaction.unsandboxed ? undefined : interaction.suggestedRule),
+			);
+		}
+		case "network_access": {
+			const host =
+				interaction.port && interaction.port !== 443 && interaction.port !== 80
+					? `${interaction.host}:${interaction.port}`
+					: interaction.host;
+			return frame(
+				t("approval.networkQuestion", { host }),
+				<p className="text-sm text-muted-foreground">{t("approval.networkDescription")}</p>,
+				<>
+					<Button variant="ghost" size="sm" onClick={() => onRespond({ decision: "deny" })}>
+						{t("approval.deny")}
+					</Button>
+					<div className="flex-1" />
+					<Button
+						variant="ghost"
+						size="sm"
+						title={t("approval.hostRuleDescription")}
+						onClick={() => onRespond({ decision: "allow_always" })}
+					>
+						<Trans
+							t={t}
+							i18nKey="approval.alwaysAllow"
+							shouldUnescape
+							tOptions={{ interpolation: { escapeValue: true } }}
+							values={{ rule: interaction.host }}
+							components={{ rule: <code className="font-mono text-xs" /> }}
+						/>
+					</Button>
+					<Button variant="outline" size="sm" onClick={() => onRespond({ decision: "allow_session" })}>
+						{t("approval.allowHostSession")}
+					</Button>
+					<Button size="sm" onClick={() => onRespond({ decision: "allow" })} autoFocus>
+						{t("approval.allow")}
+					</Button>
+				</>,
 			);
 		}
 		case "confirm":

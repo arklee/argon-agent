@@ -23,6 +23,7 @@ const connected: ConnectionState = {
 		homeDir: "/home/test",
 		argonVersion: "test",
 		piVersion: "test",
+		sandbox: { supported: false },
 	},
 };
 

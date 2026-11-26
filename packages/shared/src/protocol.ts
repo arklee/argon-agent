@@ -24,6 +24,20 @@ export interface EnvironmentInfo {
 	homeDir: string;
 	argonVersion: string;
 	piVersion: string;
+	/** Whether the OS sandbox (decisions D15) works on the backend machine. */
+	sandbox: SandboxSupport;
+}
+
+/**
+ * OS sandbox availability on the backend machine. Only macOS (Seatbelt) is implemented; elsewhere
+ * `supported` is false and the "ask" permission mode is unavailable (sessions run in "auto").
+ * `supported` true with `reason` set means the platform supports it but initialization failed:
+ * shell commands are refused (fail-closed) until it is fixed.
+ */
+export interface SandboxSupport {
+	supported: boolean;
+	mechanism?: "seatbelt";
+	reason?: string;
 }
 
 export interface ModelRef {
@@ -39,6 +53,12 @@ export interface ModelInfo extends ModelRef {
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | (string & {});
 
+/**
+ * "ask": shell commands run in the OS sandbox without asking; file writes inside the writable roots
+ * are allowed; anything that leaves the sandbox (writes elsewhere, unlisted network hosts, running a
+ * command unsandboxed, other tools) asks. Only available where `EnvironmentInfo.sandbox.supported`.
+ * "auto": no sandbox, nothing asks.
+ */
 export type PermissionMode = "ask" | "auto";
 
 export interface SessionSummary {
@@ -60,7 +80,7 @@ export interface SessionSummary {
 
 export type SessionStatus = "idle" | "running";
 
-export type InteractionKind = "select" | "confirm" | "input" | "editor" | "tool_approval" | "oauth";
+export type InteractionKind = "select" | "confirm" | "input" | "editor" | "tool_approval" | "oauth" | "network_access";
 
 export interface InteractionBase {
 	id: string;
@@ -88,7 +108,15 @@ export type Interaction =
 			diff?: string;
 			/** The rule "Always allow" would save, e.g. { tool: "bash", command: "npm test" }. */
 			suggestedRule?: PermissionRule;
-	  });
+			/** The model asked to run this shell command outside the sandbox. */
+			unsandboxed?: boolean;
+	  })
+	/**
+	 * A sandboxed command tried to reach a host that is not in `ArgonSettings.sandbox.allowedDomains`.
+	 * Answered with a `decision`: allow (this connection), allow_session, allow_always (saved to
+	 * settings), deny.
+	 */
+	| (InteractionBase & { kind: "network_access"; host: string; port?: number; toolCallId?: string });
 
 export type InteractionResponse =
 	| { cancelled: true }
@@ -290,6 +318,8 @@ export interface PermissionRule {
 /** Argon's own settings, per backend environment ($ARGON_HOME/settings.json). */
 export interface ArgonSettings {
 	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
+	/** OS sandbox policy (decisions D15); used in "ask" mode where the sandbox is supported. */
+	sandbox: { allowedDomains: string[] };
 	/** Tool preset for new sessions (decisions D13). */
 	defaultToolPreset: ToolPresetId;
 }

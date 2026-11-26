@@ -54,11 +54,14 @@ import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.
 import { createNestedDiffExtension } from "./nested-diffs.ts";
 import {
 	createPermissionExtension,
+	isUnsandboxedBash,
 	READ_ONLY_TOOLS,
 	type ToolCallCheck,
 	type ToolCallDecision,
 } from "./permissions.ts";
 import type { ResolvedProjectTrust } from "./project-trust.ts";
+import { createSandboxExtension, sandboxFor } from "./sandbox.ts";
+import { effectiveMode, SandboxPolicy } from "./sandbox-policy.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { describeToolCall } from "./tool-display.ts";
 import { resolveToolPreset, type ToolPreset } from "./tool-presets.ts";
@@ -139,6 +142,8 @@ export class ManagedSession {
 	readonly createdAt: number;
 	private readonly broker: InteractionBroker;
 	private readonly promptResults = new Map<string, Promise<PromptDisposition>>();
+	private unsandboxedBashAllowed = false;
+	private readonly networkAllowedDomains = new Set<string>();
 	private readonly sessionAllowedTools = new Set<string>();
 	private readonly writeDiffs = new Map<string, string>();
 	private unsubscribe: (() => void) | undefined;
@@ -175,8 +180,9 @@ export class ManagedSession {
 		this.createdAt = Number.isNaN(created) ? Date.now() : created;
 		for (const entry of session.sessionManager.getEntries()) {
 			if (entry.type !== "custom" || entry.customType !== SESSION_ALLOW_ENTRY) continue;
-			const tool = (entry.data as { tool?: unknown } | undefined)?.tool;
-			if (typeof tool === "string") this.sessionAllowedTools.add(tool);
+			const data = entry.data as { tool?: unknown; unsandboxed?: unknown } | undefined;
+			if (data?.tool === "bash" && data.unsandboxed === true) this.unsandboxedBashAllowed = true;
+			else if (typeof data?.tool === "string") this.sessionAllowedTools.add(data.tool);
 		}
 		this.state = createEmptySessionState({
 			sessionId: session.sessionId,
@@ -184,7 +190,7 @@ export class ManagedSession {
 			sessionPath: session.sessionFile,
 		});
 		this.state.toolPreset = appliedToolPreset.id;
-		this.state.permissionMode = permissionMode;
+		this.state.permissionMode = effectiveMode(permissionMode, settings?.support);
 		this.state.projectTrust = projectTrust?.info;
 		this.appliedProjectTrust = projectTrust?.trusted;
 		this.state.mcp = mcp.status;
@@ -255,6 +261,17 @@ export class ManagedSession {
 				resourceLoaderOptions: {
 					extensionFactories: [
 						permissionExtension,
+						createSandboxExtension({
+							cwd,
+							settings: deps.settings,
+							shellPath: settingsManager.getShellPath(),
+							commandPrefix: settingsManager.getShellCommandPrefix(),
+							mode: () => self?.state.permissionMode ?? deps.settings.defaultPermissionMode,
+							session: () => {
+								if (!self) throw new Error("Session not ready");
+								return { id: self.state.sessionId, broker: self.broker, allowedDomains: self.networkAllowedDomains };
+							},
+						}),
 						writeDiffExtension,
 						nestedDiffExtension,
 						...createBuiltinExtensions(() => (self?.appliedToolPreset ?? initialPreset).codemodeMode),
@@ -780,6 +797,8 @@ export class ManagedSession {
 	}
 
 	setPermissionMode(mode: PermissionMode): void {
+		if (mode !== effectiveMode(mode, this.settings?.support))
+			throw new Error("The sandbox is not available on this platform");
 		this.emit({ type: "permission_mode_changed", mode });
 		// Stored in the session file, so reopening the session restores it.
 		this.session.sessionManager.appendCustomEntry(PERMISSION_ENTRY, { mode });
@@ -898,6 +917,7 @@ export class ManagedSession {
 	async dispose(): Promise<void> {
 		if (this.disposed) return;
 		this.disposed = true;
+		if (this.settings) sandboxFor(this.settings).attribution.forget(this.state.sessionId);
 		this.broker.cancelAll();
 		this.disposeWidgets();
 		this.unsubscribe?.();
@@ -1197,11 +1217,23 @@ export class ManagedSession {
 		diff: string | undefined,
 	): Promise<{ allow: true; waited: boolean } | { allow: false; reason: string }> {
 		if (this.state.permissionMode === "auto") return { allow: true, waited: false };
-		if (READ_ONLY_TOOLS.has(check.toolName) || this.sessionAllowedTools.has(check.toolName)) {
+		const unsandboxed = isUnsandboxedBash(check);
+		const policy = new SandboxPolicy(this.state.cwd, this.settings?.argonHome ?? this.agentDir);
+		const path = (check.input as { path?: unknown } | undefined)?.path;
+		const safePath = typeof path === "string" ? path : ".";
+		const safeBuiltin =
+			check.toolName === "bash"
+				? !unsandboxed
+				: READ_ONLY_TOOLS.has(check.toolName)
+					? policy.canRead(safePath, check.toolName === "grep" || check.toolName === "find")
+					: (check.toolName === "write" || check.toolName === "edit") &&
+						typeof path === "string" &&
+						policy.canWrite(path);
+		if (safeBuiltin || (unsandboxed ? this.unsandboxedBashAllowed : this.sessionAllowedTools.has(check.toolName))) {
 			return { allow: true, waited: false };
 		}
-		if (this.settings?.allows(check.toolName, check.input)) return { allow: true, waited: false };
-		const suggestedRule = suggestRule(check.toolName, check.input);
+		if (!unsandboxed && this.settings?.allows(check.toolName, check.input)) return { allow: true, waited: false };
+		const suggestedRule = unsandboxed ? undefined : suggestRule(check.toolName, check.input);
 		const response = await this.broker.request(
 			{
 				kind: "tool_approval",
@@ -1210,15 +1242,20 @@ export class ManagedSession {
 				args: check.input,
 				diff,
 				suggestedRule,
+				unsandboxed: unsandboxed || undefined,
 			},
 			{ signal: check.signal, fallback: { decision: "deny", reason: "Cancelled" } },
 		);
 		const decision = "decision" in response ? response.decision : "deny";
-		if (decision === "allow_session" && !this.sessionAllowedTools.has(check.toolName)) {
-			this.sessionAllowedTools.add(check.toolName);
-			this.session.sessionManager.appendCustomEntry(SESSION_ALLOW_ENTRY, { tool: check.toolName });
+		if (decision === "allow_session") {
+			if (unsandboxed) this.unsandboxedBashAllowed = true;
+			else this.sessionAllowedTools.add(check.toolName);
+			this.session.sessionManager.appendCustomEntry(SESSION_ALLOW_ENTRY, {
+				tool: check.toolName,
+				...(unsandboxed ? { unsandboxed: true } : {}),
+			});
 		}
-		if (decision === "allow_always") {
+		if (decision === "allow_always" && !unsandboxed) {
 			const rule = ("rule" in response && response.rule) || suggestedRule;
 			if (rule) await this.settings?.addRule(rule).catch((e) => log.warn(`could not save permission rule: ${e}`));
 		}

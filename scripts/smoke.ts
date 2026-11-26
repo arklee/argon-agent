@@ -25,6 +25,7 @@ function parseModel(ref: string): { provider: string; id: string } {
 }
 const MARKER = "SMOKE-OK";
 const COMMAND = "echo argon > smoke.txt";
+const SANDBOXED = process.platform === "darwin";
 const ARGON_HOME = process.env.ARGON_HOME ?? join(homedir(), ".argon");
 const AUTH_PATH = join(ARGON_HOME, "agent", "auth.json");
 
@@ -216,7 +217,8 @@ function assertSettings(state: SessionState) {
 	assert.equal(state.model?.provider, MODEL.provider, "Unexpected model provider");
 	assert.equal(state.model?.id, MODEL.id, "Unexpected model ID");
 	assert.equal(state.thinkingLevel, "low", "Unexpected thinking level");
-	assert.equal(state.permissionMode, "ask", "Unexpected permission mode");
+	// "ask" needs the OS sandbox (decisions D15), which only exists on macOS; elsewhere sessions run in "auto".
+	assert.equal(state.permissionMode, SANDBOXED ? "ask" : "auto", "Unexpected permission mode");
 }
 
 async function snapshot(client: WebSocketAgentClient, sessionId: string) {
@@ -330,7 +332,8 @@ async function main() {
 			assert.equal(state.items.filter((item) => item.kind === "user").length, 1, "Duplicate prompt added a user item");
 		});
 
-		await check("Tool approval", async (signal) => {
+		// Writing inside the project is within the sandbox (or "auto" without one): it must run without asking.
+		await check(SANDBOXED ? "Sandboxed bash" : "Bash", async (signal) => {
 			assert(cwd, "Missing temporary project");
 			await runPrompt(
 				client(),
@@ -340,7 +343,6 @@ async function main() {
 					text: `Use the bash tool to run exactly this command in the current project directory: ${COMMAND}`,
 				},
 				signal,
-				true,
 			);
 			assert.equal(await readFile(join(cwd, "smoke.txt"), "utf8"), "argon\n", "Unexpected smoke.txt content");
 		});

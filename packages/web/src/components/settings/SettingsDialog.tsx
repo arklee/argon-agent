@@ -181,7 +181,7 @@ function Choice<T extends string>({
 	ariaLabel,
 }: {
 	value: T | undefined;
-	options: { value: T; label: string }[];
+	options: { value: T; label: string; disabled?: boolean }[];
 	onChange: (value: T) => void;
 	placeholder?: string;
 	ariaLabel?: string;
@@ -193,7 +193,7 @@ function Choice<T extends string>({
 			</SelectTrigger>
 			<SelectContent position="popper" align="end">
 				{options.map((o) => (
-					<SelectItem key={o.value} value={o.value}>
+					<SelectItem key={o.value} value={o.value} disabled={o.disabled}>
 						{o.label}
 					</SelectItem>
 				))}
@@ -611,8 +611,14 @@ function PermissionsSection() {
 	const { t } = useTranslation();
 	const argon = useSettings((s) => s.settings?.argon);
 	const updateArgon = useSettings((s) => s.updateArgon);
+	const sandbox = useApp((s) => s.environment?.sandbox);
 	if (!argon) return <Loading />;
 	const { permissions } = argon;
+	// Older backends do not report sandbox support (or the policy); assume support as before.
+	const sandboxSupported = sandbox?.supported !== false;
+	const allowedDomains = argon.sandbox?.allowedDomains ?? [];
+	const removeHost = (host: string) =>
+		void updateArgon({ sandbox: { ...argon.sandbox, allowedDomains: allowedDomains.filter((h) => h !== host) } });
 	const remove = (rule: PermissionRule) =>
 		void updateArgon({
 			permissions: {
@@ -625,12 +631,14 @@ function PermissionsSection() {
 			<Group>
 				<Row
 					label={t("settings.permissions.defaultMode")}
-					description={t("settings.permissions.defaultModeDescription")}
+					description={
+						sandboxSupported ? t("settings.permissions.defaultModeDescription") : t("chat.sandboxUnavailable")
+					}
 				>
 					<Choice
 						value={permissions.defaultMode}
 						options={[
-							{ value: "ask", label: t("settings.permissions.ask") },
+							{ value: "ask", label: t("settings.permissions.ask"), disabled: !sandboxSupported },
 							{ value: "auto", label: t("settings.permissions.auto") },
 						]}
 						onChange={(defaultMode) => void updateArgon({ permissions: { ...permissions, defaultMode } })}
@@ -667,6 +675,30 @@ function PermissionsSection() {
 				)}
 			</Group>
 			<p className="text-xs text-muted-foreground">{t("settings.permissions.commandMatching")}</p>
+			{sandboxSupported && (
+				<Group title={t("settings.permissions.allowedHosts")}>
+					<p className="pt-2 text-xs text-muted-foreground">{t("settings.permissions.allowedHostsDescription")}</p>
+					{allowedDomains.length === 0 ? (
+						<p className="py-4 text-sm text-muted-foreground">{t("settings.permissions.noHosts")}</p>
+					) : (
+						allowedDomains.map((host) => (
+							<div key={host} className="flex items-center gap-3 py-2.5">
+								<span className="min-w-0 flex-1 truncate font-mono text-sm" title={host}>
+									{host}
+								</span>
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									aria-label={t("settings.permissions.removeHost", { host })}
+									onClick={() => removeHost(host)}
+								>
+									<Trash2 />
+								</Button>
+							</div>
+						))
+					)}
+				</Group>
+			)}
 		</>
 	);
 }

@@ -1,11 +1,11 @@
 /**
  * Argon's tool permission gate, implemented as an inline pi extension (no pi patch needed).
- * pi itself never asks before running tools; Argon asks for anything that is not read-only.
+ * pi itself never asks before running tools; Argon asks when a call leaves the sandbox policy.
  */
 
 import type { ExtensionFactory, InlineExtension } from "@earendil-works/pi-coding-agent";
 
-/** Built-in tools that only read. Everything else (bash, edit, write, MCP, custom) needs approval in "ask" mode. */
+/** Built-in readers: allowed only when their target is outside the read-deny list. */
 export const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 
 export interface ToolCallCheck {
@@ -31,8 +31,8 @@ export function createPermissionExtension(host: PermissionHost): InlineExtension
 				input: event.input,
 				signal: ctx.signal,
 			};
-			// Nested calls were approved with their parent.
-			if (event.parentToolCallId) {
+			// Nested calls share the parent approval, except requests to leave the OS sandbox.
+			if (event.parentToolCallId && !isUnsandboxedBash(check)) {
 				await host.previewNestedCall?.(check);
 				return;
 			}
@@ -42,4 +42,11 @@ export function createPermissionExtension(host: PermissionHost): InlineExtension
 		});
 	};
 	return { name: "argon-permissions", factory, hidden: true };
+}
+
+export function isUnsandboxedBash(check: Pick<ToolCallCheck, "toolName" | "input">): boolean {
+	return (
+		check.toolName === "bash" &&
+		(check.input as { dangerouslyDisableSandbox?: unknown } | undefined)?.dangerouslyDisableSandbox === true
+	);
 }

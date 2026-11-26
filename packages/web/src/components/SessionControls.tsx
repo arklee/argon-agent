@@ -22,6 +22,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { thinkingLevelLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
 /** Shared look of the composer toolbar's pickers. */
@@ -72,7 +73,16 @@ export function ThinkingPicker({ session }: { session: SessionState }) {
 export function PermissionPicker({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
 	const setPermissionMode = useApp((s) => s.setPermissionMode);
+	const sandbox = useApp((s) => s.environment?.sandbox);
 	const ask = session.permissionMode === "ask";
+	// Older backends do not report sandbox support; assume it so "ask" stays selectable.
+	const sandboxDescription = !sandbox
+		? t("chat.sandboxed")
+		: !sandbox.supported
+			? t("chat.sandboxUnavailable")
+			: sandbox.reason
+				? t("chat.sandboxFailed", { reason: sandbox.reason })
+				: t("chat.sandboxed");
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -93,10 +103,17 @@ export function PermissionPicker({ session }: { session: SessionState }) {
 					value={session.permissionMode}
 					onValueChange={(v) => void setPermissionMode(v as SessionState["permissionMode"])}
 				>
-					<DropdownMenuRadioItem value="ask">
+					<DropdownMenuRadioItem value="ask" disabled={sandbox?.supported === false}>
 						<div>
 							<div>{t("chat.askChanges")}</div>
-							<div className="text-xs text-muted-foreground">{t("chat.allowReadOnly")}</div>
+							<div
+								className={cn(
+									"text-xs text-muted-foreground",
+									sandbox?.supported && sandbox.reason && "text-destructive",
+								)}
+							>
+								{sandboxDescription}
+							</div>
 						</div>
 					</DropdownMenuRadioItem>
 					<DropdownMenuRadioItem value="auto">

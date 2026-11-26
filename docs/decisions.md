@@ -234,3 +234,49 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 **生命周期**：CLI 和 utilityProcess 共用纯 Node 的 `startBackend()`。退出先停止连接，再 dispose registry；main 等待退出，超时强制终止。崩溃后最多重启三次并保留连接地址，前端复用既有重连和快照恢复逻辑。运行中的任务仍会中断，不声称能续跑。
 
 **验证范围**：macOS arm64，Electron 45.5.0 / Node 24.22.3；安装包和独立配置冒烟。具体命令、布局和未完成项见 [desktop.md](desktop.md)。签名、公证、更新及其他平台验证仍在阶段 2。
+
+## D15. 沙箱方案
+
+**状态**：macOS 已实现（2026-11-26），Windows 和 Linux 暂缓。调研细节见 [sandbox.md](sandbox.md)。
+
+**背景**：按命令文本做静态审批覆盖不了 bash 的各种写法（D13 第 7 条），安全边界要交给操作系统。pi 不提供沙箱，只推荐把整个进程放进容器或虚拟机，这不适合作为桌面应用的默认方案。
+
+**方向**：
+
+1. **用 inline extension 做 tool 级沙箱**（遵循 D7）。参照 pi 社区扩展的做法：注册同名 bash / powershell 工具，在 `createBashToolDefinition(cwd, { operations })` 里换成沙箱化的 `BashOperations`，接管 `user_bash`，在 `tool_call` 里检查 read / write / edit 的路径。codemode 的嵌套调用最终也走这些工具，自然被覆盖。沙箱在 backend 所在机器上生效，远程 backend 同样适用（D4）。
+2. **macOS 用 `@anthropic-ai/sandbox-runtime`**（Seatbelt + 沙箱外的域名代理）。Claude Code 和最流行的 pi 沙箱扩展都基于它，Apache-2.0，可作为库调用。它自称 Beta，API 可能变化，封装在 backend 一处，升级时只改那里。
+3. **Windows 分档，按可用性自动选择，结果在 UI 上明确标出**：
+   - MXC（Win11 24H2 / 25H2 的较新 build）：不需要管理员，隔离最完整。首选。
+   - srt 的 Windows 后端（专用本地账户 + restricted token + WFP，需要一次 UAC 安装）：相当于 Codex 的 elevated 方案，覆盖不支持 MXC 的机器。srt 本身也有实验性的 MXC 后端（要求 Node 24+，桌面版 Electron 45 自带 Node 24，满足）。
+   - 都不可用：不进沙箱，退回现有审批，界面上持续提示“未隔离”。不做 Codex unelevated 那种只靠环境变量挡网络的方案，它提供的是虚假的安全感。
+   - Windows 上优先用 pi 的 powershell 工具；MXC 下 Git Bash / MSYS2 会崩。
+4. **审批只在越界时介入**：沙箱内的命令自动放行；需要写工作区外、访问白名单外的域名，或要求不进沙箱重试时，经 `InteractionBroker` 询问。批准后可以只放开对应的路径或域名（本会话 / 本项目 / 全局），也可以不进沙箱重试一次。与现有权限模式合并设计。
+5. **默认策略**：
+   - 写：cwd、临时目录和用户添加的目录。
+   - 写保护：`.git`（含 `gitdir:` 指向的目标，以及 hooks / config）、`.argon/`、shell rc 文件。
+   - 读保护（几家默认都不限制读，必须补上）：`$ARGON_HOME`（尤其 `agent/auth.json`）、`~/.ssh`、云厂商凭据目录。
+   - 网络：默认关闭或只开空白名单，由用户添加域名。
+6. **沙箱起不来时 fail-closed**：明确报错并退回审批，不静默降级（Claude Code 默认静默降级，这是反面教材）。
+
+**已知限制（要写进用户文档）**：
+
+- MCP 服务器进程、其他扩展自己启动的子进程不受沙箱约束。这是 tool 级隔离的固有局限，要覆盖它们只能把整个 backend 放进沙箱。
+- 域名白名单只看主机名，存在 domain fronting；宽泛的白名单（例如 `github.com`）可被用来外传数据。
+- 放开 Unix socket（尤其 Docker socket）等于放开整台主机。
+- srt Windows 后端有若干已知缺口（DNS、SMB、WSL 流量不受限等），见 sandbox.md。
+
+**考虑过的方案**：
+
+- 整个 pi 进程放进容器、Docker Sandboxes、OpenShell：隔离最彻底，但桌面用户要装 Docker，路径映射、性能和 GUI 体验都差。可以作为以后的可选模式。
+- Gondolin 微虚拟机（pi 官方示例）：依赖 QEMU，只路由内置工具，扩展工具仍在宿主上运行。
+- 直接依赖社区扩展：carderne 的 pi-sandbox 不支持 Windows；yuru7 的支持 Windows，但不隔离网络、不限制读。Argon 要和 InteractionBroker、权限模式深度整合，自己实现一个 inline extension 更合适，两者的实现可以参考。
+
+**第一版实现（2026-11-26）**：
+
+- 只实现 macOS。`EnvironmentInfo.sandbox` 报告后端机器的支持情况：Windows / Linux 上 `supported: false`，"ask" 模式不可用，会话一律按 "auto" 运行。界面上 Ask 选项置灰，backend 拒绝切换到 "ask"；已保存的 "ask" 和 `ARGON_PERMISSION_MODE=ask` 都按 "auto" 处理。Windows 的分档方案留到以后。
+- 沙箱只在 "ask" 模式下生效。"auto" 模式不进沙箱，与 pi 的默认行为一致。
+- `argon-sandbox` inline extension（`backend/src/sandbox.ts`）注册同名 bash 工具，给它加一个 `dangerouslyDisableSandbox` 参数。在 "ask" 模式下，命令通过 sandbox-runtime 的 Seatbelt 包装执行，不再询问。命令失败时会附上违规说明，提示模型可以请求在沙箱外重试；请求在沙箱外运行一律询问，saved rules 不覆盖它，"本会话允许" 只对本会话有效。codemode 的嵌套调用请求在沙箱外运行时也会单独询问，不随父调用放行。
+- 文件策略在 `backend/src/sandbox-policy.ts`，按会话的 cwd 单独生成，每次调用都传给 `wrapWithSandbox`；read 类工具和 write / edit 在 `tool_call` 里用同一份策略检查（解析符号链接）。
+- 网络代理由 sandbox-runtime 全局持有，未知主机通过 ask 回调发起 `network_access` 交互。请求无法可靠归属到会话：只有一个会话在执行沙箱命令时就问它，否则问最近启动命令的会话并记日志。允许的域名保存在 `ArgonSettings.sandbox.allowedDomains`，设置页可以移除。
+- 后端启动时初始化沙箱；失败时 `sandbox.reason` 写明原因，bash 在 "ask" 模式下拒绝执行，不降级。
+- 其他扩展提供的执行类工具（例如 `exec`）不在沙箱内，"ask" 模式下仍按其他工具询问。

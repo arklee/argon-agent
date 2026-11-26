@@ -177,6 +177,8 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 			return empty;
 		},
 		"sessions.setPermissionMode": async (params) => {
+			if (params.mode === "ask" && !config.environment.sandbox.supported)
+				throw new RequestError("bad_request", config.environment.sandbox.reason ?? "Sandbox unavailable");
 			registry.require(params.sessionId).setPermissionMode(params.mode);
 			return empty;
 		},
@@ -249,6 +251,8 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		},
 		"settings.get": async (params) => registry.readSettings(params.cwd),
 		"settings.update": async (params) => {
+			if (params.argon?.permissions?.defaultMode === "ask" && !config.environment.sandbox.supported)
+				throw new RequestError("bad_request", config.environment.sandbox.reason ?? "Sandbox unavailable");
 			await registry.updateSettings(params);
 			return empty;
 		},

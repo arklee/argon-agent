@@ -7,8 +7,13 @@ export const en = {
 	approval: {
 		allow: "Allow",
 		allowSession: "Allow {{tool}} for this session",
+		allowHostSession: "Allow for this session",
 		alwaysAllow: "Always allow <rule>{{rule}}</rule>",
 		deny: "Deny",
+		hostRuleDescription:
+			"Saved to Permissions settings; sandboxed commands in every session on this backend may connect to it",
+		networkDescription: "A sandboxed command tried to connect to a host that is not on the allowed list.",
+		networkQuestion: "Allow network access to {{host}}?",
 		question: "Allow {{tool}}?",
 		questionWithSummary: "Allow {{tool}} {{summary}}?",
 		redirectInstructions:
@@ -16,6 +21,9 @@ export const en = {
 		redirectPlaceholder: "Redirect URL (optional)",
 		ruleDescription: "Saved to Permissions settings; applies to every session on this backend",
 		submitUrl: "Submit URL",
+		unsandboxedDescription:
+			"Outside the sandbox the command can read and change any of your files and use the network.",
+		unsandboxedQuestion: "Run {{tool}} outside the sandbox?",
 	},
 	attachments: {
 		remove: "Remove {{file}}",
@@ -23,9 +31,8 @@ export const en = {
 		uploading: "Uploading…",
 	},
 	chat: {
-		allowReadOnly: "Read-only tools run freely",
 		ask: "Ask",
-		askChanges: "Ask before changes",
+		askChanges: "Ask outside the sandbox",
 		auto: "Auto",
 		compacting: "Compacting context…",
 		copyFailed: "Could not copy to the clipboard",
@@ -42,6 +49,9 @@ export const en = {
 		retry: "Retry",
 		retryStatus: "<emphasis>Retrying ({{attempt, number}}/{{max, number}})…</emphasis> {{error}}",
 		runEverything: "Run everything",
+		sandboxed: "Commands run in a sandbox; read-only tools run freely",
+		sandboxFailed: "The sandbox could not start: {{reason}}",
+		sandboxUnavailable: "Needs the sandbox, which is not available on this system yet",
 		stopped: "Stopped by you",
 		thinking: "Thinking",
 		thinkingInProgress: "Thinking…",
@@ -396,6 +406,8 @@ export const en = {
 			trustNewDescription: "Whether a project's own extensions and settings load.",
 		},
 		permissions: {
+			allowedHosts: "Allowed network hosts",
+			allowedHostsDescription: "Sandboxed commands may connect to these hosts without asking.",
 			alwaysAllowed: "Always allowed",
 			anyBash: "bash (any command)",
 			ask: "Ask before running",
@@ -403,11 +415,14 @@ export const en = {
 			commandMatching:
 				"A command rule matches the command itself and the command followed by arguments. Commands that chain, pipe, redirect or substitute always ask.",
 			defaultMode: "Default mode",
-			defaultModeDescription: "Read-only tools (read, grep, find, ls) never ask. Each session can still switch modes.",
+			defaultModeDescription:
+				"In Ask mode, commands run in a sandbox and Argon asks only when something needs to leave it. Each session can still switch modes.",
 			description: "When Argon asks before the agent runs a tool.",
 			everyCall: "Every call",
+			noHosts: "Nothing yet. Choose “Always allow” on a network request to add a host.",
 			noRules: "Nothing yet. Choose “Always allow” on an approval request to add a rule.",
 			remove: "Remove rule {{rule}}",
+			removeHost: "Remove host {{host}}",
 			title: "Permissions",
 		},
 		plugins: {

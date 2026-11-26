@@ -92,9 +92,19 @@
 
 按命令文本做静态审批无法覆盖 bash 的各种写法（管道、子 shell、eval、脚本文件），安全边界交给操作系统。Codex CLI（Seatbelt / Landlock + seccomp，按沙箱模式和审批策略组合）和 Claude Code（沙箱化的 bash）都是这个思路；pi 的 security.md 也明确把隔离交给容器或沙箱。
 
-- [ ] 调研与方案：Seatbelt（macOS）、Landlock / bubblewrap（Linux）、Windows 方案、容器；文件系统（工作区可写、其余只读）和网络的限制粒度
-- [ ] 沙箱在 backend 所在机器上生效（远程 backend 同样适用），对所有执行命令的工具统一生效，包括 codemode 的嵌套调用和扩展工具
-- [ ] 审批改为只在越出沙箱边界时介入（例如需要写工作区外、需要网络），与权限模式合并设计
+- [x] 调研与方案（macOS / Windows）：Codex、Claude Code（sandbox-runtime）、pi 社区扩展，见 [sandbox.md](sandbox.md)；方向见 decisions D15
+- [x] `argon-sandbox` inline extension：替换 bash 的 `BashOperations`，在 `tool_call` 里检查文件工具路径；codemode 嵌套调用随之覆盖（Argon 没有 `!` 命令，`user_bash` 暂不涉及）
+- [x] macOS：接入 `@anthropic-ai/sandbox-runtime` 0.0.83（Seatbelt + 域名代理），默认读写策略按 D15 第 5 条（含 `$ARGON_HOME` 读保护）
+- [x] 非 macOS：Ask 模式置灰，只能用 Run everything（D15 第一版实现）
+- [x] 桌面模型冒烟断言工作区内 bash 不询问，并检查实际写入内容；macOS 使用 Ask 模式验证沙箱
+- [ ] 沙箱命令卡片显示“沙箱内 / 沙箱外”；设置页手动添加允许的域名
+- [ ] Windows：可用性探测和分档（MXC → srt Windows 后端 → 不隔离），首次安装 srt 后端的 UAC 引导，UI 显示当前隔离级别
+- [ ] Windows 实机验证：MXC 的系统 build 要求、Git Bash 与 powershell 工具、Schannel 工具（`Invoke-WebRequest`）在沙箱内失败
+- [x] 审批改为只在越出沙箱边界时介入（例如需要写工作区外、需要网络）；批准可放开域名（本次 / 本会话 / 全局）或不进沙箱重试
+- [ ] 按路径放开写权限（目前写工作区外只能单次批准 write / edit，或让命令在沙箱外运行）
+- [x] 沙箱起不来时 fail-closed 并明确提示，不静默降级
+- [ ] 已知限制写进用户文档：MCP 服务器和扩展自启的子进程不受约束、domain fronting、Unix socket
+- [ ] Linux（bubblewrap + seccomp，sandbox-runtime 已支持）：暂缓
 
 ## 阶段 3：远程 agent
 
@@ -136,6 +146,10 @@
 - [ ] Argon 专属工具（customTools）：例如在 GUI 中预览文件、打开浏览器预览
 
 ## 技术债与已知问题
+
+- [x] 递归 grep / find 检查受保护路径的父目录，避免从上层目录搜索绕过凭据读保护
+
+- [x] 桌面消息复制被统一拒绝权限的策略拦截：仅向 Argon 主页面开放 `clipboard-sanitized-write`，继续拒绝读取及子框架权限；桌面冒烟覆盖中文、多行复制和读取拒绝
 
 - [x] 其他客户端（或 API）卸载会话时，正在查看该会话的标签页会退回首页：`SessionMirror` 现在保留已保存会话的状态并标为已卸载，任何操作前先 `reopen`（经 `sessions.open`，强制采用新快照）；会话文件已被删除时才退回首页
 - [x] 被拒绝的工具调用在历史回放中显示为 error：拒绝时追加 `argon.tool_blocked` 自定义条目，`projectHistory` 回放为 blocked
