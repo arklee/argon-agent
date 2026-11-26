@@ -22,6 +22,7 @@ import { type WebSocket, WebSocketServer } from "ws";
 import type { BackendConfig } from "./config.ts";
 import { listDir, saveUpload } from "./fs-api.ts";
 import { log } from "./log.ts";
+import { canonicalProjectPath, projectTrustParent } from "./project-trust.ts";
 import { NotFoundError, type SessionRegistry } from "./registry.ts";
 
 const AUTH_TIMEOUT_MS = 5000;
@@ -237,6 +238,18 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 				if (!info?.isDirectory()) throw new RequestError("bad_request", `Not a directory: ${params.cwd}`);
 			}
 			await registry.updateProject(params);
+			return empty;
+		},
+		"projects.setTrust": async (params) => {
+			if (typeof params.cwd !== "string" || !params.cwd.trim())
+				throw new RequestError("bad_request", "cwd is required");
+			if (!["trust", "trust_parent", "deny", "trust_session", "deny_session"].includes(params.decision)) {
+				throw new RequestError("bad_request", "Invalid project trust decision");
+			}
+			if (params.decision === "trust_parent" && projectTrustParent(canonicalProjectPath(params.cwd)) === undefined) {
+				throw new RequestError("bad_request", "The project folder has no parent");
+			}
+			await registry.setProjectTrust(params);
 			return empty;
 		},
 		"sessions.unload": async (params) => {

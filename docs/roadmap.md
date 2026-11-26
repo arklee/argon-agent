@@ -58,8 +58,8 @@
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
-- [ ] 项目信任（project trust）流程：首次打开项目时询问，确认后才加载项目内的扩展和设置
-- [ ] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误
+- [x] 项目信任（project trust）流程（后端完成，UI 待做）：首次打开项目时询问，确认后才加载项目内的扩展和设置
+- [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误（后端完成，UI 待做）
 - [ ] 更丰富地渲染扩展 widget（目前只显示纯文本）
 
 ### 质量

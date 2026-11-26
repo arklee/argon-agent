@@ -190,3 +190,7 @@ percho 把 SDK 直接跑在 main 进程里，能用，但有几个问题：
 全局 SDK 数据放在 `$ARGON_HOME/agent`（默认 `~/.argon/agent`），项目配置目录使用 `.argon`。不自动迁移 pi 的配置、凭据或历史，移除 ARGON_PI_AGENT_DIR 覆盖。
 入口在加载 SDK 前覆盖进程内的 PI_CODING_AGENT_DIR 和 PI_CODING_AGENT_SESSION_DIR，避免 SDK 内部会话创建、列举及扩展回退到 CLI 目录。
 SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME，故补丁增加 PI_CONFIG_DIR_NAME 覆盖；Argon 固定为 .argon，普通 pi 默认行为不变。升级 pi 时需验证此补丁。
+
+## D11. 项目信任由 Argon 处理
+
+**决定**：Argon 在加载项目资源时自行判断信任状态，会话加载不等待用户回答。信任状态未决时，先按不信任模式加载会话，由 GUI 的横幅询问用户。Argon 跳过 pi 的 `project_trust` 扩展事件，信任决定通过 `projects.setTrust` 提交。

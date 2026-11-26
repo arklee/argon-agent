@@ -21,6 +21,7 @@ import {
 	type McpExposure,
 	type ModelRef,
 	type PermissionMode,
+	type SessionDiagnostic,
 	type SessionEvent,
 	type SessionEventEnvelope,
 	type SessionSnapshot,
@@ -36,8 +37,11 @@ import {
 	createAgentSessionFromServices,
 	createAgentSessionRuntime,
 	createAgentSessionServices,
+	type DefaultProjectTrust,
 	type ModelRuntime,
+	type ResourceDiagnostic,
 	SessionManager,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { generateTitle, titleModel } from "./auto-title.ts";
 import { createBuiltinExtensions } from "./builtin-extensions.ts";
@@ -52,6 +56,7 @@ import {
 	type ToolCallCheck,
 	type ToolCallDecision,
 } from "./permissions.ts";
+import type { ResolvedProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
@@ -60,12 +65,14 @@ const REPLAY_BUFFER_SIZE = 5000;
 /** Custom session entry recording the session's permission mode. */
 const PERMISSION_ENTRY = "argon.permission_mode";
 const IDEMPOTENCY_CACHE_SIZE = 200;
+const MAX_DIAGNOSTICS = 100;
 
 export interface ManagedSessionDeps {
 	agentDir: string;
 	modelRuntime: ModelRuntime;
 	/** Default permission mode and persisted "always allow" rules. */
 	settings: ArgonSettingsStore;
+	resolveProjectTrust(cwd: string, defaultTrust: DefaultProjectTrust): ResolvedProjectTrust;
 	/**
 	 * Session switches started by extensions (pi's newSession / fork / switchSession). The registry
 	 * loads the target and tells clients to follow; Argon keeps one ManagedSession per session.
@@ -107,12 +114,23 @@ export class ManagedSession {
 	private liveItemCounter = 0;
 	private currentAssistantItemId: string | undefined;
 	private disposed = false;
+	private appliedProjectTrust: boolean | undefined;
+	private trustRefreshPending = false;
+	private trustRefresh: Promise<void> | undefined;
+	private promptPreflights = 0;
+	private reloading = false;
+	private resourceDiagnostics = new Map<string, SessionDiagnostic>();
+	private settingsDiagnostics: ResourceDiagnostic[] = [];
+	private diagnosticCounter = 0;
+	private hasReloaded = false;
 
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
 		private readonly mcp: McpBridge,
 		private readonly agentDir: string,
 		permissionMode: PermissionMode,
+		private readonly resolveProjectTrust: ManagedSessionDeps["resolveProjectTrust"],
+		projectTrust: ResolvedProjectTrust | undefined,
 		private readonly sessionHost?: ExtensionSessionHost,
 		private readonly modelRuntime?: ModelRuntime,
 		private readonly settings?: ArgonSettingsStore,
@@ -124,6 +142,8 @@ export class ManagedSession {
 			sessionPath: session.sessionFile,
 		});
 		this.state.permissionMode = permissionMode;
+		this.state.projectTrust = projectTrust?.info;
+		this.appliedProjectTrust = projectTrust?.trusted;
 		this.state.mcp = mcp.status;
 		this.broker = new InteractionBroker({
 			onRequested: (interaction) => this.emit({ type: "interaction_requested", interaction }),
@@ -140,6 +160,7 @@ export class ManagedSession {
 				self ? self.checkToolCall(check) : Promise.resolve({ allow: false, reason: "Session not ready" }),
 		});
 		const mcp = createMcpBridge();
+		let projectTrust: ResolvedProjectTrust | undefined;
 
 		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 			cwd,
@@ -147,10 +168,19 @@ export class ManagedSession {
 			sessionManager,
 			sessionStartEvent,
 		}) => {
+			const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 			const services = await createAgentSessionServices({
 				cwd,
 				agentDir,
 				modelRuntime: deps.modelRuntime,
+				settingsManager,
+				resourceLoaderReloadOptions: {
+					// Argon owns the decision and banner. Skip pi's project_trust extension event.
+					resolveProjectTrust: async () => {
+						projectTrust = deps.resolveProjectTrust(cwd, settingsManager.getDefaultProjectTrust());
+						return projectTrust.trusted;
+					},
+				},
 				// The permission gate goes first so its tool_call handler runs before any other extension's.
 				resourceLoaderOptions: {
 					extensionFactories: [permissionExtension, ...createBuiltinExtensions(), mcp.extension],
@@ -182,6 +212,8 @@ export class ManagedSession {
 			mcp,
 			deps.agentDir,
 			ManagedSession.storedPermissionMode(sessionManager) ?? deps.settings.defaultPermissionMode,
+			deps.resolveProjectTrust,
+			projectTrust,
 			deps.sessionHost,
 			deps.modelRuntime,
 			deps.settings,
@@ -189,7 +221,10 @@ export class ManagedSession {
 		self = managed;
 		await managed.bind();
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
-		managed.reportDiagnostics();
+		managed.reportDiagnostics(true);
+		if (runtime.modelFallbackMessage) {
+			managed.appendDiagnostic({ level: "warning", source: "model", message: runtime.modelFallbackMessage });
+		}
 		return managed;
 	}
 
@@ -231,6 +266,61 @@ export class ManagedSession {
 	// Commands
 	// -------------------------------------------------------------------------
 
+	refreshProjectTrust(): Promise<void> {
+		this.trustRefreshPending = true;
+		return this.applyPendingProjectTrust();
+	}
+
+	private applyPendingProjectTrust(): Promise<void> {
+		if (this.trustRefresh) return this.trustRefresh;
+		if (!this.canRefreshProjectTrust()) return Promise.resolve();
+
+		this.trustRefresh = Promise.resolve().then(async () => {
+			try {
+				while (this.canRefreshProjectTrust()) {
+					this.trustRefreshPending = false;
+					const settings = this.runtime.services.settingsManager;
+					const next = this.resolveProjectTrust(this.runtime.cwd, settings.getDefaultProjectTrust());
+					if (next.trusted !== this.appliedProjectTrust) {
+						settings.setProjectTrusted(next.trusted);
+						this.appliedProjectTrust = undefined;
+						await this.reload();
+					} else {
+						this.reportDiagnostics();
+					}
+					this.appliedProjectTrust = next.trusted;
+					this.emit({ type: "project_trust_changed", trust: next.info });
+				}
+			} catch (error) {
+				this.trustRefreshPending = true;
+				throw error;
+			} finally {
+				this.trustRefresh = undefined;
+			}
+		});
+		return this.trustRefresh;
+	}
+
+	private canRefreshProjectTrust(): boolean {
+		return (
+			this.trustRefreshPending &&
+			!this.disposed &&
+			!this.isRunning &&
+			!this.session.isStreaming &&
+			!this.state.compacting &&
+			!this.reloading &&
+			this.promptPreflights === 0
+		);
+	}
+
+	private resumeProjectTrust(): void {
+		if (!this.trustRefreshPending || this.trustRefresh) return;
+		void this.applyPendingProjectTrust().catch((error: unknown) => {
+			log.error("could not refresh project trust", error);
+			this.emit({ type: "notification", level: "error", message: `Could not refresh project trust: ${error}` });
+		});
+	}
+
 	prompt(params: {
 		clientMessageId: string;
 		text: string;
@@ -240,32 +330,47 @@ export class ManagedSession {
 		const existing = this.promptResults.get(params.clientMessageId);
 		if (existing) return existing;
 
-		const result = new Promise<PromptDisposition>((resolve, reject) => {
-			let answered = false;
-			const streamingBehavior = this.session.isStreaming ? (params.streamingBehavior ?? "followUp") : undefined;
-			this.session
-				.prompt(params.text, {
-					source: "rpc",
-					images: params.images?.map((image) => ({
-						type: "image" as const,
-						data: image.data,
-						mimeType: image.mimeType,
-					})),
-					streamingBehavior,
-					preflightResult: (disposition) => {
+		const result = this.applyPendingProjectTrust().then(
+			() =>
+				new Promise<PromptDisposition>((resolve, reject) => {
+					let answered = false;
+					this.promptPreflights++;
+					const finishPreflight = () => {
+						if (answered) return;
 						answered = true;
-						resolve(disposition);
-					},
-				})
-				.then(() => {
-					if (!answered) resolve("handled");
-				})
-				.catch((error: unknown) => {
-					const message = error instanceof Error ? error.message : String(error);
-					if (!answered) reject(error);
-					else this.emit({ type: "notification", level: "error", message });
-				});
-		});
+						this.promptPreflights--;
+						this.resumeProjectTrust();
+					};
+					const streamingBehavior = this.session.isStreaming ? (params.streamingBehavior ?? "followUp") : undefined;
+					this.session
+						.prompt(params.text, {
+							source: "rpc",
+							images: params.images?.map((image) => ({
+								type: "image" as const,
+								data: image.data,
+								mimeType: image.mimeType,
+							})),
+							streamingBehavior,
+							preflightResult: (disposition) => {
+								finishPreflight();
+								resolve(disposition);
+							},
+						})
+						.then(() => {
+							if (answered) return;
+							finishPreflight();
+							resolve("handled");
+						})
+						.catch((error: unknown) => {
+							const message = error instanceof Error ? error.message : String(error);
+							if (answered) this.emit({ type: "notification", level: "error", message });
+							else {
+								finishPreflight();
+								reject(error);
+							}
+						});
+				}),
+		);
 		this.promptResults.set(params.clientMessageId, result);
 		if (this.promptResults.size > IDEMPOTENCY_CACHE_SIZE) {
 			const oldest = this.promptResults.keys().next().value;
@@ -628,6 +733,7 @@ export class ManagedSession {
 		this.disposed = true;
 		this.broker.cancelAll();
 		this.unsubscribe?.();
+		await this.trustRefresh?.catch(() => undefined);
 		// AgentSessionRuntime.dispose() emits session_shutdown (needed by MCP to close child processes).
 		await this.runtime.dispose();
 		this.listeners.clear();
@@ -675,25 +781,93 @@ export class ManagedSession {
 				switchSession: async (sessionPath, options) =>
 					this.switchTo(() => this.requireHost().openSession(sessionPath), options?.withSession),
 				reload: async () => {
-					await session.reload();
-					this.reportDiagnostics();
+					await this.reload();
 				},
 			},
 			onError: (error) => {
 				log.warn(`[extension] ${error.extensionPath} (${error.event}): ${error.error}`);
+				const message = `Extension error in ${error.extensionPath}: ${error.error}`;
+				this.appendDiagnostic({ level: "error", source: "extension", message, path: error.extensionPath });
 				this.emit({
 					type: "notification",
 					level: "error",
-					message: `Extension error in ${error.extensionPath}: ${error.error}`,
+					message,
 				});
 			},
 		});
 	}
 
-	private reportDiagnostics(): void {
+	private async reload(): Promise<void> {
+		if (this.reloading) throw new Error("Session is already reloading");
+		this.reloading = true;
+		try {
+			await this.session.reload();
+			this.hasReloaded = true;
+			this.reportDiagnostics(true);
+		} finally {
+			this.reloading = false;
+			this.resumeProjectTrust();
+		}
+	}
+
+	private reportDiagnostics(readSettings = false): void {
 		for (const diagnostic of this.runtime.takeUnreportedDiagnostics()) {
 			log.warn(`[pi] ${diagnostic.type}: ${diagnostic.message}`);
 		}
+		if (readSettings) {
+			this.settingsDiagnostics = this.runtime.services.settingsManager.drainErrors().map(({ scope, path, error }) => ({
+				type: "warning",
+				message: path
+					? `Invalid settings file ${path}: ${error.message}`
+					: `Invalid ${scope} settings: ${error.message}`,
+				path,
+			}));
+		}
+		const loader = this.session.resourceLoader;
+		const extensions = loader.getExtensions();
+		// The runtime's startup diagnostics are fixed. The loader reflects the latest reload.
+		const resources: { type: string; message: string; path?: string }[] = [
+			...(this.hasReloaded ? [] : this.runtime.diagnostics),
+			...this.settingsDiagnostics,
+			...extensions.errors.map(({ path, error }) => ({ type: "error", message: error, path })),
+			...(extensions.warnings ?? []).map(({ path, warning }) => ({ type: "warning", message: warning, path })),
+			...loader.getSkills().diagnostics,
+			...loader.getPrompts().diagnostics,
+			...loader.getThemes().diagnostics,
+			...this.session.extensionRunner.getCommandDiagnostics(),
+			...this.session.extensionRunner.getShortcutDiagnostics(),
+		];
+		const next = new Map<string, SessionDiagnostic>();
+		const added: SessionDiagnostic[] = [];
+		for (const { type, message, path } of resources) {
+			const level = type === "error" ? "error" : "warning";
+			const key = JSON.stringify([level, message, path]);
+			if (next.has(key)) continue;
+			const existing = this.resourceDiagnostics.get(key);
+			const diagnostic = existing ?? this.createDiagnostic({ level, source: "resources", message, path });
+			next.set(key, diagnostic);
+			if (!existing) added.push(diagnostic);
+		}
+		this.resourceDiagnostics = next;
+		// Keep surviving entries in chronological order, including those from other sources.
+		const ids = new Set([...next.values()].map(({ id }) => id));
+		const retained = this.state.diagnostics.filter(({ source, id }) => source !== "resources" || ids.has(id));
+		this.setDiagnostics([...retained, ...added]);
+	}
+
+	private createDiagnostic(diagnostic: Omit<SessionDiagnostic, "id">): SessionDiagnostic {
+		return { ...diagnostic, id: String(++this.diagnosticCounter) };
+	}
+
+	private appendDiagnostic(diagnostic: Omit<SessionDiagnostic, "id">): void {
+		this.setDiagnostics([...this.state.diagnostics, this.createDiagnostic(diagnostic)]);
+	}
+
+	private setDiagnostics(diagnostics: SessionDiagnostic[]): void {
+		const next = diagnostics.slice(-MAX_DIAGNOSTICS);
+		const current = this.state.diagnostics;
+		if (current.length === next.length && next.every((entry, i) => entry === current[i])) return;
+		this.emit({ type: "diagnostics_changed", diagnostics: next });
 	}
 
 	/** Rebuild the full state from the session tree (on load). */
@@ -814,6 +988,7 @@ export class ManagedSession {
 				this.emit({ type: "run_settled", aborted: event.aborted });
 				this.emitContextUsage();
 				this.emitBranches();
+				this.resumeProjectTrust();
 				if (!event.aborted) void this.maybeNameSession();
 				return;
 			case "message_start": {
@@ -925,6 +1100,7 @@ export class ManagedSession {
 					this.emit({ type: "notification", level: "error", message: event.errorMessage });
 				}
 				this.emitContextUsage();
+				this.resumeProjectTrust();
 				return;
 			case "entry_appended": {
 				const entry = event.entry;

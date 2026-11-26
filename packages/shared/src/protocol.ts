@@ -280,6 +280,24 @@ export interface StatusEntry {
 	text: string;
 }
 
+export type ProjectTrustStatus = "not_required" | "trusted" | "untrusted" | "undecided";
+
+export interface ProjectTrustInfo {
+	status: ProjectTrustStatus;
+	/** Folder whose saved decision applies, if any. */
+	savedPath?: string;
+	/** Parent folder offered as "trust parent". */
+	parentPath?: string;
+}
+
+export interface SessionDiagnostic {
+	id: string;
+	level: "warning" | "error";
+	source: "resources" | "extension" | "model";
+	message: string;
+	path?: string;
+}
+
 /** Full, self-contained state of one loaded session. Clients rebuild from it after (re)connect. */
 export interface SessionState {
 	sessionId: string;
@@ -291,6 +309,8 @@ export interface SessionState {
 	thinkingLevel: ThinkingLevel;
 	availableThinkingLevels: ThinkingLevel[];
 	permissionMode: PermissionMode;
+	projectTrust?: ProjectTrustInfo;
+	diagnostics: SessionDiagnostic[];
 	items: TranscriptItem[];
 	tools: Record<string, ToolCallState>;
 	pendingInteractions: Interaction[];
@@ -358,6 +378,8 @@ export type SessionEvent =
 	| { type: "model_changed"; model?: ModelRef }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| { type: "permission_mode_changed"; mode: PermissionMode }
+	| { type: "project_trust_changed"; trust: ProjectTrustInfo }
+	| { type: "diagnostics_changed"; diagnostics: SessionDiagnostic[] }
 	| { type: "interaction_requested"; interaction: Interaction }
 	| { type: "interaction_resolved"; interactionId: string }
 	| { type: "status_entry"; key: string; text?: string }
@@ -538,6 +560,10 @@ export interface Methods {
 	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };
 	"projects.update": {
 		params: ProjectPrefs;
+		result: Record<string, never>;
+	};
+	"projects.setTrust": {
+		params: { cwd: string; decision: "trust" | "trust_parent" | "deny" | "trust_session" | "deny_session" };
 		result: Record<string, never>;
 	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };

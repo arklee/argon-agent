@@ -1,10 +1,14 @@
-import type { SessionEvent, SessionEventEnvelope } from "@argon/shared";
+import type { ProjectTrustStatus, SessionEvent, SessionEventEnvelope } from "@argon/shared";
 import {
+	type AgentSession,
 	type AgentSessionEvent,
 	type AgentSessionRuntime,
+	type AgentSessionRuntimeDiagnostic,
 	createAgentSessionRuntime,
 	type ModelRuntime,
+	type ResourceDiagnostic,
 	SessionManager,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManagedSession } from "../src/managed-session.ts";
@@ -19,15 +23,24 @@ afterEach(() => vi.restoreAllMocks());
 
 const cwd = "/project";
 
-async function loadSession() {
+async function loadSession(
+	options: { modelFallbackMessage?: string; diagnostics?: AgentSessionRuntimeDiagnostic[] } = {},
+) {
 	const sessionManager = SessionManager.inMemory(cwd);
 	vi.spyOn(SessionManager, "create").mockReturnValue(sessionManager);
 	const listeners = new Set<(event: AgentSessionEvent) => void>();
 	const emit = (event: AgentSessionEvent) => {
 		for (const listener of listeners) listener(event);
 	};
+	const settingsManager = SettingsManager.inMemory({}, { projectTrusted: false });
+	const diagnostics: ResourceDiagnostic[] = [];
+	const reload = vi.fn(async () => undefined);
+	const bindExtensions = vi.fn(async (_bindings: Parameters<AgentSession["bindExtensions"]>[0]) =>
+		emit({ type: "session_info_changed", name: "Set during bind" }),
+	);
 	const runtime = {
 		cwd,
+		services: { settingsManager },
 		session: {
 			sessionId: sessionManager.getSessionId(),
 			sessionManager,
@@ -35,22 +48,131 @@ async function loadSession() {
 				listeners.add(listener);
 				return () => listeners.delete(listener);
 			},
-			bindExtensions: async () => emit({ type: "session_info_changed", name: "Set during bind" }),
+			bindExtensions,
+			reload,
+			resourceLoader: {
+				getExtensions: () => ({ errors: [] }),
+				getSkills: () => ({ diagnostics }),
+				getPrompts: () => ({ diagnostics: [] }),
+				getThemes: () => ({ diagnostics: [] }),
+			},
+			extensionRunner: {
+				getCommandDiagnostics: () => [],
+				getShortcutDiagnostics: () => [],
+			},
 			getAvailableThinkingLevels: () => ["off"],
 			getContextUsage: () => undefined,
 		},
-		takeUnreportedDiagnostics: () => [],
+		diagnostics: options.diagnostics ?? [],
+		modelFallbackMessage: options.modelFallbackMessage,
+		takeUnreportedDiagnostics: vi
+			.fn()
+			.mockReturnValueOnce(options.diagnostics ?? [])
+			.mockReturnValue([]),
 	};
 	// The SDK classes are nominal. The fake implements the runtime surface used by load and these events.
 	vi.mocked(createAgentSessionRuntime).mockResolvedValueOnce(runtime as unknown as AgentSessionRuntime);
+	let trustStatus: ProjectTrustStatus = "undecided";
 	const managed = await ManagedSession.load(
 		{ kind: "new", cwd },
-		{ agentDir: "/agent", modelRuntime: {} as ModelRuntime, settings: new ArgonSettingsStore("/argon") },
+		{
+			agentDir: "/agent",
+			modelRuntime: {} as ModelRuntime,
+			settings: new ArgonSettingsStore("/argon"),
+			resolveProjectTrust: () => ({ trusted: trustStatus === "trusted", info: { status: trustStatus } }),
+		},
 	);
 	const events: SessionEventEnvelope[] = [];
 	managed.subscribe((event) => events.push(event));
-	return { managed, emit, events };
+	const bindings = bindExtensions.mock.calls[0]![0];
+	return {
+		managed,
+		emit,
+		events,
+		diagnostics,
+		reload,
+		settingsManager,
+		bindings,
+		setTrustStatus: (status: ProjectTrustStatus) => {
+			trustStatus = status;
+		},
+	};
 }
+
+describe("ManagedSession trust and diagnostics", () => {
+	it("defers reload until the run settles and applies the latest decision", async () => {
+		const { managed, emit, events, reload, settingsManager, setTrustStatus } = await loadSession();
+		// The mocked runtime skips the factory; establish the initial applied trust.
+		await managed.refreshProjectTrust();
+		reload.mockClear();
+		events.length = 0;
+		emit({ type: "agent_start" });
+		setTrustStatus("untrusted");
+		await managed.refreshProjectTrust();
+		setTrustStatus("trusted");
+		await managed.refreshProjectTrust();
+		emit({ type: "agent_end", messages: [], willRetry: true });
+		expect(reload).not.toHaveBeenCalled();
+		expect(settingsManager.isProjectTrusted()).toBe(false);
+
+		emit({ type: "agent_settled", aborted: true });
+		await vi.waitFor(() => expect(managed.snapshot().state.projectTrust?.status).toBe("trusted"));
+		expect(settingsManager.isProjectTrusted()).toBe(true);
+		expect(reload).toHaveBeenCalledTimes(1);
+		expect(events.map(({ event }) => event.type)).toEqual(["run_started", "run_settled", "project_trust_changed"]);
+	});
+
+	it("publishes trust status changes without reloading when the effective trust is unchanged", async () => {
+		const { managed, events, reload, setTrustStatus } = await loadSession();
+		await managed.refreshProjectTrust();
+		reload.mockClear();
+		events.length = 0;
+
+		setTrustStatus("untrusted");
+		await managed.refreshProjectTrust();
+
+		expect(reload).not.toHaveBeenCalled();
+		expect(events.map(({ event }) => event)).toEqual([
+			{ type: "project_trust_changed", trust: { status: "untrusted" } },
+		]);
+	});
+
+	it("replaces resource diagnostics on reload and keeps model and extension diagnostics", async () => {
+		const { managed, events, bindings, diagnostics } = await loadSession({
+			modelFallbackMessage: "Could not restore model",
+			diagnostics: [{ type: "error", message: "Initial resource error" }],
+		});
+		expect(managed.snapshot().state.diagnostics).toMatchObject([
+			{ level: "error", source: "resources", message: "Initial resource error" },
+			{ level: "warning", source: "model", message: "Could not restore model" },
+		]);
+		bindings.onError?.({ extensionPath: "/extension.ts", event: "test", error: "Broken handler" });
+		expect(events.at(-1)?.event).toMatchObject({ type: "notification", level: "error" });
+		diagnostics.push({ type: "collision", message: "Duplicate skill", path: "/skill.md" });
+		await bindings.commandContextActions?.reload();
+		const after = managed.snapshot().state.diagnostics;
+		expect(after).toMatchObject([
+			{ source: "model" },
+			{ source: "extension", level: "error", path: "/extension.ts" },
+			{ source: "resources", level: "warning", message: "Duplicate skill", path: "/skill.md" },
+		]);
+		events.length = 0;
+		await bindings.commandContextActions?.reload();
+		expect(managed.snapshot().state.diagnostics).toBe(after);
+		expect(events).toEqual([]);
+	});
+
+	it("keeps the newest 100 diagnostics", async () => {
+		const { managed, bindings } = await loadSession();
+		for (let i = 0; i < 101; i++) {
+			bindings.onError?.({ extensionPath: "/extension.ts", event: "test", error: `Error ${i}` });
+		}
+		const { diagnostics } = managed.snapshot().state;
+		expect(diagnostics).toHaveLength(100);
+		expect(diagnostics[0]?.message).toBe("Extension error in /extension.ts: Error 1");
+		expect(diagnostics.at(-1)?.message).toBe("Extension error in /extension.ts: Error 100");
+	});
+});
 
 describe("ManagedSession event translation", () => {
 	it("subscribes before binding and keeps the run active until agent_settled", async () => {

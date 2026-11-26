@@ -18,6 +18,7 @@ export function createEmptySessionState(init: { sessionId: string; cwd: string; 
 		thinkingLevel: "off",
 		availableThinkingLevels: [],
 		permissionMode: "ask",
+		diagnostics: [],
 		items: [],
 		tools: {},
 		pendingInteractions: [],
@@ -222,6 +223,10 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 			return { ...state, thinkingLevel: event.level };
 		case "permission_mode_changed":
 			return { ...state, permissionMode: event.mode };
+		case "project_trust_changed":
+			return { ...state, projectTrust: event.trust };
+		case "diagnostics_changed":
+			return { ...state, diagnostics: event.diagnostics };
 		case "interaction_requested":
 			if (state.pendingInteractions.some((i) => i.id === event.interaction.id)) return state;
 			return { ...state, pendingInteractions: [...state.pendingInteractions, event.interaction] };

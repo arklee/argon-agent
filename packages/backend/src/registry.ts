@@ -4,21 +4,28 @@
 
 import { existsSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import type {
 	ArgonSettings,
 	GlobalEvent,
+	MethodParams,
 	ModelInfo,
 	ModelRef,
 	PiSettings,
 	ProjectPrefs,
 	SessionSummary,
 } from "@argon/shared";
-import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+	type DefaultProjectTrust,
+	ModelRuntime,
+	ProjectTrustStore,
+	SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import { AuthFlows } from "./auth-flows.ts";
 import { log } from "./log.ts";
 import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
+import { canonicalProjectPath, projectTrustParent, resolveProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, readPiSettings, writePiSettings } from "./settings.ts";
 
 export interface RegistryOptions {
@@ -33,6 +40,9 @@ export class SessionRegistry {
 	/** In-flight opens keyed by session path, so concurrent opens share one load. */
 	private readonly opening = new Map<string, Promise<ManagedSession>>();
 	private readonly globalListeners = new Set<(event: GlobalEvent) => void>();
+	private readonly projectTrustStore: ProjectTrustStore;
+	private readonly sessionTrustDecisions = new Map<string, boolean>();
+	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
 	readonly auth: AuthFlows;
@@ -41,6 +51,7 @@ export class SessionRegistry {
 		private readonly options: RegistryOptions,
 		readonly modelRuntime: ModelRuntime,
 	) {
+		this.projectTrustStore = new ProjectTrustStore(options.agentDir);
 		// Before any session loads: a magpie-pi extension from the user's pi packages must stay
 		// inactive in this process (magpie runs once, backend-wide; see magpie-host.ts).
 		process.env.MAGPIE_PI_EMBEDDED = "1";
@@ -98,9 +109,7 @@ export class SessionRegistry {
 		cwd: string,
 		options: Omit<Extract<SessionTarget, { kind: "new" }>, "kind" | "cwd"> = {},
 	): Promise<ManagedSession> {
-		const session = await ManagedSession.load({ kind: "new", cwd, ...options }, this.deps());
-		this.register(session);
-		return session;
+		return this.load({ kind: "new", cwd, ...options });
 	}
 
 	async open(sessionPath: string): Promise<ManagedSession> {
@@ -111,12 +120,7 @@ export class SessionRegistry {
 		if (!existsSync(sessionPath)) throw new NotFoundError(`Session file not found: ${sessionPath}`);
 		const inFlight = this.opening.get(sessionPath);
 		if (inFlight) return inFlight;
-		const loading = ManagedSession.load({ kind: "open", sessionPath }, this.deps())
-			.then((session) => {
-				this.register(session);
-				return session;
-			})
-			.finally(() => this.opening.delete(sessionPath));
+		const loading = this.load({ kind: "open", sessionPath }).finally(() => this.opening.delete(sessionPath));
 		this.opening.set(sessionPath, loading);
 		return loading;
 	}
@@ -201,6 +205,46 @@ export class SessionRegistry {
 		this.broadcast({ type: "projects_changed" });
 	}
 
+	async setProjectTrust({ cwd, decision }: MethodParams<"projects.setTrust">): Promise<void> {
+		const path = canonicalProjectPath(cwd);
+		let affectedPath = path;
+		switch (decision) {
+			case "trust_session":
+			case "deny_session":
+				this.sessionTrustDecisions.set(path, decision === "trust_session");
+				break;
+			case "trust_parent": {
+				const parent = projectTrustParent(path);
+				if (parent === undefined) throw new Error("The project folder has no parent");
+				this.projectTrustStore.setMany([
+					{ path: parent, decision: true },
+					{ path, decision: null },
+				]);
+				this.sessionTrustDecisions.delete(path);
+				affectedPath = parent;
+				break;
+			}
+			case "trust":
+			case "deny":
+				this.projectTrustStore.set(path, decision === "trust");
+				this.sessionTrustDecisions.delete(path);
+				break;
+		}
+		this.trustRevision++;
+
+		const updates = [...this.sessions.values()]
+			.filter((session) => {
+				const child = relative(affectedPath, canonicalProjectPath(session.snapshot().state.cwd));
+				return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
+			})
+			.map((session) => session.refreshProjectTrust());
+		const results = await Promise.allSettled(updates);
+		this.broadcast({ type: "projects_changed" });
+		for (const result of results) {
+			if (result.status === "rejected") throw result.reason;
+		}
+	}
+
 	async list(cwd?: string): Promise<SessionSummary[]> {
 		const infos = cwd ? await SessionManager.list(cwd) : await SessionManager.listAll();
 		const byId = new Map<string, SessionSummary>();
@@ -265,13 +309,28 @@ export class SessionRegistry {
 		await this.modelRuntime.settleCredentialWrites().catch(() => undefined);
 	}
 
-	private deps() {
-		return {
+	private async load(target: SessionTarget): Promise<ManagedSession> {
+		let revision = this.trustRevision;
+		const session = await ManagedSession.load(target, {
 			agentDir: this.options.agentDir,
 			modelRuntime: this.modelRuntime,
 			settings: this.options.settings,
 			sessionHost: this.sessionHost,
-		};
+			resolveProjectTrust: (cwd: string, defaultTrust: DefaultProjectTrust) =>
+				resolveProjectTrust(cwd, this.projectTrustStore, this.sessionTrustDecisions, defaultTrust),
+		});
+		try {
+			// A trust request can land while this session is loading and still absent from the registry.
+			while (revision !== this.trustRevision) {
+				revision = this.trustRevision;
+				await session.refreshProjectTrust();
+			}
+		} catch (error) {
+			await session.dispose();
+			throw error;
+		}
+		this.register(session);
+		return session;
 	}
 
 	private readonly sessionHost: ExtensionSessionHost = {

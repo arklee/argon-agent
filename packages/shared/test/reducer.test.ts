@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionEvent, SessionState } from "../src/protocol.ts";
+import type { ProjectTrustInfo, SessionDiagnostic, SessionEvent, SessionState } from "../src/protocol.ts";
 import { applySessionEvent, createEmptySessionState } from "../src/reducer.ts";
 
 function run(events: SessionEvent[], state?: SessionState): SessionState {
@@ -7,6 +7,41 @@ function run(events: SessionEvent[], state?: SessionState): SessionState {
 }
 
 describe("applySessionEvent", () => {
+	it("replaces project trust without mutating previous state", () => {
+		const initial = run([]);
+		const undecided: ProjectTrustInfo = { status: "undecided", parentPath: "/parent" };
+		const before = run([{ type: "project_trust_changed", trust: undecided }], initial);
+		Object.freeze(before);
+		Object.freeze(undecided);
+		const trusted: ProjectTrustInfo = { status: "trusted", savedPath: "/parent", parentPath: "/parent" };
+		const after = run([{ type: "project_trust_changed", trust: trusted }], before);
+
+		expect(initial.projectTrust).toBeUndefined();
+		expect(before.projectTrust).toEqual({ status: "undecided", parentPath: "/parent" });
+		expect(after).not.toBe(before);
+		expect(after.projectTrust).toEqual(trusted);
+		expect(after.items).toBe(before.items);
+	});
+
+	it("replaces and clears diagnostics without mutating previous state", () => {
+		const initial = run([]);
+		const diagnostic: SessionDiagnostic = { id: "r1", level: "error", source: "resources", message: "Invalid skill" };
+		const before = run([{ type: "diagnostics_changed", diagnostics: [diagnostic] }], initial);
+		Object.freeze(before);
+		Object.freeze(before.diagnostics);
+		Object.freeze(diagnostic);
+		const replacement: SessionDiagnostic = { id: "m1", level: "warning", source: "model", message: "Model fallback" };
+		const after = run([{ type: "diagnostics_changed", diagnostics: [replacement] }], before);
+		const cleared = run([{ type: "diagnostics_changed", diagnostics: [] }], after);
+
+		expect(initial.diagnostics).toEqual([]);
+		expect(before.diagnostics).toEqual([diagnostic]);
+		expect(after).not.toBe(before);
+		expect(after.diagnostics).toEqual([replacement]);
+		expect(cleared.diagnostics).toEqual([]);
+		expect(after.tools).toBe(before.tools);
+	});
+
 	it("streams text and tool call deltas into an assistant item", () => {
 		const state = run([
 			{ type: "run_started" },
