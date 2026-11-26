@@ -1,5 +1,6 @@
 import type { CompletionItem, SlashCommand } from "@argon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ARGON_COMMANDS } from "@/lib/builtin-commands";
 import { cn } from "@/lib/utils";
 import { getClient } from "@/stores/app";
 
@@ -44,7 +45,25 @@ function rankCommands(commands: SlashCommand[], query: string): SlashCommand[] {
  * loaded extensions show up without a refresh.
  */
 export function useSlashCompletion(sessionId: string, text: string) {
-	const [commands, setCommands] = useState<SlashCommand[]>([]);
+	const [extensionCommands, setCommands] = useState<SlashCommand[]>([]);
+	const extensionNames = useMemo(
+		() => new Set(extensionCommands.filter((c) => c.source === "extension").map((c) => c.name)),
+		[extensionCommands],
+	);
+	// Built-ins Argon handles itself, unless an extension overrides the name.
+	const commands = useMemo<SlashCommand[]>(
+		() => [
+			...extensionCommands,
+			...ARGON_COMMANDS.filter((c) => !extensionNames.has(c.name)).map((c) => ({
+				name: c.name,
+				description: c.description,
+				source: "extension" as const,
+				origin: "argon",
+				completesArguments: false,
+			})),
+		],
+		[extensionCommands, extensionNames],
+	);
 	const [argItems, setArgItems] = useState<{ forText: string; items: CompletionItem[] }>();
 	const [dismissedFor, setDismissedFor] = useState<string>();
 	const parsed = parseCommand(text);
@@ -103,7 +122,7 @@ export function useSlashCompletion(sessionId: string, text: string) {
 	}, [parsed, commands, command, argItems, text]);
 
 	const open = suggestions.length > 0 && dismissedFor !== text;
-	return { suggestions: open ? suggestions : [], dismiss: () => setDismissedFor(text) };
+	return { suggestions: open ? suggestions : [], dismiss: () => setDismissedFor(text), extensionNames };
 }
 
 export function SlashCompletionMenu({

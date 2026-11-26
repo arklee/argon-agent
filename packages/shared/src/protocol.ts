@@ -150,6 +150,14 @@ export interface CompletionItem {
 	description?: string;
 }
 
+export interface ContextUsageInfo {
+	/** Estimated tokens in the context, or null when unknown (e.g. right after compaction). */
+	tokens: number | null;
+	contextWindow: number;
+	/** 0-100, or null when `tokens` is unknown. */
+	percent: number | null;
+}
+
 export interface StatusEntry {
 	key: string;
 	text: string;
@@ -174,6 +182,8 @@ export interface SessionState {
 	compacting: boolean;
 	retry?: { attempt: number; maxAttempts: number; errorMessage: string };
 	lastUsage?: UsageInfo;
+	/** How full the model's context window is. Undefined without a model. */
+	contextUsage?: ContextUsageInfo;
 	/** Undefined until the MCP extension reports (or when it is disabled). */
 	mcp?: McpStatus;
 }
@@ -228,6 +238,7 @@ export type SessionEvent =
 	| { type: "status_entry"; key: string; text?: string }
 	| { type: "notification"; level: "info" | "warning" | "error"; message: string }
 	| { type: "mcp_changed"; mcp: McpStatus }
+	| { type: "context_usage_changed"; usage?: ContextUsageInfo }
 	/** Replace the whole state (used after operations that rebuild history, e.g. compaction). */
 	| { type: "reset"; state: SessionState };
 
@@ -295,6 +306,8 @@ export interface Methods {
 		params: { sessionId: string; server: string; action: McpAction | "exposure"; exposure?: McpExposure };
 		result: { error?: string };
 	};
+	/** Starts compaction (aborting a running turn, like pi does) and returns; progress comes as events. */
+	"sessions.compact": { params: { sessionId: string; customInstructions?: string }; result: Record<string, never> };
 	"sessions.commands": { params: { sessionId: string }; result: { commands: SlashCommand[] } };
 	"sessions.completeCommand": {
 		params: { sessionId: string; name: string; argumentPrefix: string };

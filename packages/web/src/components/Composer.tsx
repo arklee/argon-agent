@@ -1,9 +1,11 @@
 import type { SessionState } from "@argon/shared";
 import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { hasMcpPanel } from "@/components/McpPanel";
 import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
 import { Button } from "@/components/ui/button";
+import { matchBuiltin } from "@/lib/builtin-commands";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
@@ -13,8 +15,11 @@ export function Composer({ session }: { session: SessionState }) {
 	const sendPrompt = useApp((s) => s.sendPrompt);
 	const abort = useApp((s) => s.abort);
 	const setMcpPanelOpen = useApp((s) => s.setMcpPanelOpen);
+	const compact = useApp((s) => s.compact);
+	const renameSession = useApp((s) => s.renameSession);
+	const createSession = useApp((s) => s.createSession);
 	const ref = useRef<HTMLTextAreaElement>(null);
-	const { suggestions, dismiss } = useSlashCompletion(session.sessionId, text);
+	const { suggestions, dismiss, extensionNames } = useSlashCompletion(session.sessionId, text);
 	const [activeIndex, setActiveIndex] = useState(0);
 	/** Whether the user moved the highlight since the text last changed. */
 	const [navigated, setNavigated] = useState(false);
@@ -38,6 +43,20 @@ export function Composer({ session }: { session: SessionState }) {
 		if (value === "/mcp" && hasMcpPanel(session.mcp)) {
 			setMcpPanelOpen(true);
 			setText("");
+			return;
+		}
+		const builtin = matchBuiltin(value, extensionNames);
+		if (builtin?.kind === "unsupported") {
+			toast.warning(`/${builtin.name} is a pi terminal command and is not available in Argon yet`);
+			return;
+		}
+		if (builtin?.kind === "argon") {
+			setText("");
+			if (builtin.name === "compact") void compact(builtin.argument);
+			else if (builtin.name === "name") {
+				if (builtin.argument) void renameSession(builtin.argument);
+				else toast.warning("Usage: /name <session name>");
+			} else if (builtin.name === "new") void createSession(session.cwd).catch(() => undefined);
 			return;
 		}
 		setSending(true);

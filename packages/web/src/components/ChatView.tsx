@@ -2,6 +2,7 @@ import type { SessionState } from "@argon/shared";
 import { ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Composer } from "@/components/Composer";
+import { ContextMeter } from "@/components/ContextMeter";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
 import { Transcript } from "@/components/Transcript";
@@ -24,7 +25,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { displayPath, formatTokens, sessionTitle } from "@/lib/format";
+import { displayPath, sessionTitle } from "@/lib/format";
 import { useApp } from "@/stores/app";
 
 function ModelPicker({ session }: { session: SessionState }) {
@@ -173,11 +174,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				>
 					{displayPath(session.cwd, environment?.homeDir)}
 				</span>
-				{session.lastUsage && (
-					<span className="text-xs text-muted-foreground" title="Tokens in the last request">
-						{formatTokens(session.lastUsage.totalTokens)} tok
-					</span>
-				)}
+				<ContextMeter session={session} />
 				<McpPanel mcp={session.mcp} />
 				<PermissionPicker session={session} />
 				<ThinkingPicker session={session} />

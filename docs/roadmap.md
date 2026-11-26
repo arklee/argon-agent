@@ -23,12 +23,12 @@
 
 - [ ] 图片和附件：支持粘贴和拖拽，以内容上传给后端（不能依赖本地路径），写入 `prompt.images`；工具结果里的图片也要能显示
 - [x] 斜杠命令：后端提供命令列表（扩展命令、prompt 模板、技能）和参数补全（`sessions.commands` / `sessions.completeCommand`），输入框里做补全；`/mcp` 直接打开 MCP 面板
-- [ ] pi TUI 的内置命令（`/compact`、`/model`、`/new`、`/name` 等）在 SDK 的 `prompt()` 里不会被处理，会被当成普通文本发给模型。需要在 GUI 里给出对应的原生入口，或者在发送前拦截
+- [x] pi TUI 的内置命令在 SDK 的 `prompt()` 里不会被处理：`/compact`、`/name`、`/new` 由 Argon 原生实现，其余在输入框里拦截并提示（`web/src/lib/builtin-commands.ts`，名单对应 pi 1.6.1）
 - [ ] `@文件` 补全：后端提供按项目搜索文件的 API
 - [ ] edit / write 工具展示 diff 视图（参考 pi 的 `generateDiffString` 和 edit 工具的 details）
 - [ ] 消息操作：复制；从某条消息开始编辑重发（会话树分支）
 - [ ] 排队消息的取消和编辑（对应 pi 的 `clear_queue`）
-- [ ] 上下文用量指示（占 context window 的百分比），提供手动压缩按钮
+- [x] 上下文用量指示（占 context window 的百分比），提供手动压缩按钮（`sessions.compact`，后台执行；成功压缩的路径还没在真实长会话上验证）
 - [ ] 长会话的虚拟滚动（列表虚拟化）
 - [ ] 错误和自动重试的展示优化；被中止的回合给出明确提示
 - [ ] 键盘快捷键：新建会话、切换会话、停止、聚焦输入框

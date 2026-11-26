@@ -10,6 +10,7 @@
 import {
 	applySessionEvent,
 	type CompletionItem,
+	type ContextUsageInfo,
 	createEmptySessionState,
 	type Interaction,
 	type InteractionResponse,
@@ -229,6 +230,16 @@ export class ManagedSession {
 		await this.session.setModel(model);
 		this.emit({ type: "model_changed", model: ref });
 		this.emitThinkingState();
+		this.emitContextUsage();
+	}
+
+	compact(customInstructions?: string): void {
+		if (this.state.compacting) throw new Error("Already compacting");
+		// Runs in the background: summarizing can take longer than a request. pi reports progress and
+		// failures (compaction_end with errorMessage) as events, then rethrows; the rethrow is only logged.
+		void this.session.compact(customInstructions?.trim() || undefined).catch((error: unknown) => {
+			log.debug(`compaction ended with error: ${error instanceof Error ? error.message : String(error)}`);
+		});
 	}
 
 	setThinkingLevel(level: ThinkingLevel): void {
@@ -411,7 +422,25 @@ export class ManagedSession {
 		for (const result of history.toolResults) {
 			state = applySessionEvent(state, { type: "tool_ended", ...result });
 		}
-		this.state = state;
+		this.state = { ...state, contextUsage: this.readContextUsage() };
+	}
+
+	private readContextUsage(): ContextUsageInfo | undefined {
+		const usage = this.session.getContextUsage();
+		return usage ? { tokens: usage.tokens, contextWindow: usage.contextWindow, percent: usage.percent } : undefined;
+	}
+
+	private emitContextUsage(): void {
+		const usage = this.readContextUsage();
+		const current = this.state.contextUsage;
+		if (
+			usage?.tokens === current?.tokens &&
+			usage?.contextWindow === current?.contextWindow &&
+			usage?.percent === current?.percent
+		) {
+			return;
+		}
+		this.emit({ type: "context_usage_changed", usage });
 	}
 
 	private emitThinkingState(): void {
@@ -471,6 +500,7 @@ export class ManagedSession {
 			case "agent_settled":
 				this.currentAssistantItemId = undefined;
 				this.emit({ type: "run_settled", aborted: event.aborted });
+				this.emitContextUsage();
 				return;
 			case "message_start": {
 				const message = event.message as { role: string };
@@ -538,7 +568,10 @@ export class ManagedSession {
 				if (!id) return;
 				const item = messageToItem(message, id, false);
 				if (item) this.emit({ type: "item_replaced", item });
-				if (message.role === "assistant") this.currentAssistantItemId = undefined;
+				if (message.role === "assistant") {
+					this.currentAssistantItemId = undefined;
+					this.emitContextUsage();
+				}
 				return;
 			}
 			case "tool_execution_start":
@@ -572,6 +605,10 @@ export class ManagedSession {
 				return;
 			case "compaction_end":
 				this.emit({ type: "compaction_ended", errorMessage: event.errorMessage });
+				if (event.errorMessage && !event.aborted) {
+					this.emit({ type: "notification", level: "error", message: event.errorMessage });
+				}
+				this.emitContextUsage();
 				return;
 			case "entry_appended": {
 				const entry = event.entry;

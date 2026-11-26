@@ -222,6 +222,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				statusEntries: event.text === undefined ? rest : [...rest, { key: event.key, text: event.text }],
 			};
 		}
+		case "context_usage_changed":
+			return { ...state, contextUsage: event.usage };
 		case "mcp_changed":
 			return { ...state, mcp: event.mcp };
 		case "notification":

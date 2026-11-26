@@ -139,7 +139,9 @@ export function Transcript({ session }: { session: SessionState }) {
 		() => new Set(session.pendingInteractions.flatMap((i) => (i.kind === "tool_approval" ? [i.toolCallId] : []))),
 		[session.pendingInteractions],
 	);
-	const waitingForFirstToken = session.status === "running" && (lastItem?.kind !== "assistant" || !lastItem.streaming);
+	// Manual compaction runs while idle, so it gets the indicator too.
+	const waitingForFirstToken =
+		session.compacting || (session.status === "running" && (lastItem?.kind !== "assistant" || !lastItem.streaming));
 	return (
 		<div className="mx-auto w-full max-w-3xl px-6 py-6">
 			{session.items.map((item) => (

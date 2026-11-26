@@ -84,4 +84,20 @@ describe("applySessionEvent", () => {
 		);
 		expect(JSON.stringify(before)).toBe(snapshot);
 	});
+
+	it("stores context usage and MCP status without touching other state", () => {
+		const before = run([{ type: "item_added", item: { kind: "user", id: "u1", text: "hi", imageCount: 0, timestamp: 0 } }]);
+		const mcp = { configErrors: [], overridden: [], servers: [] };
+		const after = run(
+			[
+				{ type: "context_usage_changed", usage: { tokens: 1200, contextWindow: 200000, percent: 0.6 } },
+				{ type: "mcp_changed", mcp },
+			],
+			before,
+		);
+		expect(after.contextUsage).toEqual({ tokens: 1200, contextWindow: 200000, percent: 0.6 });
+		expect(after.mcp).toBe(mcp);
+		expect(after.items).toBe(before.items);
+		expect(run([{ type: "context_usage_changed" }], after).contextUsage).toBeUndefined();
+	});
 });
