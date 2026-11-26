@@ -111,7 +111,7 @@
 
 - [x] 1. 显示层：协议加 `ToolDisplay` 和 `source`；backend presenter（`backend/src/tool-display.ts`，pi 内置工具名和参数结构只在这里出现）；前端 `web/src/tools/` 按类型划分的渲染器，查找顺序为“来源 + 工具名”覆盖 → 工具名覆盖 → 类型 → 通用；审批卡片使用渲染器的预览
 - [x] 2. 嵌套调用：嵌套事件带上父 id、显示描述和来源，`script` 卡片在源码（语法高亮）和输出之间列出子调用，折叠时显示调用次数；嵌套调用仍随父调用审批，但有 diff 预览；pi 不记录嵌套结果，独立的 inline extension `argon-nested-diffs` 把子调用的 diff 存进父结果的 details，重新打开时从 pi 的 `nestedCalls` 记录恢复子调用（输出不可恢复，状态、参数、错误、耗时、diff 可以）
-- [ ] 3. 预设选择：全局默认 + 会话级切换（存会话文件，两轮之间生效）；预设如何作用到 pi 配置（`defaultTools`、`codemode.mode`）
+- [x] 3. 预设选择：传统 / Codemode / 仅 Codemode（`backend/src/tool-presets.ts`），设置里选默认，顶栏按会话切换（存为 `argon.tool_preset` 记录，运行中切换则本轮结束后生效）。实现上不用 pi 的配置覆盖（reload 会丢）：用 `setActiveToolsByName` 增减 `codemode` 工具，codemode 的 on/only 通过 Argon 注册扩展时传入的 `mode` getter 每轮读取；加载和 reload 后都会按预设校正
 - [ ] ~~4. 审批策略按显示类型~~：不做。权限控制交给沙箱（见下一节），审批维持现有的基本机制（只读工具放行、其余询问、本会话允许、简单的命令前缀规则），不再细化；codemode 的嵌套调用继续随父调用一起审批
 
 ## 阶段 4：对 pi 的深度定制（按需）
