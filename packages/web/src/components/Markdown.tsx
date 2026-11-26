@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 
 const plugins = { code, cjk };
+// Code blocks are flat cards without line numbers; copying is enough (see .argon-markdown in index.css).
+const controls = { code: { copy: true, download: false } } as const;
 
 export const Markdown = memo(function Markdown({ text, streaming }: { text: string; streaming?: boolean }) {
 	const { t } = useTranslation();
@@ -22,7 +24,14 @@ export const Markdown = memo(function Markdown({ text, streaming }: { text: stri
 		[t],
 	);
 	return (
-		<Streamdown plugins={plugins} isAnimating={streaming} className="argon-markdown" translations={translations}>
+		<Streamdown
+			plugins={plugins}
+			isAnimating={streaming}
+			className="argon-markdown"
+			translations={translations}
+			controls={controls}
+			lineNumbers={false}
+		>
 			{text}
 		</Streamdown>
 	);

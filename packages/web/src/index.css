@@ -149,6 +149,86 @@
 	font-size: 1em;
 }
 
+/*
+ * Streamdown blocks come as a padded outer card around a bordered inner box. Flatten them to one
+ * frame and show the controls only on hover. Selectors use Streamdown's data-streamdown attributes;
+ * unlayered rules win over its Tailwind utilities.
+ */
+.argon-markdown [data-streamdown="code-block"] {
+	gap: 0;
+	margin-block: 0.75em;
+	padding: 0;
+	border-radius: 0.625rem;
+	background: color-mix(in oklab, var(--color-muted) 55%, transparent);
+}
+.argon-markdown [data-streamdown="code-block-header"] {
+	height: auto;
+	padding: 0.6em 1em 0;
+	font-size: 0.75em;
+}
+.argon-markdown [data-streamdown="code-block-header"] > span {
+	margin: 0;
+	font-family: var(--font-sans);
+}
+.argon-markdown [data-streamdown="code-block-body"] {
+	padding: 0.5em 1em 0.85em;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	font-size: 0.875em;
+	line-height: 1.6;
+}
+.argon-markdown [data-streamdown="code-block-body"] pre {
+	background: transparent;
+}
+.argon-markdown
+	:is([data-streamdown="code-block-actions"], [data-streamdown="table-wrapper"]:not(.fixed) > div:first-child) {
+	opacity: 0;
+	transition: opacity 120ms;
+}
+.argon-markdown [data-streamdown="code-block-actions"] {
+	border: 0;
+	background: transparent;
+	backdrop-filter: none;
+}
+.argon-markdown
+	:is([data-streamdown="code-block"], [data-streamdown="table-wrapper"]):is(:hover, :focus-within)
+	:is([data-streamdown="code-block-actions"], [data-streamdown="table-wrapper"] > div:first-child) {
+	opacity: 1;
+}
+.argon-markdown [data-streamdown="table-wrapper"]:not(.fixed) {
+	position: relative;
+	gap: 0;
+	margin-block: 0.75em;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.argon-markdown [data-streamdown="table-wrapper"]:not(.fixed) > div:last-child {
+	border-radius: 0.625rem;
+	background: transparent;
+}
+/* The table's control row floats over the top-right corner instead of taking a line. */
+.argon-markdown [data-streamdown="table-wrapper"]:not(.fixed) > div:first-child:not(:only-child) {
+	position: absolute;
+	top: 0.25rem;
+	right: 0.25rem;
+	z-index: 1;
+	border-radius: 0.375rem;
+	background: var(--color-popover);
+}
+.argon-markdown :is([data-streamdown="table-cell"], [data-streamdown="table-header-cell"]) {
+	padding: 0.5em 0.9em;
+	font-size: 0.9em;
+}
+.argon-markdown [data-streamdown="inline-code"] {
+	font-size: 0.875em;
+}
+/* Identifiers in narrow table columns should not break mid-word; the table scrolls instead. */
+.argon-markdown [data-streamdown="table-cell"] [data-streamdown="inline-code"] {
+	white-space: nowrap;
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
