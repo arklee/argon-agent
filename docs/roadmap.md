@@ -101,7 +101,7 @@
 
 本轮只实现传统模式、codemode、codemode only 三个预设，pi-codex-conversion 的模式只在设计上预留。
 
-- [ ] 1. 显示层：协议加 `ToolDisplay` 和 `source`；backend presenter（把 `summarizeToolArgs` 的判断迁过去）；前端按类型（shell / file_read / file_change / search / script / generic）划分的渲染器和按“来源 + 工具名”的覆盖入口。外观基本不变（backend 部分已完成）
+- [x] 1. 显示层：协议加 `ToolDisplay` 和 `source`；backend presenter（`backend/src/tool-display.ts`，pi 内置工具名和参数结构只在这里出现）；前端 `web/src/tools/` 按类型划分的渲染器，查找顺序为“来源 + 工具名”覆盖 → 工具名覆盖 → 类型 → 通用；审批卡片使用渲染器的预览
 - [ ] 2. 嵌套调用：`ToolCallState.parentToolCallId`，`translate` 保留嵌套事件，`script` 卡片显示子调用（含 diff）；修正 codemode 卡片的摘要（format.ts 仍写着旧名 `exec`）和脚本代码高亮
 - [ ] 3. 预设选择：全局默认 + 会话级切换（存会话文件，两轮之间生效）；预设如何作用到 pi 配置（`defaultTools`、`codemode.mode`）
 - [ ] 4. 审批策略按显示类型：迁移 `READ_ONLY_TOOLS` 和规则建议；嵌套调用的审批粒度作为预设选项
