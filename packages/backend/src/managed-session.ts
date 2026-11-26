@@ -38,6 +38,7 @@ import {
 	createAgentSessionRuntime,
 	createAgentSessionServices,
 	type DefaultProjectTrust,
+	type LoadExtensionsResult,
 	type ModelRuntime,
 	type ResourceDiagnostic,
 	SessionManager,
@@ -68,6 +69,12 @@ import { createWriteDiffExtension } from "./write-diff.ts";
 const REPLAY_BUFFER_SIZE = 5000;
 const TOOL_PRESET_ENTRY = "argon.tool_preset";
 const PERMISSION_ENTRY = "argon.permission_mode";
+/** "Allow for this session" choices, so they survive unloading the session. */
+const SESSION_ALLOW_ENTRY = "argon.session_allow";
+/** Tool calls the user denied: pi stores them as plain error results. */
+const TOOL_BLOCKED_ENTRY = "argon.tool_blocked";
+const MAX_UNDELIVERED_NOTIFICATIONS = 20;
+const UNDELIVERED_NOTIFICATION_TTL_MS = 60_000;
 const IDEMPOTENCY_CACHE_SIZE = 200;
 const MAX_PENDING_WRITE_DIFFS = 100;
 const MAX_DIAGNOSTICS = 100;
@@ -77,7 +84,13 @@ export interface ManagedSessionDeps {
 	modelRuntime: ModelRuntime;
 	/** Default permission mode and persisted "always allow" rules. */
 	settings: ArgonSettingsStore;
-	resolveProjectTrust(cwd: string, defaultTrust: DefaultProjectTrust): ResolvedProjectTrust;
+	/** `extensions`: the user-level extensions pi loads before trust is known (for the `project_trust` event). */
+	resolveProjectTrust(
+		cwd: string,
+		defaultTrust: DefaultProjectTrust,
+		extensions: LoadExtensionsResult | undefined,
+		onError: (message: string) => void,
+	): Promise<ResolvedProjectTrust>;
 	/**
 	 * Session switches started by extensions (pi's newSession / fork / switchSession). The registry
 	 * loads the target and tells clients to follow; Argon keeps one ManagedSession per session.
@@ -93,6 +106,8 @@ export interface ExtensionSessionHost {
 	openSession(sessionPath: string): Promise<ManagedSession>;
 	/** Clients showing `from` should switch to `to`. */
 	announce(from: ManagedSession, to: ManagedSession): void;
+	/** An extension called ctx.shutdown() (deferred until the session is idle). */
+	shutdown?(session: ManagedSession): boolean;
 }
 
 /** What a new session should be created from (see ManagedSession.load). */
@@ -112,6 +127,16 @@ export class ManagedSession {
 	private seq = 0;
 	private readonly buffer: SessionEventEnvelope[] = [];
 	private readonly listeners = new Set<(envelope: SessionEventEnvelope) => void>();
+	private clientCount = 0;
+	private undeliveredNotifications: {
+		event: Extract<SessionEvent, { type: "notification" }>;
+		at: number;
+		seq: number;
+	}[] = [];
+	private shutdownRequested = false;
+	private disposeWidgets: () => void = () => {};
+	/** When the session was created (its file header), for listing sessions that have no file yet. */
+	readonly createdAt: number;
 	private readonly broker: InteractionBroker;
 	private readonly promptResults = new Map<string, Promise<PromptDisposition>>();
 	private readonly sessionAllowedTools = new Set<string>();
@@ -129,6 +154,7 @@ export class ManagedSession {
 	private settingsDiagnostics: ResourceDiagnostic[] = [];
 	private diagnosticCounter = 0;
 	private hasReloaded = false;
+	private readonly trust: { extensions?: LoadExtensionsResult };
 
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
@@ -141,8 +167,17 @@ export class ManagedSession {
 		private readonly sessionHost?: ExtensionSessionHost,
 		private readonly modelRuntime?: ModelRuntime,
 		private readonly settings?: ArgonSettingsStore,
+		trust: { extensions?: LoadExtensionsResult } = {},
 	) {
 		const session = runtime.session;
+		this.trust = trust;
+		const created = Date.parse(session.sessionManager.getHeader()?.timestamp ?? "");
+		this.createdAt = Number.isNaN(created) ? Date.now() : created;
+		for (const entry of session.sessionManager.getEntries()) {
+			if (entry.type !== "custom" || entry.customType !== SESSION_ALLOW_ENTRY) continue;
+			const tool = (entry.data as { tool?: unknown } | undefined)?.tool;
+			if (typeof tool === "string") this.sessionAllowedTools.add(tool);
+		}
 		this.state = createEmptySessionState({
 			sessionId: session.sessionId,
 			cwd: runtime.cwd,
@@ -183,6 +218,13 @@ export class ManagedSession {
 		});
 		const mcp = createMcpBridge();
 		let projectTrust: ResolvedProjectTrust | undefined;
+		const trust: { extensions?: LoadExtensionsResult } = {};
+		const trustErrors: string[] = [];
+		const onTrustError = (message: string) => {
+			log.warn(message);
+			if (self) self.appendDiagnostic({ level: "error", source: "extension", message });
+			else trustErrors.push(message);
+		};
 
 		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 			cwd,
@@ -198,8 +240,14 @@ export class ManagedSession {
 				settingsManager,
 				resourceLoaderReloadOptions: {
 					// Argon owns the decision and banner. Skip pi's project_trust extension event.
-					resolveProjectTrust: async () => {
-						projectTrust = deps.resolveProjectTrust(cwd, settingsManager.getDefaultProjectTrust());
+					resolveProjectTrust: async ({ extensionsResult }) => {
+						trust.extensions = extensionsResult;
+						projectTrust = await deps.resolveProjectTrust(
+							cwd,
+							settingsManager.getDefaultProjectTrust(),
+							extensionsResult,
+							onTrustError,
+						);
 						return projectTrust.trusted;
 					},
 				},
@@ -253,8 +301,10 @@ export class ManagedSession {
 			deps.sessionHost,
 			deps.modelRuntime,
 			deps.settings,
+			trust,
 		);
 		self = managed;
+		for (const message of trustErrors) managed.appendDiagnostic({ level: "error", source: "extension", message });
 		await managed.bind();
 		managed.applyToolPreset(initialPreset);
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
@@ -299,6 +349,35 @@ export class ManagedSession {
 		return () => this.listeners.delete(listener);
 	}
 
+	/**
+	 * Subscribe a client connection. Call it synchronously right after `clientSnapshot()`, which hands
+	 * out the notifications nobody has seen yet (see SessionSnapshot.notifications).
+	 */
+	subscribeClient(listener: (envelope: SessionEventEnvelope) => void): () => void {
+		const unsubscribe = this.subscribe(listener);
+		this.clientCount++;
+		let done = false;
+		return () => {
+			if (done) return;
+			done = true;
+			this.clientCount--;
+			unsubscribe();
+		};
+	}
+
+	clientSnapshot(): SessionSnapshot {
+		// Only recent ones: a toast about something long past would be confusing.
+		const cutoff = Date.now() - UNDELIVERED_NOTIFICATION_TTL_MS;
+		const notifications = this.undeliveredNotifications.filter(({ at }) => at >= cutoff).map(({ event }) => event);
+		this.undeliveredNotifications = [];
+		return notifications.length > 0 ? { ...this.snapshot(), notifications } : this.snapshot();
+	}
+
+	/** Drop diagnostics from extensions and model fallbacks; resource problems are kept while they last. */
+	clearDiagnostics(): void {
+		this.setDiagnostics(this.state.diagnostics.filter((d) => d.source === "resources"));
+	}
+
 	// -------------------------------------------------------------------------
 	// Commands
 	// -------------------------------------------------------------------------
@@ -317,7 +396,12 @@ export class ManagedSession {
 				while (this.canRefreshProjectTrust()) {
 					this.trustRefreshPending = false;
 					const settings = this.runtime.services.settingsManager;
-					const next = this.resolveProjectTrust(this.runtime.cwd, settings.getDefaultProjectTrust());
+					const next = await this.resolveProjectTrust(
+						this.runtime.cwd,
+						settings.getDefaultProjectTrust(),
+						this.trust.extensions,
+						(message) => this.appendDiagnostic({ level: "error", source: "extension", message }),
+					);
 					if (next.trusted !== this.appliedProjectTrust) {
 						settings.setProjectTrusted(next.trusted);
 						this.appliedProjectTrust = undefined;
@@ -353,7 +437,15 @@ export class ManagedSession {
 		);
 	}
 
+	resumeAfterRegister(): void {
+		this.resumePendingChanges();
+	}
+
 	private resumePendingChanges(): void {
+		if (this.shutdownRequested && this.isIdleForChanges()) {
+			if (this.sessionHost?.shutdown?.(this)) this.shutdownRequested = false;
+			return;
+		}
 		if (this.state.toolPresetPending && this.isIdleForChanges()) {
 			const preset = resolveToolPreset(this.state.toolPreset);
 			this.applyToolPreset(preset);
@@ -807,6 +899,7 @@ export class ManagedSession {
 		if (this.disposed) return;
 		this.disposed = true;
 		this.broker.cancelAll();
+		this.disposeWidgets();
 		this.unsubscribe?.();
 		await this.trustRefresh?.catch(() => undefined);
 		// AgentSessionRuntime.dispose() emits session_shutdown (needed by MCP to close child processes).
@@ -824,9 +917,15 @@ export class ManagedSession {
 		this.unsubscribe = session.subscribe((event) => this.handlePiEvent(event));
 		this.mcp.onStatus((mcp) => this.emit({ type: "mcp_changed", mcp }));
 		this.resetFromSession();
+		const ui = createUIBridge(this.broker, (event) => this.emit(event));
+		this.disposeWidgets = ui.disposeWidgets;
 		await session.bindExtensions({
-			uiContext: createUIBridge(this.broker, (event) => this.emit(event)),
+			uiContext: ui,
 			mode: "rpc",
+			shutdownHandler: () => {
+				this.shutdownRequested = true;
+				this.resumePendingChanges();
+			},
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
 				newSession: async (options) =>
@@ -876,6 +975,8 @@ export class ManagedSession {
 		if (this.reloading) throw new Error("Session is already reloading");
 		this.reloading = true;
 		try {
+			this.disposeWidgets();
+			for (const { key } of this.state.widgets) this.emit({ type: "widget_changed", key });
 			await this.session.reload();
 			this.applyToolPreset(this.appliedToolPreset);
 			this.hasReloaded = true;
@@ -935,8 +1036,24 @@ export class ManagedSession {
 		return { ...diagnostic, id: String(++this.diagnosticCounter) };
 	}
 
+	/** A repeat of an earlier extension/model problem is folded into it (counted, moved to the end). */
 	private appendDiagnostic(diagnostic: Omit<SessionDiagnostic, "id">): void {
-		this.setDiagnostics([...this.state.diagnostics, this.createDiagnostic(diagnostic)]);
+		const current = this.state.diagnostics;
+		const index = current.findIndex(
+			(d) =>
+				d.source !== "resources" &&
+				d.source === diagnostic.source &&
+				d.level === diagnostic.level &&
+				d.message === diagnostic.message &&
+				d.path === diagnostic.path,
+		);
+		if (index === -1) {
+			this.setDiagnostics([...current, this.createDiagnostic(diagnostic)]);
+			return;
+		}
+		const previous = current[index]!;
+		const folded = { ...previous, count: (previous.count ?? 1) + 1 };
+		this.setDiagnostics([...current.slice(0, index), ...current.slice(index + 1), folded]);
 	}
 
 	private setDiagnostics(diagnostics: SessionDiagnostic[]): void {
@@ -974,6 +1091,9 @@ export class ManagedSession {
 		for (const result of history.toolResults) {
 			state = applySessionEvent(state, { type: "tool_ended", ...result });
 		}
+		for (const [toolCallId, reason] of history.blockedTools) {
+			if (state.tools[toolCallId]) state = applySessionEvent(state, { type: "tool_blocked", toolCallId, reason });
+		}
 		for (const event of history.nestedToolEvents) state = applySessionEvent(state, event);
 		this.state = { ...state, contextUsage: this.readContextUsage(), userBranches: this.computeUserBranches() };
 	}
@@ -1004,7 +1124,15 @@ export class ManagedSession {
 		this.emit({ type: "thinking_level_changed", level: this.session.thinkingLevel });
 	}
 
+	markDelivered(throughSeq: number): void {
+		this.undeliveredNotifications = this.undeliveredNotifications.filter(({ seq }) => seq > throughSeq);
+	}
+
 	private emit(event: SessionEvent): void {
+		if (event.type === "notification" && this.clientCount === 0) {
+			this.undeliveredNotifications.push({ event, at: Date.now(), seq: this.seq + 1 });
+			if (this.undeliveredNotifications.length > MAX_UNDELIVERED_NOTIFICATIONS) this.undeliveredNotifications.shift();
+		}
 		this.state = applySessionEvent(this.state, event);
 		const envelope: SessionEventEnvelope = { sessionId: this.state.sessionId, seq: ++this.seq, event };
 		this.buffer.push(envelope);
@@ -1086,7 +1214,10 @@ export class ManagedSession {
 			{ signal: check.signal, fallback: { decision: "deny", reason: "Cancelled" } },
 		);
 		const decision = "decision" in response ? response.decision : "deny";
-		if (decision === "allow_session") this.sessionAllowedTools.add(check.toolName);
+		if (decision === "allow_session" && !this.sessionAllowedTools.has(check.toolName)) {
+			this.sessionAllowedTools.add(check.toolName);
+			this.session.sessionManager.appendCustomEntry(SESSION_ALLOW_ENTRY, { tool: check.toolName });
+		}
 		if (decision === "allow_always") {
 			const rule = ("rule" in response && response.rule) || suggestedRule;
 			if (rule) await this.settings?.addRule(rule).catch((e) => log.warn(`could not save permission rule: ${e}`));
@@ -1096,6 +1227,8 @@ export class ManagedSession {
 		}
 		const reason = "decision" in response && response.reason ? `Denied by user: ${response.reason}` : "Denied by user";
 		this.emit({ type: "tool_blocked", toolCallId: check.toolCallId, reason });
+		// pi records the result as a plain error; remember that it was blocked for history replay.
+		this.session.sessionManager.appendCustomEntry(TOOL_BLOCKED_ENTRY, { toolCallId: check.toolCallId, reason });
 		return { allow: false, reason };
 	}
 

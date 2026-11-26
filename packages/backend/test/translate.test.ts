@@ -186,6 +186,7 @@ describe("projectHistory", () => {
 				{ kind: "notice", id: "n1", variant: "custom", title: "extension", text: "Visible", timestamp },
 			],
 			nestedToolEvents: [],
+			blockedTools: new Map(),
 			toolResults: [
 				{ toolCallId: "t1", isError: false, output: "Edited", imageCount: 1, durationMs: 23, diff: "+1 updated" },
 			],
@@ -249,6 +250,28 @@ describe("projectHistory", () => {
 				output: "Unfinished: still running when the calling tool finished",
 			}),
 		]);
+	});
+
+	it("collects denied calls from Argon's tool_blocked entries", () => {
+		const history = projectHistory([
+			{
+				type: "custom",
+				id: "x1",
+				parentId: null,
+				timestamp: new Date(0).toISOString(),
+				customType: "argon.tool_blocked",
+				data: { toolCallId: "t1", reason: "Denied by user: no" },
+			},
+			{
+				type: "custom",
+				id: "x2",
+				parentId: "x1",
+				timestamp: new Date(0).toISOString(),
+				customType: "other",
+				data: { toolCallId: "t2" },
+			},
+		]);
+		expect(history.blockedTools).toEqual(new Map([["t1", "Denied by user: no"]]));
 	});
 
 	it("preserves a persisted notice timestamp at the Unix epoch", () => {

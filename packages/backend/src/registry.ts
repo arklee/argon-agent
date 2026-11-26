@@ -4,14 +4,16 @@
 
 import { existsSync } from "node:fs";
 import { readFile, unlink, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
 	ArgonSettings,
 	GlobalEvent,
 	MethodParams,
+	MethodResult,
 	ModelInfo,
 	ModelRef,
 	PiSettings,
+	ProjectPiSettings,
 	ProjectPrefs,
 	SessionSummary,
 } from "@argon/shared";
@@ -20,15 +22,39 @@ import {
 	getAgentDir,
 	ModelRuntime,
 	ProjectTrustStore,
-	SessionManager,
+	resolveModelScopeWithDiagnostics,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { AuthFlows } from "./auth-flows.ts";
 import { log } from "./log.ts";
 import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
-import { canonicalProjectPath, projectTrustParent, resolveProjectTrust } from "./project-trust.ts";
-import { type ArgonSettingsStore, readPiSettings, writePiSettings } from "./settings.ts";
+import {
+	canonicalProjectPath,
+	projectTrustParent,
+	resolveProjectTrust,
+	resolveProjectTrustWithExtensions,
+} from "./project-trust.ts";
+import { SessionIndex } from "./session-index.ts";
+import { SessionPrefs } from "./session-prefs.ts";
+import {
+	type ArgonSettingsStore,
+	readPiSettings,
+	readProjectSettings,
+	writePiSettings,
+	writeProjectSettings,
+} from "./settings.ts";
 import { listSessionFiles, UploadsGc } from "./uploads-gc.ts";
+
+/** pi's session directory (bootstrap.ts points PI_CODING_AGENT_SESSION_DIR at Argon's). */
+function sessionsDir(): string {
+	return process.env.PI_CODING_AGENT_SESSION_DIR || join(getAgentDir(), "sessions");
+}
+
+function isInside(parent: string, child: string): boolean {
+	const path = relative(parent, child);
+	return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
 
 export interface RegistryOptions {
 	agentDir: string;
@@ -46,6 +72,8 @@ export class SessionRegistry {
 	private readonly projectTrustStore: ProjectTrustStore;
 	private readonly sessionTrustDecisions = new Map<string, boolean>();
 	private readonly uploadsGc: UploadsGc;
+	private readonly sessionIndex = new SessionIndex(sessionsDir());
+	private readonly prefs: SessionPrefs;
 	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
@@ -56,15 +84,21 @@ export class SessionRegistry {
 		readonly modelRuntime: ModelRuntime,
 	) {
 		this.projectTrustStore = new ProjectTrustStore(options.agentDir);
+		this.prefs = new SessionPrefs(options.argonHome);
 		const sessions = this.sessions;
 		const unloading = this.unloading;
 		this.uploadsGc = new UploadsGc({
 			uploadsRoot: join(options.argonHome, "uploads"),
 			listSessionFiles: async () => {
-				// Match pi's getSessionsDir(), which is internal to the SDK.
-				const listed = await SessionManager.listAll();
-				const files = await listSessionFiles(join(getAgentDir(), "sessions"));
-				return [...files, ...listed.map((info) => info.path)];
+				const listed = await this.sessionIndex.list();
+				const files = await listSessionFiles(sessionsDir());
+				// Sessions pi's listing does not cover: projects with their own `sessionDir`, and session
+				// files opened from elsewhere (e.g. by an extension's switchSession).
+				for (const dir of await this.projectSessionDirs(listed.map((info) => info.cwd))) {
+					files.push(...(await listSessionFiles(dir)));
+				}
+				await this.prefs.pruneExternalSessions();
+				return [...files, ...listed.map((info) => info.path), ...this.prefs.externalSessions()];
 			},
 			*memoryReferences() {
 				for (const session of sessions.values()) yield session.uploadReferenceText();
@@ -86,13 +120,52 @@ export class SessionRegistry {
 		void this.magpie.start().then(() => this.broadcast({ type: "providers_changed" }));
 	}
 
-	readSettings(cwd: string | undefined) {
-		return { ...readPiSettings(this.options.agentDir, cwd), argon: this.options.settings.get() };
+	readSettings(cwd: string | undefined): MethodResult<"settings.get"> {
+		return {
+			...readPiSettings(this.options.agentDir, cwd),
+			argon: this.options.settings.get(),
+			...(cwd ? { project: readProjectSettings(cwd, this.isProjectTrusted(cwd)) } : {}),
+		};
 	}
 
 	async updateSettings(update: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> }): Promise<void> {
 		if (update.pi) await writePiSettings(this.options.agentDir, update.pi);
 		if (update.argon) await this.options.settings.update(update.argon);
+	}
+
+	updateProjectSettings(cwd: string, set?: Partial<ProjectPiSettings>, unset?: (keyof ProjectPiSettings)[]): void {
+		writeProjectSettings(cwd, set, unset);
+	}
+
+	/** Whether pi would load `cwd`'s project settings now (saved or session decision, else the default). */
+	private isProjectTrusted(cwd: string): boolean {
+		const defaultTrust = SettingsManager.create(cwd, this.options.agentDir, { projectTrusted: false });
+		return this.resolveTrust(cwd, defaultTrust.getDefaultProjectTrust()).trusted;
+	}
+
+	private resolveTrust(cwd: string, defaultTrust: DefaultProjectTrust) {
+		return resolveProjectTrust(cwd, this.projectTrustStore, this.sessionTrustDecisions, defaultTrust);
+	}
+
+	/** `sessionDir` settings of known projects (pi lists only its default session directory). */
+	private async projectSessionDirs(sessionCwds: string[]): Promise<string[]> {
+		const cwds = new Set([...(await this.listProjects()).map((p) => p.cwd), ...sessionCwds]);
+		const dirs = new Set<string>();
+		for (const cwd of cwds) {
+			if (!existsSync(cwd)) continue;
+			const projectTrusted = this.isProjectTrusted(cwd);
+			let settings: SettingsManager;
+			try {
+				settings = SettingsManager.create(cwd, this.options.agentDir, { projectTrusted });
+			} catch {
+				// Unreadable settings: nothing extra to scan for this project.
+				continue;
+			}
+			const dir = settings.getSessionDir();
+			if (dir) dirs.add(resolve(cwd, dir));
+		}
+		const defaultDir = resolve(sessionsDir());
+		return [...dirs].filter((dir) => !isInside(defaultDir, dir));
 	}
 
 	/** Restart magpie after plugin changes; providers appear/disappear for all sessions. */
@@ -145,6 +218,15 @@ export class SessionRegistry {
 		return loading;
 	}
 
+	async setArchived(sessionPath: string, archived: boolean): Promise<void> {
+		const known =
+			[...this.sessions.values()].some((s) => s.sessionPath === sessionPath) ||
+			(await this.sessionIndex.list()).some((info) => info.path === sessionPath);
+		if (!known) throw new NotFoundError(`Not a known session: ${sessionPath}`);
+		await this.prefs.setArchived(sessionPath, archived);
+		this.broadcast({ type: "sessions_changed" });
+	}
+
 	async unload(sessionId: string): Promise<void> {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
@@ -168,7 +250,7 @@ export class SessionRegistry {
 			this.broadcast({ type: "sessions_changed" });
 			return;
 		}
-		const known = (await SessionManager.listAll()).some((info) => info.path === sessionPath);
+		const known = (await this.sessionIndex.list()).some((info) => info.path === sessionPath);
 		if (!known) throw new NotFoundError(`Not a known session: ${sessionPath}`);
 		for (const session of [...this.sessions.values()]) {
 			if (session.sessionPath === sessionPath) {
@@ -178,6 +260,8 @@ export class SessionRegistry {
 		}
 		const uploadKeys = await this.uploadsGc.readDeletedSession(sessionPath);
 		await unlink(sessionPath);
+		this.sessionIndex.invalidate();
+		await this.prefs.forget(sessionPath);
 		void this.uploadsGc.cleanDeletedSession(uploadKeys);
 		this.broadcast({ type: "sessions_changed" });
 	}
@@ -274,7 +358,8 @@ export class SessionRegistry {
 	}
 
 	async list(cwd?: string): Promise<SessionSummary[]> {
-		const infos = cwd ? await SessionManager.list(cwd) : await SessionManager.listAll();
+		const all = await this.sessionIndex.list();
+		const infos = cwd ? all.filter((info) => info.cwd === cwd) : all;
 		const byId = new Map<string, SessionSummary>();
 		for (const info of infos) {
 			const loaded = this.sessions.get(info.id);
@@ -290,6 +375,7 @@ export class SessionRegistry {
 				modifiedAt: info.modified.getTime(),
 				loaded: Boolean(loaded),
 				running: loaded?.isRunning ?? false,
+				...(this.prefs.isArchived(info.path) ? { archived: true } : {}),
 			});
 		}
 		// New sessions have no file until their first message; still show them.
@@ -302,26 +388,44 @@ export class SessionRegistry {
 				sessionPath: session.sessionPath ?? "",
 				cwd: state.cwd,
 				name: state.name,
-				firstMessage: "",
+				firstMessage: firstUserText(session) ?? "",
 				messageCount: 0,
-				createdAt: Date.now(),
-				modifiedAt: Date.now(),
+				createdAt: session.createdAt,
+				modifiedAt: session.createdAt,
 				loaded: true,
 				running: session.isRunning,
+				...(session.sessionPath && this.prefs.isArchived(session.sessionPath) ? { archived: true } : {}),
 			});
 		}
 		return [...byId.values()].sort((a, b) => b.modifiedAt - a.modifiedAt);
 	}
 
-	async listModels(): Promise<ModelInfo[]> {
-		const models = await this.modelRuntime.getAvailable();
-		return models.map((model) => ({
+	async listModels(cwd?: string): Promise<MethodResult<"models.list">> {
+		const available = await this.modelRuntime.getAvailable();
+		const models: ModelInfo[] = available.map((model) => ({
 			provider: model.provider,
 			id: model.id,
 			name: model.name ?? model.id,
 			reasoning: Boolean(model.reasoning),
 			contextWindow: model.contextWindow,
 		}));
+		if (!cwd) return { models };
+		const settings = SettingsManager.create(cwd, this.options.agentDir, {
+			projectTrusted: existsSync(cwd) && this.isProjectTrusted(cwd),
+		});
+		const patterns = settings.getEnabledModels();
+		if (!patterns?.length) return { models };
+		const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(patterns, this.modelRuntime);
+		const usable = new Set(models.map((m) => `${m.provider}/${m.id}`));
+		const seen = new Set<string>();
+		const scoped: NonNullable<MethodResult<"models.list">["scoped"]> = [];
+		for (const { model, thinkingLevel } of scopedModels) {
+			const key = `${model.provider}/${model.id}`;
+			if (!usable.has(key) || seen.has(key)) continue;
+			seen.add(key);
+			scoped.push({ provider: model.provider, id: model.id, ...(thinkingLevel ? { thinkingLevel } : {}) });
+		}
+		return { models, scoped, scopeWarnings: diagnostics.map((d) => d.message) };
 	}
 
 	async setModel(sessionId: string, model: ModelRef): Promise<void> {
@@ -330,6 +434,7 @@ export class SessionRegistry {
 
 	async dispose(): Promise<void> {
 		await this.uploadsGc.dispose();
+		await this.prefs.flush();
 		const sessions = [...this.sessions.values()];
 		this.sessions.clear();
 		await Promise.allSettled(sessions.map((s) => s.dispose()));
@@ -345,8 +450,15 @@ export class SessionRegistry {
 			modelRuntime: this.modelRuntime,
 			settings: this.options.settings,
 			sessionHost: this.sessionHost,
-			resolveProjectTrust: (cwd: string, defaultTrust: DefaultProjectTrust) =>
-				resolveProjectTrust(cwd, this.projectTrustStore, this.sessionTrustDecisions, defaultTrust),
+			resolveProjectTrust: (cwd, defaultTrust, extensions, onError) =>
+				resolveProjectTrustWithExtensions(
+					cwd,
+					this.projectTrustStore,
+					this.sessionTrustDecisions,
+					defaultTrust,
+					extensions,
+					onError,
+				),
 		});
 		try {
 			// A trust request can land while this session is loading and still absent from the registry.
@@ -370,10 +482,19 @@ export class SessionRegistry {
 				this.broadcast({ type: "session_requested", fromSessionId: from.sessionId, sessionPath: to.sessionPath });
 			}
 		},
+		// An extension's ctx.shutdown(): the CLI exits; Argon only unloads that session (others keep running).
+		shutdown: (session) => {
+			if (this.sessions.get(session.sessionId) !== session) return false;
+			log.info(`session ${session.sessionId} requested shutdown`);
+			void this.unload(session.sessionId).catch((error) => log.error("shutdown unload failed", error));
+			return true;
+		},
 	};
 
 	private register(session: ManagedSession): void {
 		this.sessions.set(session.sessionId, session);
+		const path = session.sessionPath;
+		if (path && !isInside(resolve(sessionsDir()), resolve(path))) void this.prefs.addExternalSession(resolve(path));
 		// Run state changes affect the session list (running dot, names, message counts).
 		session.subscribe((envelope) => {
 			const type = envelope.event.type;
@@ -383,6 +504,7 @@ export class SessionRegistry {
 		});
 		log.info(`session loaded ${session.sessionId} (${session.snapshot().state.cwd})`);
 		this.broadcast({ type: "sessions_changed" });
+		session.resumeAfterRegister();
 	}
 
 	private broadcast(event: GlobalEvent): void {

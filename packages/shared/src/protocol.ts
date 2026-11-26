@@ -54,6 +54,8 @@ export interface SessionSummary {
 	/** True when the session is currently loaded in the backend. */
 	loaded: boolean;
 	running: boolean;
+	/** Archived sessions are listed apart (Argon preference, per environment). */
+	archived?: boolean;
 }
 
 export type SessionStatus = "idle" | "running";
@@ -253,6 +255,21 @@ export interface PiSettings {
 	defaultProjectTrust: string;
 }
 
+/** The pi settings a project may override (everything but backend-wide choices such as project trust). */
+export type ProjectPiSettings = Omit<PiSettings, "defaultProjectTrust">;
+
+export interface ProjectSettingsInfo {
+	cwd: string;
+	/** Backend path of the project settings file. */
+	path: string;
+	/** Only the keys the project file sets. */
+	values: Partial<ProjectPiSettings>;
+	/** pi ignores project settings while the project is not trusted. */
+	trusted: boolean;
+	/** The file exists but could not be parsed. */
+	error?: string;
+}
+
 /** Resources a scope loads (read-only view; edit with pi's own commands or the settings files). */
 export interface ResourceSettings {
 	scope: "global" | "project";
@@ -302,6 +319,8 @@ export type ProjectTrustDecision = "trust" | "trust_parent" | "deny" | "trust_se
 
 export interface ProjectTrustInfo {
 	status: ProjectTrustStatus;
+	/** Set when a user-level extension decided (pi's `project_trust` event). */
+	decidedBy?: string;
 	/** Folder whose saved decision applies, if any. */
 	savedPath?: string;
 	/** Parent folder offered as "trust parent". */
@@ -314,6 +333,15 @@ export interface SessionDiagnostic {
 	source: "resources" | "extension" | "model";
 	message: string;
 	path?: string;
+	/** How many times the same problem was reported (repeats are folded into one entry). */
+	count?: number;
+}
+
+/** A text widget an extension shows next to the composer (pi's setWidget with string lines). */
+export interface ExtensionWidget {
+	key: string;
+	lines: string[];
+	placement: "aboveEditor" | "belowEditor";
 }
 
 /** Full, self-contained state of one loaded session. Clients rebuild from it after (re)connect. */
@@ -338,6 +366,10 @@ export interface SessionState {
 	pendingInteractions: Interaction[];
 	queue: { steering: string[]; followUp: string[] };
 	statusEntries: StatusEntry[];
+	/** Extension widgets, in the order they were first set. */
+	widgets: ExtensionWidget[];
+	/** Replaces the generic "working" label while a turn runs (pi's setWorkingMessage). */
+	workingMessage?: string;
 	compacting: boolean;
 	retry?: { attempt: number; maxAttempts: number; errorMessage: string };
 	lastUsage?: UsageInfo;
@@ -356,6 +388,11 @@ export interface SessionSnapshot {
 	state: SessionState;
 	/** Sequence number of the last event already applied to `state`. */
 	seq: number;
+	/**
+	 * Notifications emitted while no client was attached (e.g. by an extension that set the session up
+	 * before switching to it). Delivered once, to the first client that attaches.
+	 */
+	notifications?: Extract<SessionEvent, { type: "notification" }>[];
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +452,9 @@ export type SessionEvent =
 	| { type: "interaction_requested"; interaction: Interaction }
 	| { type: "interaction_resolved"; interactionId: string }
 	| { type: "status_entry"; key: string; text?: string }
+	/** `widget` undefined: removed. */
+	| { type: "widget_changed"; key: string; widget?: ExtensionWidget }
+	| { type: "working_message_changed"; message?: string }
 	| { type: "notification"; level: "info" | "warning" | "error"; message: string }
 	| { type: "mcp_changed"; mcp: McpStatus }
 	| { type: "context_usage_changed"; usage?: ContextUsageInfo }
@@ -465,7 +505,18 @@ export interface Methods {
 		params: { path?: string; dirsOnly?: boolean };
 		result: { path: string; parent?: string; entries: DirEntry[] };
 	};
-	"models.list": { params: Record<string, never>; result: { models: ModelInfo[] } };
+	/**
+	 * With `cwd`, also the models in that project's `enabledModels` scope (pi's model cycling set), in
+	 * pattern order. `scoped` is undefined when no scope is configured (every model is in scope).
+	 */
+	"models.list": {
+		params: { cwd?: string };
+		result: {
+			models: ModelInfo[];
+			scoped?: (ModelRef & { thinkingLevel?: ThinkingLevel })[];
+			scopeWarnings?: string[];
+		};
+	};
 	"sessions.list": { params: { cwd?: string }; result: { sessions: SessionSummary[] } };
 	"sessions.create": { params: { cwd: string }; result: SessionSnapshot };
 	"sessions.open": { params: { sessionPath: string }; result: SessionSnapshot };
@@ -545,6 +596,10 @@ export interface Methods {
 		params: { sessionId: string; textBeforeCursor: string };
 		result: { prefix: string; items: (CompletionItem & { isDirectory: boolean })[] } | null;
 	};
+	/** Archive or restore a session (listed sessions only). Archiving does not unload it. */
+	"sessions.setArchived": { params: { sessionPath: string; archived: boolean }; result: Record<string, never> };
+	/** Drop extension and model diagnostics. Resource problems stay until they are fixed (they are re-reported on reload). */
+	"sessions.clearDiagnostics": { params: { sessionId: string }; result: Record<string, never> };
 	/** Delete a session file (unloading it first). Only paths of listed sessions are accepted. */
 	"sessions.delete": { params: { sessionPath: string }; result: Record<string, never> };
 	/** Show the previous/next sibling of a user message (its latest continuation). Idle sessions only. */
@@ -583,13 +638,22 @@ export interface Methods {
 		params: { action: "install" | "remove"; spec: string; confirmed: boolean };
 		result: { message: string };
 	};
+	/** `pi` is the global scope; with `cwd`, `project` holds what the project's settings file sets. */
 	"settings.get": {
 		params: { cwd?: string };
-		result: { pi: PiSettings; resources: ResourceSettings[]; argon: ArgonSettings };
+		result: { pi: PiSettings; resources: ResourceSettings[]; argon: ArgonSettings; project?: ProjectSettingsInfo };
 	};
 	/** Changes apply to sessions started afterwards (loaded sessions keep their settings until reopened). */
 	"settings.update": {
 		params: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> };
+		result: Record<string, never>;
+	};
+	/**
+	 * Set (`set`) or remove (`unset`, falling back to the global value) project-level pi settings in
+	 * `<cwd>/.argon/settings.json`. Applies to sessions started afterwards, like `settings.update`.
+	 */
+	"settings.updateProject": {
+		params: { cwd: string; set?: Partial<ProjectPiSettings>; unset?: (keyof ProjectPiSettings)[] };
 		result: Record<string, never>;
 	};
 	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };

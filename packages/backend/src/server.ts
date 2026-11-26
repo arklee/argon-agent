@@ -100,7 +100,7 @@ class Connection {
 	attach(sessionId: string): void {
 		if (this.attached.has(sessionId)) return;
 		const session = this.registry.require(sessionId);
-		const unsubscribe = session.subscribe((envelope) => this.send({ kind: "session_event", envelope }));
+		const unsubscribe = session.subscribeClient((envelope) => this.send({ kind: "session_event", envelope }));
 		this.attached.set(sessionId, unsubscribe);
 	}
 
@@ -125,26 +125,28 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		"sessions.getImages": async (params) => ({
 			images: registry.require(params.sessionId).getImages({ toolCallId: params.toolCallId, itemId: params.itemId }),
 		}),
-		"models.list": async () => ({ models: await registry.listModels() }),
+		"models.list": async (params) => registry.listModels(typeof params?.cwd === "string" ? params.cwd : undefined),
 		"sessions.list": async (params) => ({ sessions: await registry.list(params.cwd) }),
 		"sessions.create": async (params, conn) => {
 			if (!params.cwd) throw new RequestError("bad_request", "cwd is required");
 			const session = await registry.create(params.cwd);
-			const snapshot = session.snapshot();
+			const snapshot = session.clientSnapshot();
 			conn.attach(session.sessionId);
 			return snapshot;
 		},
 		"sessions.open": async (params, conn) => {
 			const session = await registry.open(params.sessionPath);
-			const snapshot = session.snapshot();
+			const snapshot = session.clientSnapshot();
 			conn.attach(session.sessionId);
 			return snapshot;
 		},
 		"sessions.attach": async (params, conn) => {
 			const session = registry.require(params.sessionId);
 			const events = params.sinceSeq !== undefined ? session.eventsSince(params.sinceSeq) : undefined;
+			const snapshot = events ? undefined : session.clientSnapshot();
+			if (events) session.markDelivered(events.at(-1)?.seq ?? session.snapshot().seq);
 			conn.attach(params.sessionId);
-			return events ? { events } : { snapshot: session.snapshot() };
+			return snapshot ? { snapshot } : { events: events ?? [] };
 		},
 		"sessions.detach": async (params, conn) => {
 			conn.detach(params.sessionId);
@@ -202,6 +204,17 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		}),
 		"sessions.completeFile": async (params) =>
 			(await registry.require(params.sessionId).completeFile(params.textBeforeCursor)) ?? null,
+		"sessions.setArchived": async (params) => {
+			if (typeof params.sessionPath !== "string" || typeof params.archived !== "boolean") {
+				throw new RequestError("bad_request", "sessionPath and archived are required");
+			}
+			await registry.setArchived(params.sessionPath, params.archived);
+			return empty;
+		},
+		"sessions.clearDiagnostics": async (params) => {
+			registry.require(params.sessionId).clearDiagnostics();
+			return empty;
+		},
 		"sessions.delete": async (params) => {
 			await registry.delete(params.sessionPath);
 			return empty;
@@ -237,6 +250,17 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		"settings.get": async (params) => registry.readSettings(params.cwd),
 		"settings.update": async (params) => {
 			await registry.updateSettings(params);
+			return empty;
+		},
+		"settings.updateProject": async (params) => {
+			if (typeof params.cwd !== "string" || !params.cwd) throw new RequestError("bad_request", "cwd is required");
+			const info = await stat(params.cwd).catch(() => undefined);
+			if (!info?.isDirectory()) throw new RequestError("bad_request", `Not a directory: ${params.cwd}`);
+			try {
+				registry.updateProjectSettings(params.cwd, params.set, params.unset);
+			} catch (error) {
+				throw new RequestError("bad_request", error instanceof Error ? error.message : String(error));
+			}
 			return empty;
 		},
 		"projects.list": async () => ({ projects: await registry.listProjects() }),

@@ -115,7 +115,8 @@ it("loads undecided projects untrusted and reapplies saved and temporary choices
 	writeFileSync(
 		join(userExtensions, "trust-hook.js"),
 		`export default pi => {
-			pi.on("project_trust", () => ({ trusted: "yes", remember: true }));
+			// Undecided falls through to Argon's own decision (see the extension test below).
+			pi.on("project_trust", () => ({ trusted: "undecided" }));
 			pi.registerCommand("switch-project", { handler: (path, ctx) => ctx.switchSession(path) });
 		};`,
 	);
@@ -170,6 +171,37 @@ it("loads undecided projects untrusted and reapplies saved and temporary choices
 		});
 		expect(registry.require(target.getSessionId()).snapshot().state.projectTrust?.status).toBe("undecided");
 		expect(first.snapshot().state.projectTrust?.status).toBe("trusted");
+	} finally {
+		await registry.dispose();
+	}
+});
+
+it("lets user-level project_trust handlers decide undecided projects, after session-only choices", async () => {
+	vi.spyOn(SessionManager, "create").mockImplementation((path) => SessionManager.inMemory(path));
+	const remembered = join(parentPath, "remembered");
+	const once = join(parentPath, "once");
+	for (const project of [remembered, once]) addProjectSettings(project);
+	const userExtensions = join(agentDir, "extensions");
+	mkdirSync(userExtensions, { recursive: true });
+	writeFileSync(
+		join(userExtensions, "trust-hook.js"),
+		`export default pi => pi.on("project_trust", (event) =>
+			event.cwd.endsWith("remembered") ? { trusted: "yes", remember: true } : { trusted: "no" });`,
+	);
+	const registry = await SessionRegistry.create({ agentDir, argonHome: root, settings: new ArgonSettingsStore(root) });
+	try {
+		const saved = await registry.create(remembered);
+		expect(saved.snapshot().state.projectTrust).toMatchObject({ status: "trusted" });
+		expect(saved.snapshot().state.projectTrust?.decidedBy).toContain("trust-hook.js");
+		expect(new ProjectTrustStore(agentDir).getEntry(remembered)).toEqual({ path: remembered, decision: true });
+
+		const denied = await registry.create(once);
+		expect(denied.snapshot().state.projectTrust).toMatchObject({ status: "untrusted" });
+		expect(new ProjectTrustStore(agentDir).getEntry(once)).toBeNull();
+
+		await registry.setProjectTrust({ cwd: once, decision: "trust_session" });
+		expect(denied.snapshot().state.projectTrust).toMatchObject({ status: "trusted" });
+		expect(denied.snapshot().state.projectTrust?.decidedBy).toBeUndefined();
 	} finally {
 		await registry.dispose();
 	}

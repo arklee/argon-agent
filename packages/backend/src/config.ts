@@ -3,8 +3,10 @@
  * ~/.argon) on the machine the backend runs on; embedded pi data lives in its private agent/ subdirectory.
  */
 
+import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { homedir, hostname, platform } from "node:os";
 import { join, resolve } from "node:path";
 import type { EnvironmentInfo, PermissionMode } from "@argon/shared";
@@ -42,6 +44,35 @@ function loadEnvironmentId(argonHome: string): string {
 	return id;
 }
 
+function run(command: string, args: string[]): string | undefined {
+	try {
+		return execFileSync(command, args, { encoding: "utf8", timeout: 1000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * A readable machine name for the environment. os.hostname() is the network name, which on some
+ * networks is an IP address (or `*.local` noise); the OS usually knows the name the user chose.
+ */
+export function friendlyHostName(
+	platformName: string = platform(),
+	host: string = hostname(),
+	exec: typeof run = run,
+): string {
+	const named =
+		platformName === "darwin"
+			? exec("scutil", ["--get", "ComputerName"])
+			: platformName === "linux"
+				? exec("hostnamectl", ["--pretty"])
+				: undefined;
+	if (named) return named;
+	const short = host.replace(/\.local$/i, "");
+	if (short && !isIP(short) && !isIP(host)) return short;
+	return host || "localhost";
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig {
 	const argonHome = resolve(env.ARGON_HOME ?? join(homedir(), ".argon"));
 	mkdirSync(argonHome, { recursive: true, mode: 0o700 });
@@ -64,7 +95,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BackendConfig 
 		permissionModeOverride,
 		environment: {
 			id: loadEnvironmentId(argonHome),
-			name: env.ARGON_ENV_NAME ?? hostname(),
+			name: env.ARGON_ENV_NAME ?? friendlyHostName(),
 			hostname: hostname(),
 			platform: platform(),
 			homeDir: homedir(),

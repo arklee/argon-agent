@@ -25,6 +25,7 @@ export function createEmptySessionState(init: { sessionId: string; cwd: string; 
 		pendingInteractions: [],
 		queue: { steering: [], followUp: [] },
 		statusEntries: [],
+		widgets: [],
 		compacting: false,
 	};
 }
@@ -250,6 +251,18 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				statusEntries: event.text === undefined ? rest : [...rest, { key: event.key, text: event.text }],
 			};
 		}
+		case "widget_changed": {
+			const index = state.widgets.findIndex((w) => w.key === event.key);
+			if (!event.widget) {
+				return index === -1 ? state : { ...state, widgets: state.widgets.filter((w) => w.key !== event.key) };
+			}
+			const widgets = state.widgets.slice();
+			if (index === -1) widgets.push(event.widget);
+			else widgets[index] = event.widget;
+			return { ...state, widgets };
+		}
+		case "working_message_changed":
+			return { ...state, workingMessage: event.message };
 		case "branches_changed":
 			return { ...state, userBranches: event.userBranches };
 		case "context_usage_changed":

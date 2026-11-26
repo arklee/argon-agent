@@ -6,10 +6,20 @@
  * - Argon settings: $ARGON_HOME/settings.json (default permission mode, persisted "always allow" rules).
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { ArgonSettings, PermissionMode, PermissionRule, PiSettings, ResourceSettings } from "@argon/shared";
+import { dirname, join } from "node:path";
+import type {
+	ArgonSettings,
+	PermissionMode,
+	PermissionRule,
+	PiSettings,
+	ProjectPiSettings,
+	ProjectSettingsInfo,
+	ResourceSettings,
+} from "@argon/shared";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
+import lockfile from "proper-lockfile";
 
 import { resolveToolPreset } from "./tool-presets.ts";
 
@@ -82,6 +92,178 @@ export async function writePiSettings(agentDir: string, patch: Partial<PiSetting
 	if (patch.defaultProjectTrust) manager.setDefaultProjectTrust(patch.defaultProjectTrust as TrustArg);
 	// reload() waits for queued writes before re-reading.
 	await manager.reload();
+}
+
+// ---------------------------------------------------------------------------
+// Project-level pi settings (<cwd>/.argon/settings.json)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where each project-overridable setting lives in pi's settings JSON. pi's SettingsManager only has
+ * project setters for resource lists, so Argon edits the file itself, under the same lock pi uses.
+ */
+const PROJECT_KEYS: { [K in keyof ProjectPiSettings]-?: readonly string[] } = {
+	defaultModel: ["defaultModel"],
+	defaultThinkingLevel: ["defaultThinkingLevel"],
+	enabledModels: ["enabledModels"],
+	steeringMode: ["steeringMode"],
+	followUpMode: ["followUpMode"],
+	compaction: ["compaction", "enabled"],
+	retry: ["retry", "enabled"],
+	shellPath: ["shellPath"],
+	shellCommandPrefix: ["shellCommandPrefix"],
+	imageAutoResize: ["images", "autoResize"],
+	blockImages: ["images", "blockImages"],
+	enableSkillCommands: ["enableSkillCommands"],
+};
+
+export const PROJECT_SETTING_KEYS = Object.keys(PROJECT_KEYS) as (keyof ProjectPiSettings)[];
+
+/** Project settings file of `cwd` (pi's CONFIG_DIR_NAME is `.argon` in Argon, see decisions D10). */
+export function projectSettingsPath(cwd: string): string {
+	return join(cwd, ".argon", "settings.json");
+}
+
+type Json = Record<string, unknown>;
+
+function getPath(data: Json, path: readonly string[]): unknown {
+	let current: unknown = data;
+	for (const key of path) {
+		if (!current || typeof current !== "object") return undefined;
+		current = (current as Json)[key];
+	}
+	return current;
+}
+
+function setPath(data: Json, path: readonly string[], value: unknown): void {
+	let current = data;
+	for (const key of path.slice(0, -1)) {
+		const next = current[key];
+		if (!next || typeof next !== "object" || Array.isArray(next)) current[key] = {};
+		current = current[key] as Json;
+	}
+	const last = path.at(-1)!;
+	if (value === undefined) delete current[last];
+	else current[last] = value;
+}
+
+/** Remove `path`, then any parent objects it left empty. */
+function unsetPath(data: Json, path: readonly string[]): void {
+	setPath(data, path, undefined);
+	for (let depth = path.length - 1; depth > 0; depth--) {
+		const parent = getPath(data, path.slice(0, depth));
+		if (parent && typeof parent === "object" && Object.keys(parent).length === 0) {
+			setPath(data, path.slice(0, depth), undefined);
+		} else break;
+	}
+}
+
+function parseSettingsFile(text: string | undefined): Json {
+	if (text === undefined || !text.trim()) return {};
+	const data = JSON.parse(text.replace(/^\uFEFF/, "")) as unknown;
+	if (!data || typeof data !== "object" || Array.isArray(data))
+		throw new Error("Settings file must hold a JSON object");
+	return data as Json;
+}
+
+/** The keys the project file sets, as Argon values (`defaultModel` needs both provider and model). */
+export function readProjectSettings(cwd: string, trusted: boolean): ProjectSettingsInfo {
+	const path = projectSettingsPath(cwd);
+	const info: ProjectSettingsInfo = { cwd, path, values: {}, trusted };
+	let data: Json;
+	try {
+		data = parseSettingsFile(existsSync(path) ? readFileSync(path, "utf8") : undefined);
+	} catch (error) {
+		return { ...info, error: error instanceof Error ? error.message : String(error) };
+	}
+	const values: Partial<ProjectPiSettings> = {};
+	for (const key of PROJECT_SETTING_KEYS) {
+		if (key === "defaultModel") {
+			const provider = data.defaultProvider;
+			const id = data.defaultModel;
+			if (typeof provider === "string" && typeof id === "string") values.defaultModel = { provider, id };
+			continue;
+		}
+		const value = getPath(data, PROJECT_KEYS[key]);
+		if (value !== undefined) (values as Record<string, unknown>)[key] = value;
+	}
+	return { ...info, values };
+}
+
+/** Run `update` on the parsed project file under pi's settings lock and write the result. */
+function withProjectFile(cwd: string, update: (data: Json) => void): void {
+	const path = projectSettingsPath(cwd);
+	if (!existsSync(path)) {
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, "{}\n", { flag: "wx" });
+	}
+	const release = lockWithRetry(path);
+	try {
+		const data = parseSettingsFile(readFileSync(path, "utf8"));
+		update(data);
+		writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+	} finally {
+		release();
+	}
+}
+
+function lockWithRetry(path: string): () => void {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			// Same options as pi's FileSettingsStorage, so both lock the same file.
+			return lockfile.lockSync(path, { realpath: false });
+		} catch (error) {
+			if ((error as { code?: string }).code !== "ELOCKED" || attempt >= 10) throw error;
+			const until = Date.now() + 20;
+			while (Date.now() < until) {
+				// pi waits synchronously too; the lock is held only for a read-modify-write.
+			}
+		}
+	}
+}
+
+const BOOLEAN_KEYS = new Set(["compaction", "retry", "imageAutoResize", "blockImages", "enableSkillCommands"]);
+
+function checkProjectValue(key: keyof ProjectPiSettings, value: unknown): void {
+	const ok =
+		key === "enabledModels"
+			? Array.isArray(value) && value.every((v) => typeof v === "string")
+			: key === "steeringMode" || key === "followUpMode"
+				? value === "all" || value === "one-at-a-time"
+				: BOOLEAN_KEYS.has(key)
+					? typeof value === "boolean"
+					: typeof value === "string";
+	if (!ok) throw new Error(`Invalid value for ${key}`);
+}
+
+export function writeProjectSettings(
+	cwd: string,
+	set: Partial<ProjectPiSettings> = {},
+	unset: readonly (keyof ProjectPiSettings)[] = [],
+): void {
+	const unknown = [...Object.keys(set), ...unset].filter((key) => !(key in PROJECT_KEYS));
+	if (unknown.length > 0) throw new Error(`Not a project setting: ${unknown.join(", ")}`);
+	withProjectFile(cwd, (data) => {
+		for (const key of unset) {
+			if (key === "defaultModel") {
+				delete data.defaultProvider;
+				delete data.defaultModel;
+			} else unsetPath(data, PROJECT_KEYS[key]);
+		}
+		for (const [key, value] of Object.entries(set) as [keyof ProjectPiSettings, unknown][]) {
+			if (value === undefined) continue;
+			if (key === "defaultModel") {
+				const model = value as PiSettings["defaultModel"];
+				if (typeof model?.provider !== "string" || !model.provider || typeof model.id !== "string" || !model.id)
+					throw new Error("defaultModel needs a provider and an id");
+				data.defaultProvider = model.provider;
+				data.defaultModel = model.id;
+			} else {
+				checkProjectValue(key, value);
+				setPath(data, PROJECT_KEYS[key], value);
+			}
+		}
+	});
 }
 
 // ---------------------------------------------------------------------------

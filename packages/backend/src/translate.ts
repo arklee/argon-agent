@@ -142,6 +142,8 @@ export function toolResultOutput(result: AnyMessage): { output: string; imageCou
 
 export interface HistoryProjection {
 	nestedToolEvents: Extract<SessionEvent, { type: "tool_started" | "tool_ended" }>[];
+	/** Calls the user denied (Argon's `argon.tool_blocked` entries), with the reason. */
+	blockedTools: Map<string, string>;
 	items: TranscriptItem[];
 	toolResults: Array<{
 		toolCallId: string;
@@ -161,6 +163,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 	const nestedToolEvents: HistoryProjection["nestedToolEvents"] = [];
 	const items: TranscriptItem[] = [];
 	const toolResults: HistoryProjection["toolResults"] = [];
+	const blockedTools = new Map<string, string>();
 	for (const entry of entries) {
 		const parsed = Date.parse(entry.timestamp);
 		const timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
@@ -230,6 +233,14 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 					timestamp,
 				});
 				break;
+			case "custom": {
+				if (entry.customType !== "argon.tool_blocked") break;
+				const data = entry.data as { toolCallId?: unknown; reason?: unknown } | undefined;
+				if (typeof data?.toolCallId === "string") {
+					blockedTools.set(data.toolCallId, typeof data.reason === "string" ? data.reason : "Denied by user");
+				}
+				break;
+			}
 			case "custom_message": {
 				if (!entry.display) break;
 				const { text } = contentToText(entry.content as ContentPart[] | string);
@@ -240,5 +251,5 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 				break;
 		}
 	}
-	return { items, toolResults, nestedToolEvents };
+	return { items, toolResults, nestedToolEvents, blockedTools };
 }

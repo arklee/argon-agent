@@ -11,7 +11,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ManagedSession } from "../src/managed-session.ts";
+import { type ExtensionSessionHost, ManagedSession } from "../src/managed-session.ts";
 import { ArgonSettingsStore } from "../src/settings.ts";
 import { resolveToolPreset } from "../src/tool-presets.ts";
 
@@ -27,6 +27,8 @@ const cwd = "/project";
 async function loadSession(
 	options: {
 		modelFallbackMessage?: string;
+		sessionHost?: ExtensionSessionHost;
+		shutdownDuringBind?: boolean;
 		diagnostics?: AgentSessionRuntimeDiagnostic[];
 		setup?: (sessionManager: SessionManager) => void;
 		activeTools?: string[];
@@ -44,9 +46,10 @@ async function loadSession(
 	const settingsManager = SettingsManager.inMemory({}, { projectTrusted: false });
 	const diagnostics: ResourceDiagnostic[] = [];
 	const reload = vi.fn(async () => undefined);
-	const bindExtensions = vi.fn(async (_bindings: Parameters<AgentSession["bindExtensions"]>[0]) =>
-		emit({ type: "session_info_changed", name: "Set during bind" }),
-	);
+	const bindExtensions = vi.fn(async (_bindings: Parameters<AgentSession["bindExtensions"]>[0]) => {
+		emit({ type: "session_info_changed", name: "Set during bind" });
+		if (options.shutdownDuringBind) _bindings.shutdownHandler?.();
+	});
 	let activeTools = options.activeTools ?? ["read", "custom"];
 	const setActiveToolsByName = vi.fn((names: string[]) => {
 		activeTools = names;
@@ -97,9 +100,10 @@ async function loadSession(
 		{ kind: "new", cwd },
 		{
 			agentDir: "/agent",
+			sessionHost: options.sessionHost,
 			modelRuntime: {} as ModelRuntime,
 			settings,
-			resolveProjectTrust: () => ({ trusted: trustStatus === "trusted", info: { status: trustStatus } }),
+			resolveProjectTrust: async () => ({ trusted: trustStatus === "trusted", info: { status: trustStatus } }),
 		},
 	);
 	const events: SessionEventEnvelope[] = [];
@@ -194,6 +198,139 @@ describe("ManagedSession trust and diagnostics", () => {
 		expect(diagnostics).toHaveLength(100);
 		expect(diagnostics[0]?.message).toBe("Extension error in /extension.ts: Error 1");
 		expect(diagnostics.at(-1)?.message).toBe("Extension error in /extension.ts: Error 100");
+	});
+});
+
+describe("ManagedSession diagnostics, notifications and approvals", () => {
+	it("folds repeated extension errors and clears everything but resource problems", async () => {
+		const { managed, bindings } = await loadSession({ diagnostics: [{ type: "error", message: "Resource error" }] });
+		for (let i = 0; i < 3; i++) bindings.onError?.({ extensionPath: "/e.ts", event: "test", error: "Same" });
+		bindings.onError?.({ extensionPath: "/e.ts", event: "test", error: "Other" });
+		expect(managed.snapshot().state.diagnostics).toMatchObject([
+			{ source: "resources", message: "Resource error" },
+			{ source: "extension", message: "Extension error in /e.ts: Same", count: 3 },
+			{ source: "extension", message: "Extension error in /e.ts: Other" },
+		]);
+		managed.clearDiagnostics();
+		expect(managed.snapshot().state.diagnostics).toMatchObject([{ source: "resources", message: "Resource error" }]);
+		expect(managed.snapshot().state.diagnostics).toHaveLength(1);
+	});
+
+	it("hands notifications sent while no client was attached to the first client snapshot", async () => {
+		const { managed, bindings } = await loadSession();
+		bindings.uiContext?.notify("Set up the session", "info");
+		expect(managed.clientSnapshot().notifications).toEqual([
+			{ type: "notification", level: "info", message: "Set up the session" },
+		]);
+		expect(managed.clientSnapshot().notifications).toBeUndefined();
+		const unsubscribe = managed.subscribeClient(() => {});
+		bindings.uiContext?.notify("Seen live", "info");
+		unsubscribe();
+		expect(managed.clientSnapshot().notifications).toBeUndefined();
+	});
+
+	it("clears only replayed notifications from later snapshots", async () => {
+		const { managed, bindings } = await loadSession();
+		bindings.uiContext?.notify("Replayed", "info");
+		const throughSeq = managed.snapshot().seq;
+		bindings.uiContext?.notify("Still pending", "info");
+		managed.markDelivered(throughSeq);
+		expect(managed.clientSnapshot().notifications?.map((event) => event.message)).toEqual(["Still pending"]);
+	});
+
+	it("disposes and clears widgets on each reload while keeping the bridge usable", async () => {
+		const { managed, bindings, reload, events } = await loadSession();
+		const ui = bindings.uiContext!;
+		const dispose = vi.fn();
+		const mount = () => {
+			ui.setWidget("plain", ["text"]);
+			ui.setWidget("component", () => ({ render: () => ["component"], invalidate() {}, dispose }));
+		};
+		mount();
+		reload.mockImplementation(async () => {
+			expect(managed.snapshot().state.widgets).toEqual([]);
+			mount();
+		});
+		await bindings.commandContextActions?.reload();
+		await bindings.commandContextActions?.reload();
+		expect(dispose).toHaveBeenCalledTimes(2);
+		expect(managed.snapshot().state.widgets).toHaveLength(2);
+		expect(events.filter(({ event }) => event.type === "widget_changed" && !event.widget)).toHaveLength(4);
+		ui.setWidget("component", undefined);
+	});
+
+	it("retries shutdown requested during initial bind after registration", async () => {
+		const shutdown = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+		const { managed } = await loadSession({
+			shutdownDuringBind: true,
+			sessionHost: { shutdown, createSession: vi.fn(), openSession: vi.fn(), announce: vi.fn() },
+		});
+		expect(shutdown).toHaveBeenCalledTimes(1);
+		managed.resumeAfterRegister();
+		expect(shutdown).toHaveBeenCalledTimes(2);
+		managed.resumeAfterRegister();
+		expect(shutdown).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps text and component widgets and the working message in the state", async () => {
+		const { managed, bindings } = await loadSession();
+		const ui = bindings.uiContext!;
+		ui.setWidget("plain", ["\u001b[1mBold\u001b[0m", "two"]);
+		let text = "first";
+		let requestRender: (() => void) | undefined;
+		ui.setWidget(
+			"component",
+			(tui) => {
+				requestRender = () => (tui as { requestRender(): void }).requestRender();
+				return { render: (width: number) => [`${text} @${width}`], invalidate() {} };
+			},
+			{ placement: "belowEditor" },
+		);
+		ui.setWorkingMessage("Indexing");
+		expect(managed.snapshot().state.widgets).toEqual([
+			{ key: "plain", lines: ["Bold", "two"], placement: "aboveEditor" },
+			{ key: "component", lines: ["first @100"], placement: "belowEditor" },
+		]);
+		expect(managed.snapshot().state.workingMessage).toBe("Indexing");
+		text = "second";
+		requestRender?.();
+		await vi.waitFor(() => expect(managed.snapshot().state.widgets[1]?.lines).toEqual(["second @100"]));
+		ui.setWidget("plain", undefined);
+		expect(managed.snapshot().state.widgets.map((w) => w.key)).toEqual(["component"]);
+	});
+
+	it("stores allow-for-session choices and denied calls in the session file", async () => {
+		type Check = { checkToolCall(check: unknown): Promise<unknown> };
+		const check = (managed: unknown, toolCallId: string, toolName = "bash") =>
+			(managed as Check).checkToolCall({ toolCallId, toolName, input: { command: "make" }, signal: undefined });
+		const answer = async (managed: ManagedSession, response: Parameters<ManagedSession["respond"]>[1]) => {
+			await vi.waitFor(() => expect(managed.snapshot().state.pendingInteractions).toHaveLength(1));
+			managed.respond(managed.snapshot().state.pendingInteractions[0]!.id, response);
+		};
+		const first = await loadSession();
+		const allowed = check(first.managed, "t1");
+		await answer(first.managed, { decision: "allow_session" });
+		await expect(allowed).resolves.toEqual({ allow: true });
+		await expect(check(first.managed, "t2")).resolves.toEqual({ allow: true });
+		const denied = check(first.managed, "t3", "custom");
+		await answer(first.managed, { decision: "deny", reason: "not now" });
+		await expect(denied).resolves.toEqual({ allow: false, reason: "Denied by user: not now" });
+
+		const custom = first.sessionManager
+			.getEntries()
+			.flatMap((e) => (e.type === "custom" ? [{ type: e.customType, data: e.data }] : []));
+		expect(custom).toEqual([
+			{ type: "argon.session_allow", data: { tool: "bash" } },
+			{ type: "argon.tool_blocked", data: { toolCallId: "t3", reason: "Denied by user: not now" } },
+		]);
+
+		const reopened = await loadSession({
+			setup: (sessionManager) => {
+				for (const entry of custom) sessionManager.appendCustomEntry(entry.type, entry.data);
+			},
+		});
+		await expect(check(reopened.managed, "t4")).resolves.toEqual({ allow: true });
+		expect(reopened.managed.snapshot().state.pendingInteractions).toEqual([]);
 	});
 });
 
