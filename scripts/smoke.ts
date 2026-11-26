@@ -15,7 +15,14 @@ const STEP_TIMEOUT = 120_000;
 const SHUTDOWN_TIMEOUT = 5_000;
 const OAUTH_REFRESH_WINDOW = 5 * 60_000;
 const HOST = "127.0.0.1";
-const MODEL = { provider: "openai", id: "gpt-6-luna" };
+/** ARGON_SMOKE_MODEL=provider/id picks another model (the provider must be logged in to Argon). */
+const MODEL = parseModel(process.env.ARGON_SMOKE_MODEL ?? "openai/gpt-6-luna");
+
+function parseModel(ref: string): { provider: string; id: string } {
+	const slash = ref.indexOf("/");
+	if (slash <= 0 || slash === ref.length - 1) throw new Error(`ARGON_SMOKE_MODEL must be provider/id, got "${ref}"`);
+	return { provider: ref.slice(0, slash), id: ref.slice(slash + 1) };
+}
 const MARKER = "SMOKE-OK";
 const COMMAND = "echo argon > smoke.txt";
 const ARGON_HOME = process.env.ARGON_HOME ?? join(homedir(), ".argon");
@@ -147,7 +154,7 @@ async function checkCredentialLifetime() {
 		const minimum = Date.now() + OAUTH_REFRESH_WINDOW + STEP_TIMEOUT + SHUTDOWN_TIMEOUT;
 		assert(
 			(credential.expires ?? 0) > minimum,
-			"OpenAI OAuth would need a refresh during this run. Refresh the Argon login before running smoke.",
+			`${MODEL.provider} OAuth would need a refresh during this run. Refresh the Argon login before running smoke.`,
 		);
 	}
 }
@@ -175,7 +182,9 @@ async function runPrompt(client: WebSocketAgentClient, prompt: Prompt, signal: A
 				interaction.toolName !== "bash" ||
 				args?.command !== COMMAND
 			) {
-				settled.reject(new Error(`Unexpected interaction: ${interaction.kind}`));
+				const detail =
+					interaction.kind === "tool_approval" ? ` (${interaction.toolName} ${JSON.stringify(interaction.args)})` : "";
+				settled.reject(new Error(`Unexpected interaction: ${interaction.kind}${detail}`));
 				return;
 			}
 			if (signal.aborted) return;
