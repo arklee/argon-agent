@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { type AgentClient, AgentClientError, type ConnectionState } from "../src/client.ts";
-import type { MethodName, MethodParams, MethodResult, SessionEventEnvelope, SessionSnapshot } from "../src/protocol.ts";
+import type {
+	GlobalEvent,
+	MethodName,
+	MethodParams,
+	MethodResult,
+	SessionEventEnvelope,
+	SessionSnapshot,
+} from "../src/protocol.ts";
 import { createEmptySessionState } from "../src/reducer.ts";
 import { SessionMirror } from "../src/session-store.ts";
 
@@ -24,6 +31,7 @@ class FakeAgentClient implements AgentClient {
 	readonly calls: Array<{ method: MethodName; params: unknown }> = [];
 	private readonly responses: Array<() => unknown> = [];
 	private readonly sessionListeners = new Set<(event: SessionEventEnvelope) => void>();
+	private readonly globalListeners = new Set<(event: GlobalEvent) => void>();
 	private readonly connectionListeners = new Set<(state: ConnectionState) => void>();
 
 	respond<M extends MethodName>(method: M, response: MethodResult<M> | Error): void {
@@ -51,8 +59,13 @@ class FakeAgentClient implements AgentClient {
 		return () => this.connectionListeners.delete(listener);
 	}
 
-	onGlobalEvent(): () => void {
-		return () => {};
+	onGlobalEvent(listener: (event: GlobalEvent) => void): () => void {
+		this.globalListeners.add(listener);
+		return () => this.globalListeners.delete(listener);
+	}
+
+	emitGlobal(event: GlobalEvent): void {
+		for (const listener of this.globalListeners) listener(event);
 	}
 
 	close(): void {
@@ -206,5 +219,118 @@ describe("SessionMirror", () => {
 
 		expect(client.calls.at(-1)).toEqual({ method: "sessions.attach", params: { sessionId, sinceSeq: 4 } });
 		expect(mirror.get(sessionId)?.name).toBe("Latest");
+	});
+});
+
+describe("unloaded sessions", () => {
+	it("keeps saved state, emits it, ignores events and skips reconnect resync", async () => {
+		const { client, mirror } = await attach();
+		const state = mirror.get(sessionId);
+		const updates: unknown[] = [];
+		mirror.subscribe((_, next) => updates.push(next));
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		expect(mirror.get(sessionId)).toBe(state);
+		expect(mirror.isUnloaded(sessionId)).toBe(true);
+		expect(updates).toEqual([state]);
+		client.emit(rename(4, "Ignored"));
+		client.close();
+		client.reconnect();
+		expect(mirror.get(sessionId)).toBe(state);
+		expect(client.calls).toHaveLength(1);
+	});
+
+	it("shares reopening requests and adopts a lower sequence through attach", async () => {
+		const { client, mirror } = await attach(20);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		client.respond("sessions.open", snapshot(0, "Fresh"));
+		const first = mirror.reopen(sessionId);
+		expect(mirror.reopen(sessionId)).toBe(first);
+		const attached = mirror.attach(sessionId);
+		await first;
+		expect(await attached).toBe(mirror.get(sessionId));
+		expect(mirror.isUnloaded(sessionId)).toBe(false);
+		client.emit(rename(1, "Next"));
+		expect(mirror.get(sessionId)?.name).toBe("Next");
+		expect(client.calls).toHaveLength(2);
+	});
+
+	it("applies sorted, deduplicated live events received while reopening", async () => {
+		const { client, mirror } = await attach(20);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		const fresh = snapshot(0);
+		fresh.state.status = "running";
+		client.respond("sessions.open", fresh);
+		const pending = mirror.reopen(sessionId);
+		client.emit({ sessionId, seq: 2, event: { type: "run_settled", aborted: false } });
+		client.emit(rename(1, "Recovered"));
+		client.emit(rename(1, "Duplicate"));
+		await pending;
+		expect(mirror.get(sessionId)?.status).toBe("idle");
+		expect(mirror.get(sessionId)?.name).toBe("Recovered");
+	});
+
+	it("resyncs a gap in events buffered while reopening", async () => {
+		const { client, mirror } = await attach(20);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		client.respond("sessions.open", snapshot(0));
+		const pending = mirror.reopen(sessionId);
+		client.emit(rename(2, "Recovered"));
+		client.respond("sessions.attach", { events: [rename(1, "Missing")] });
+		await pending;
+		expect(mirror.get(sessionId)?.name).toBe("Recovered");
+		expect(client.calls.at(-1)?.params).toEqual({ sessionId, sinceSeq: 0 });
+	});
+
+	it("preserves an unload received while reopening", async () => {
+		const { client, mirror } = await attach(20);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		client.respond("sessions.open", snapshot(0, "Reopened"));
+		const pending = mirror.reopen(sessionId);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		await pending;
+		expect(mirror.isUnloaded(sessionId)).toBe(true);
+		expect(mirror.get(sessionId)?.name).toBe("Reopened");
+		client.emit(rename(1, "Ignored"));
+		expect(mirror.get(sessionId)?.name).toBe("Reopened");
+	});
+
+	it("forgets a missing file but keeps state on other reopen failures", async () => {
+		const { client, mirror } = await attach();
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		client.respond("sessions.open", new Error("Offline"));
+		await expect(mirror.reopen(sessionId)).rejects.toThrow("Offline");
+		expect(mirror.isUnloaded(sessionId)).toBe(true);
+		client.respond("sessions.open", new AgentClientError({ code: "not_found", message: "Deleted" }));
+		await expect(mirror.reopen(sessionId)).rejects.toThrow("Deleted");
+		expect(mirror.get(sessionId)).toBeUndefined();
+		expect(mirror.isUnloaded(sessionId)).toBe(false);
+	});
+
+	it("forgets unsaved sessions on unload", async () => {
+		const client = new FakeAgentClient();
+		const mirror = new SessionMirror(client);
+		const initial = snapshot(0);
+		delete initial.state.sessionPath;
+		client.respond("sessions.attach", { snapshot: initial });
+		await mirror.attach(sessionId);
+		client.emitGlobal({ type: "session_unloaded", sessionId });
+		expect(mirror.get(sessionId)).toBeUndefined();
+	});
+
+	it("delivers snapshot notifications once, without replaying them on attach or duplicate events", async () => {
+		const client = new FakeAgentClient();
+		const mirror = new SessionMirror(client);
+		const initial = snapshot(3);
+		const event = { type: "notification", level: "info", message: "Hello" } as const;
+		initial.notifications = [event];
+		const messages: string[] = [];
+		mirror.onNotification((_, notification) => messages.push(notification.message));
+		client.respond("sessions.open", initial);
+		await mirror.open(sessionPath);
+		await mirror.attach(sessionId);
+		client.respond("sessions.open", initial);
+		await mirror.open(sessionPath);
+		client.emit({ sessionId, seq: 3, event });
+		expect(messages).toEqual(["Hello"]);
 	});
 });

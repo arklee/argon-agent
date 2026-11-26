@@ -11,6 +11,9 @@ interface Tracked {
 	state: SessionState;
 	seq: number;
 	resyncing: boolean;
+	unloaded?: boolean;
+	reopening?: Promise<SessionState>;
+	unloadedWhileReopening?: boolean;
 	/** Events received while resyncing; applied after the snapshot when contiguous. */
 	buffered: SessionEventEnvelope[];
 }
@@ -32,7 +35,15 @@ export class SessionMirror {
 		this.disposers.push(client.onSessionEvent((envelope) => this.handleEnvelope(envelope)));
 		this.disposers.push(
 			client.onGlobalEvent((event) => {
-				if (event.type === "session_unloaded") this.forget(event.sessionId);
+				if (event.type !== "session_unloaded") return;
+				const tracked = this.tracked.get(event.sessionId);
+				if (!tracked?.state.sessionPath) this.forget(event.sessionId);
+				else {
+					tracked.unloaded = true;
+					if (tracked.reopening) tracked.unloadedWhileReopening = true;
+					tracked.buffered = [];
+					this.emit(event.sessionId);
+				}
 			}),
 		);
 		this.disposers.push(
@@ -49,6 +60,42 @@ export class SessionMirror {
 
 	get(sessionId: string): SessionState | undefined {
 		return this.tracked.get(sessionId)?.state;
+	}
+
+	isUnloaded(sessionId: string): boolean {
+		return this.tracked.get(sessionId)?.unloaded === true;
+	}
+
+	reopen(sessionId: string): Promise<SessionState> {
+		const tracked = this.tracked.get(sessionId);
+		if (!tracked) return Promise.reject(new AgentClientError({ code: "not_found", message: "Session not tracked" }));
+		if (!tracked.unloaded) return Promise.resolve(tracked.state);
+		if (tracked.reopening) return tracked.reopening;
+		const sessionPath = tracked.state.sessionPath;
+		if (!sessionPath) return Promise.reject(new Error("Session has no path"));
+		tracked.unloadedWhileReopening = false;
+		tracked.reopening = this.client
+			.request("sessions.open", { sessionPath })
+			.then((snapshot) => {
+				this.adopt(snapshot, true);
+				const current = this.tracked.get(snapshot.state.sessionId)!;
+				for (const envelope of tracked.buffered.sort((a, b) => a.seq - b.seq)) {
+					if (envelope.seq === current.seq + 1) this.apply(current, envelope);
+					else if (envelope.seq > current.seq + 1) current.buffered.push(envelope);
+				}
+				current.unloaded = tracked.unloadedWhileReopening;
+				this.emit(snapshot.state.sessionId);
+				if (current.buffered.length > 0) void this.resync(snapshot.state.sessionId);
+				return current.state;
+			})
+			.catch((error: unknown) => {
+				if (error instanceof AgentClientError && error.code === "not_found") this.forget(sessionId);
+				throw error;
+			})
+			.finally(() => {
+				tracked.reopening = undefined;
+			});
+		return tracked.reopening;
 	}
 
 	subscribe(listener: SessionMirrorListener): () => void {
@@ -71,7 +118,7 @@ export class SessionMirror {
 
 	async attach(sessionId: string): Promise<SessionState> {
 		const existing = this.tracked.get(sessionId);
-		if (existing) return existing.state;
+		if (existing) return existing.unloaded ? this.reopen(sessionId) : existing.state;
 		const result = await this.client.request("sessions.attach", { sessionId });
 		if (!("snapshot" in result)) throw new Error("Expected snapshot from attach without sinceSeq");
 		return this.adopt(result.snapshot);
@@ -86,6 +133,7 @@ export class SessionMirror {
 		for (const dispose of this.disposers) dispose();
 		this.tracked.clear();
 		this.listeners.clear();
+		this.notificationListeners.clear();
 	}
 
 	/** `force` replaces even a newer local state (the backend restarted and its seq began again). */
@@ -96,7 +144,18 @@ export class SessionMirror {
 		if (!force && existing && existing.seq > snapshot.seq) return existing.state;
 		this.tracked.set(sessionId, { state: snapshot.state, seq: snapshot.seq, resyncing: false, buffered: [] });
 		this.emit(sessionId);
+		this.deliverNotifications(snapshot);
 		return snapshot.state;
+	}
+
+	private readonly notifiedSnapshots = new WeakSet<SessionSnapshot>();
+
+	private deliverNotifications(snapshot: SessionSnapshot): void {
+		if (this.notifiedSnapshots.has(snapshot)) return;
+		this.notifiedSnapshots.add(snapshot);
+		for (const event of snapshot.notifications ?? []) {
+			for (const listener of this.notificationListeners) listener(snapshot.state.sessionId, event);
+		}
 	}
 
 	private forget(sessionId: string): void {
@@ -106,6 +165,11 @@ export class SessionMirror {
 	private handleEnvelope(envelope: SessionEventEnvelope): void {
 		const tracked = this.tracked.get(envelope.sessionId);
 		if (!tracked) return;
+		if (tracked.reopening) {
+			tracked.buffered.push(envelope);
+			return;
+		}
+		if (tracked.unloaded) return;
 		if (tracked.resyncing) {
 			tracked.buffered.push(envelope);
 			return;
@@ -130,16 +194,17 @@ export class SessionMirror {
 
 	private async resync(sessionId: string): Promise<void> {
 		const tracked = this.tracked.get(sessionId);
-		if (!tracked || tracked.resyncing) return;
+		if (!tracked || tracked.unloaded || tracked.resyncing) return;
 		tracked.resyncing = true;
 		const startSeq = tracked.seq;
 		try {
 			const result = await this.client.request("sessions.attach", { sessionId, sinceSeq: tracked.seq });
 			const current = this.tracked.get(sessionId);
-			if (current !== tracked) return;
+			if (current !== tracked || tracked.unloaded) return;
 			if ("snapshot" in result) {
 				tracked.state = result.snapshot.state;
 				tracked.seq = result.snapshot.seq;
+				this.deliverNotifications(result.snapshot);
 			} else {
 				for (const envelope of result.events) {
 					if (envelope.seq === tracked.seq + 1) this.apply(tracked, envelope);
@@ -159,6 +224,7 @@ export class SessionMirror {
 				void this.resync(sessionId);
 			}
 		} catch (error) {
+			if (this.tracked.get(sessionId) !== tracked || tracked.unloaded) return;
 			tracked.resyncing = false;
 			if (this.client.connection.status !== "connected") return;
 			// The backend no longer has the session loaded (e.g. it restarted): reopen it from its file.
