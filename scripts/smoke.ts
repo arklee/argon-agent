@@ -8,6 +8,7 @@ import { createConnection, createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { deflateSync } from "node:zlib";
 import { AgentClientError, type MethodParams, type SessionState, WebSocketAgentClient } from "@argon/shared";
 
 const STEP_TIMEOUT = 120_000;
@@ -19,6 +20,47 @@ const MARKER = "SMOKE-OK";
 const COMMAND = "echo argon > smoke.txt";
 const ARGON_HOME = process.env.ARGON_HOME ?? join(homedir(), ".argon");
 const AUTH_PATH = join(ARGON_HOME, "agent", "auth.json");
+
+/** A solid red PNG, base64. */
+function redPng(size = 64): string {
+	const crcTable = Array.from({ length: 256 }, (_, n) => {
+		let c = n;
+		for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		return c >>> 0;
+	});
+	const crc = (buf: Buffer) => {
+		let c = 0xffffffff;
+		for (const byte of buf) c = (crcTable[(c ^ byte) & 0xff] ?? 0) ^ (c >>> 8);
+		return (c ^ 0xffffffff) >>> 0;
+	};
+	const chunk = (type: string, data: Buffer) => {
+		const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+		const out = Buffer.alloc(body.length + 8);
+		out.writeUInt32BE(data.length, 0);
+		body.copy(out, 4);
+		out.writeUInt32BE(crc(body), body.length + 4);
+		return out;
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(size, 0);
+	header.writeUInt32BE(size, 4);
+	header.set([8, 2, 0, 0, 0], 8);
+	const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: size }, () => [255, 0, 0]).flat())]);
+	const pixels = Buffer.concat(Array.from({ length: size }, () => row));
+	return Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		chunk("IHDR", header),
+		chunk("IDAT", deflateSync(pixels)),
+		chunk("IEND", Buffer.alloc(0)),
+	]).toString("base64");
+}
+
+function lastReplyText(state: SessionState): string {
+	const reply = state.items.findLast((item) => item.kind === "assistant");
+	assert(reply, "Missing assistant reply");
+	assert(!reply.errorMessage, reply.errorMessage);
+	return reply.blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
+}
 
 function reason(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -292,6 +334,37 @@ async function main() {
 				true,
 			);
 			assert.equal(await readFile(join(cwd, "smoke.txt"), "utf8"), "argon\n", "Unexpected smoke.txt content");
+		});
+
+		await check("Edit keeps images", async (signal) => {
+			const images = [{ mimeType: "image/png", data: redPng() }];
+			await runPrompt(
+				client(),
+				{ sessionId, clientMessageId: randomUUID(), text: "Reply with one word: OK", images },
+				signal,
+			);
+			const before = await snapshot(client(), sessionId);
+			const sent = before.items.findLast((item) => item.kind === "user");
+			assert(sent?.kind === "user" && sent.imageCount === 1, "Image was not attached to the message");
+			const settled = Promise.withResolvers<void>();
+			const unsubscribe = client().onSessionEvent(({ sessionId: id, event }) => {
+				if (id === sessionId && event.type === "run_settled") settled.resolve();
+			});
+			try {
+				await client().request("sessions.editMessage", {
+					sessionId,
+					itemId: sent.id,
+					text: "What color is this image? Reply with the color name only, in lowercase English.",
+					clientMessageId: randomUUID(),
+				});
+				await settled.promise;
+			} finally {
+				unsubscribe();
+			}
+			const after = await snapshot(client(), sessionId);
+			const edited = after.items.findLast((item) => item.kind === "user");
+			assert(edited?.kind === "user" && edited.imageCount === 1, "Edited message lost its image");
+			assert.match(lastReplyText(after).toLowerCase(), /red/, "Model did not see the image after editing");
 		});
 
 		await check("Reconnect", async (signal) => {

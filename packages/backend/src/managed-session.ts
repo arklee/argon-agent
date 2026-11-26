@@ -388,10 +388,17 @@ export class ManagedSession {
 		if (this.isRunning || this.session.isStreaming) throw new Error("Wait for the current turn to finish");
 		const entryId = this.userEntryIdFor(params.itemId);
 		if (!entryId) throw new Error("That message is no longer in this branch");
+		// The edited message branches off its parent, so the original (and its images) leave the
+		// model's context. Read them first and send them again with the new text.
+		const images = this.getImages({ itemId: entryId });
 		const result = await this.session.navigateTree(entryId, {});
 		if (result.cancelled) throw new Error("Editing was cancelled by an extension");
 		this.rebuildState();
-		return this.prompt({ clientMessageId: params.clientMessageId, text: params.text });
+		return this.prompt({
+			clientMessageId: params.clientMessageId,
+			text: params.text,
+			images: images.length > 0 ? images : undefined,
+		});
 	}
 
 	/**

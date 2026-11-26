@@ -93,6 +93,8 @@ async function loadSession(
 		reload,
 		settingsManager,
 		bindings,
+		session: runtime.session as Record<string, unknown>,
+		sessionManager,
 		setTrustStatus: (status: ProjectTrustStatus) => {
 			trustStatus = status;
 		},
@@ -171,6 +173,44 @@ describe("ManagedSession trust and diagnostics", () => {
 		expect(diagnostics).toHaveLength(100);
 		expect(diagnostics[0]?.message).toBe("Extension error in /extension.ts: Error 1");
 		expect(diagnostics.at(-1)?.message).toBe("Extension error in /extension.ts: Error 100");
+	});
+});
+
+describe("ManagedSession editMessage", () => {
+	it("resends the original message's images with the edited text", async () => {
+		const { managed, session, sessionManager } = await loadSession();
+		const image = { type: "image", data: "aW1n", mimeType: "image/png" } as const;
+		const entryId = sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "what is this?" }, image],
+			timestamp: 1,
+		});
+		const navigateTree = vi.fn(async () => ({ cancelled: false }));
+		const prompt = vi.fn(async (_text: string, options: { preflightResult?: (d: "started") => void }) => {
+			options.preflightResult?.("started");
+		});
+		Object.assign(session, { navigateTree, prompt, isStreaming: false });
+
+		await expect(managed.editMessage({ itemId: entryId, text: "and now?", clientMessageId: "c1" })).resolves.toBe(
+			"started",
+		);
+		expect(navigateTree).toHaveBeenCalledWith(entryId, {});
+		expect(prompt).toHaveBeenCalledWith(
+			"and now?",
+			expect.objectContaining({ images: [{ type: "image", data: "aW1n", mimeType: "image/png" }] }),
+		);
+	});
+
+	it("sends no images when the original message had none", async () => {
+		const { managed, session, sessionManager } = await loadSession();
+		const entryId = sessionManager.appendMessage({ role: "user", content: "plain", timestamp: 1 });
+		const prompt = vi.fn(async (_text: string, options: { preflightResult?: (d: "started") => void }) => {
+			options.preflightResult?.("started");
+		});
+		Object.assign(session, { navigateTree: vi.fn(async () => ({ cancelled: false })), prompt, isStreaming: false });
+
+		await managed.editMessage({ itemId: entryId, text: "edited", clientMessageId: "c2" });
+		expect(prompt).toHaveBeenCalledWith("edited", expect.objectContaining({ images: undefined }));
 	});
 });
 
