@@ -3,6 +3,7 @@ import { ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Composer } from "@/components/Composer";
 import { InteractionCard } from "@/components/InteractionCard";
+import { McpPanel } from "@/components/McpPanel";
 import { Transcript } from "@/components/Transcript";
 import { Button } from "@/components/ui/button";
 import {
@@ -177,6 +178,7 @@ export function ChatView({ session }: { session: SessionState }) {
 						{formatTokens(session.lastUsage.totalTokens)} tok
 					</span>
 				)}
+				<McpPanel mcp={session.mcp} />
 				<PermissionPicker session={session} />
 				<ThinkingPicker session={session} />
 				<ModelPicker session={session} />

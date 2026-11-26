@@ -20,6 +20,8 @@ export function createBuiltinExtensions(): InlineExtension[] {
 	return [
 		{ name: "codemode", factory: createCodemodeExtension(), replaceable: true, builtin: true },
 		{ name: "tool-search", factory: createToolSearchExtension(), replaceable: true, builtin: true },
-		{ name: "mcp", factory: createMcpExtension(), replaceable: true, builtin: true },
+		// Never open a browser on the backend machine (it may be remote): sign-in URLs go to the client
+		// as an `oauth` interaction (see mcp-bridge.ts).
+		{ name: "mcp", factory: createMcpExtension({ openUrl: () => {} }), replaceable: true, builtin: true },
 	];
 }

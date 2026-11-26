@@ -1,5 +1,5 @@
 import type { Interaction, InteractionResponse } from "@argon/shared";
-import { ShieldQuestion } from "lucide-react";
+import { ExternalLink, ShieldQuestion } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,6 +73,36 @@ export function InteractionCard({
 							{option}
 						</Button>
 					))}
+				</>,
+			);
+		case "oauth":
+			return frame(
+				interaction.title,
+				<div className="space-y-2 text-sm text-muted-foreground">
+					<p>
+						Open the sign-in page and finish signing in. If the page you land on does not load (for example when the
+						agent runs on another machine), paste its full URL here.
+					</p>
+					<Textarea
+						value={text}
+						onChange={(e) => setText(e.target.value)}
+						placeholder="Redirect URL (optional)"
+						className="min-h-12 font-mono text-xs"
+					/>
+				</div>,
+				<>
+					<Button variant="ghost" size="sm" onClick={() => onRespond({ cancelled: true })}>
+						Cancel
+					</Button>
+					<Button variant="outline" size="sm" disabled={!text.trim()} onClick={() => onRespond({ value: text.trim() })}>
+						Submit URL
+					</Button>
+					<Button size="sm" asChild autoFocus>
+						<a href={interaction.url} target="_blank" rel="noopener noreferrer">
+							<ExternalLink />
+							Open sign-in page
+						</a>
+					</Button>
 				</>,
 			);
 		case "input":

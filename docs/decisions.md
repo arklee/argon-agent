@@ -163,3 +163,24 @@ percho 把 SDK 直接跑在 main 进程里，能用，但有几个问题：
 - percho 的其他补丁：`retryLastFailedTurn`、可选的压缩策略、请求前暂停。它们说明这几项能力 SDK 原生不提供。
 
 其他社区 GUI 方案也可以参考：pi-desktop（tanRdev / FaqFirebase，其中有的走 RPC）、piCode（RPC）、pi-gui（SDK）、Pilot（SDK）。
+
+---
+
+## D9. MCP 状态靠补丁暴露（第一个 pi 补丁）
+
+**问题**：pi 内置 MCP 扩展的服务器状态（连接状态、错误、是否需要登录、工具列表）都在扩展闭包里。非 TUI 模式下，`/mcp` 只输出纯文本；完整的管理界面要靠 TUI 的 `ctx.ui.custom()`。按 D7 的优先级逐项排查：inline extension 只能看到已注册的工具；SDK 参数（`createMcpExtension` 的选项）拿不到配置和连接状态，因为 `loadMcpConfig` 没有导出。
+
+**决定**：用 patch-package 给 `dist/extensions/mcp/index.js` 打一个约 60 行的补丁。补丁不改变 MCP 的行为，只在 `pi.events` 上加三个通道：
+
+- `argon:mcp:state`：每次 `emitChange` 时发出一份结构化快照；
+- `argon:mcp:request-state`：请求立即发出一份快照；
+- `argon:mcp:action`：执行 reconnect / enable / disable / signin / signout / exposure，复用扩展内部的 `runAction` / `setExposure`。登录时需要的 `McpUi`（`status` / `redirectUrl`）由 Argon 实现：`redirectUrl` 变成一个 `oauth` 交互，由前端打开链接。
+
+另外，`openUrl` 通过 SDK 参数设成 no-op，backend 永远不在自己的机器上开浏览器（D4）。
+
+被否决的方案：
+
+- 解析 `/mcp` 的文本输出：太脆弱。
+- 做一个通用的"无头 TUI"桥接 `ctx.ui.custom()`：工作量大，而且做出来是终端风格的界面。
+
+**什么时候重新评估**：每次升级 pi 都要检查补丁；如果官方提供了 MCP 状态接口（可以考虑提 PR），就删掉补丁。

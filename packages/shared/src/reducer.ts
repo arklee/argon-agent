@@ -222,6 +222,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				statusEntries: event.text === undefined ? rest : [...rest, { key: event.key, text: event.text }],
 			};
 		}
+		case "mcp_changed":
+			return { ...state, mcp: event.mcp };
 		case "notification":
 			// Notifications are transient; clients surface them as toasts. Not part of state.
 			return state;

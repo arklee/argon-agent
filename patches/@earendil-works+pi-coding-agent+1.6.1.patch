@@ -1,0 +1,82 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
+index 073dcb0..a5d3e52 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
+@@ -233,6 +233,43 @@ export function createMcpExtension(options = {}) {
+         const emitChange = () => {
+             for (const listener of listeners)
+                 listener();
++            // [argon patch] Publish structured state to the host.
++            argonPublish();
++        };
++        // [argon patch] Structured state and actions for GUI hosts (Argon), over pi.events:
++        //   "argon:mcp:state"          emitted with a snapshot on every change
++        //   "argon:mcp:request-state"  asks for a snapshot now
++        //   "argon:mcp:action"         { server, action, exposure?, ui, done(error?) }
++        let argonCtx;
++        const argonSnapshot = () => ({
++            configErrors: [...configErrors],
++            overridden: [...overridden],
++            servers: servers.map((server) => {
++                const connection = server.connection;
++                const enabled = isEnabled(server);
++                return {
++                    name: server.entry.name,
++                    source: server.entry.override ?? server.entry.source,
++                    scope: server.entry.scope,
++                    transport: describeTransport(server.entry),
++                    enabled,
++                    exposure: exposureOf(server.entry),
++                    state: !enabled ? "disabled" : (connection?.state ?? "starting"),
++                    error: connection && connection.state !== "connected" ? connection.error : undefined,
++                    message: server.message,
++                    oauth: connection?.oauthUrl !== undefined,
++                    hasResources: connection?.state === "connected" ? Boolean(connection.hasResources) : false,
++                    tools: connection?.state === "connected"
++                        ? connection.tools.map((tool) => ({ name: tool.name, description: tool.description }))
++                        : [],
++                };
++            }),
++        });
++        const argonPublish = () => {
++            try {
++                pi.events.emit("argon:mcp:state", argonSnapshot());
++            }
++            catch { }
+         };
+         const subscribe = (listener) => {
+             listeners.add(listener);
+@@ -974,6 +1011,7 @@ export function createMcpExtension(options = {}) {
+             warnedUnreachable = false;
+             waitedForStartup = false;
+             sessionCwd = ctx.cwd;
++            argonCtx = ctx; // [argon patch]
+             modelRegistry = ctx.modelRegistry;
+             session = new AbortController();
+             const { signal } = session;
+@@ -1116,6 +1154,25 @@ export function createMcpExtension(options = {}) {
+             emitChange();
+             await Promise.all([...backgroundActions, ...closing.map((connection) => connection.close())]);
+         });
++        // [argon patch] Actions from the host; `ui` implements McpUi (status, redirectUrl) for sign-in.
++        pi.events.on("argon:mcp:request-state", () => argonPublish());
++        pi.events.on("argon:mcp:action", (request) => {
++            const { server: name, action, exposure, ui, done } = request;
++            void (async () => {
++                await pending;
++                const server = findServer(name);
++                if (!server)
++                    return `No MCP server named "${name}".`;
++                if (!argonCtx)
++                    return "MCP is not ready yet.";
++                if (action === "exposure")
++                    return setExposure(server, exposure);
++                if (!["reconnect", "enable", "disable", "signin", "signout"].includes(action))
++                    return `Unknown MCP action "${action}".`;
++                await runAction(ui, argonCtx, server, action);
++                return server.message;
++            })().then((error) => done?.(error), (error) => done?.(errorMessage(error)));
++        });
+         pi.registerCommand("mcp", {
+             description: "Manage MCP servers: sign in, reconnect, enable or disable, and change exposure",
+             getArgumentCompletions: (prefix) => {

@@ -8,6 +8,8 @@ import {
 	type ConnectionState,
 	type EnvironmentInfo,
 	type InteractionResponse,
+	type McpAction,
+	type McpExposure,
 	type ModelInfo,
 	type ModelRef,
 	type PermissionMode,
@@ -43,6 +45,7 @@ interface AppState {
 	setModel(model: ModelRef): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	setPermissionMode(mode: PermissionMode): Promise<void>;
+	mcpAction(server: string, action: McpAction | "exposure", exposure?: McpExposure): Promise<void>;
 }
 
 let client: AgentClient | undefined;
@@ -235,6 +238,17 @@ export const useApp = create<AppState>((set, get) => ({
 		const sessionId = get().activeSessionId;
 		if (!client || !sessionId) return;
 		await client.request("sessions.setPermissionMode", { sessionId, mode }).catch((e) => toast.error(errorMessage(e)));
+	},
+
+	async mcpAction(server, action, exposure) {
+		const sessionId = get().activeSessionId;
+		if (!client || !sessionId) return;
+		try {
+			const { error } = await client.request("sessions.mcpAction", { sessionId, server, action, exposure });
+			if (error) toast.error(error);
+		} catch (error) {
+			toast.error(errorMessage(error));
+		}
 	},
 }));
 

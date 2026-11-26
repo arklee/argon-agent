@@ -18,10 +18,12 @@
 		"typecheck": "npm run typecheck --workspaces --if-present",
 		"test": "npm run test --workspaces --if-present",
 		"lint": "biome check .",
-		"format": "biome check --write ."
+		"format": "biome check --write .",
+		"postinstall": "patch-package"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.0",
+		"patch-package": "^8.0.1",
 		"typescript": "^5.9.0"
 	}
 }

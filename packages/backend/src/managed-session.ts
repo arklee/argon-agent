@@ -12,6 +12,8 @@ import {
 	createEmptySessionState,
 	type Interaction,
 	type InteractionResponse,
+	type McpAction,
+	type McpExposure,
 	type ModelRef,
 	type PermissionMode,
 	type SessionEvent,
@@ -34,6 +36,7 @@ import {
 import { createBuiltinExtensions } from "./builtin-extensions.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
+import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.ts";
 import {
 	createPermissionExtension,
 	READ_ONLY_TOOLS,
@@ -69,6 +72,7 @@ export class ManagedSession {
 
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
+		private readonly mcp: McpBridge,
 		permissionMode: PermissionMode,
 	) {
 		const session = runtime.session;
@@ -78,6 +82,7 @@ export class ManagedSession {
 			sessionPath: session.sessionFile,
 		});
 		this.state.permissionMode = permissionMode;
+		this.state.mcp = mcp.status;
 		this.broker = new InteractionBroker({
 			onRequested: (interaction) => this.emit({ type: "interaction_requested", interaction }),
 			onResolved: (interactionId) => this.emit({ type: "interaction_resolved", interactionId }),
@@ -95,6 +100,7 @@ export class ManagedSession {
 			checkToolCall: (check) =>
 				self ? self.checkToolCall(check) : Promise.resolve({ allow: false, reason: "Session not ready" }),
 		});
+		const mcp = createMcpBridge();
 
 		const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 			cwd,
@@ -107,7 +113,9 @@ export class ManagedSession {
 				agentDir,
 				modelRuntime: deps.modelRuntime,
 				// The permission gate goes first so its tool_call handler runs before any other extension's.
-				resourceLoaderOptions: { extensionFactories: [permissionExtension, ...createBuiltinExtensions()] },
+				resourceLoaderOptions: {
+					extensionFactories: [permissionExtension, ...createBuiltinExtensions(), mcp.extension],
+				},
 			});
 			return {
 				...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
@@ -123,7 +131,7 @@ export class ManagedSession {
 			agentDir: deps.agentDir,
 			sessionManager,
 		});
-		const managed = new ManagedSession(runtime, deps.defaultPermissionMode);
+		const managed = new ManagedSession(runtime, mcp, deps.defaultPermissionMode);
 		self = managed;
 		await managed.bind();
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
@@ -234,6 +242,41 @@ export class ManagedSession {
 		this.session.setSessionName(name);
 	}
 
+	/** Returns an error message, or undefined on success. */
+	mcpAction(params: {
+		server: string;
+		action: McpAction | "exposure";
+		exposure?: McpExposure;
+	}): Promise<string | undefined> {
+		const statusKey = `mcp-signin:${params.server}`;
+		const ui: McpSignInUi = {
+			status: (title, message) => this.emit({ type: "status_entry", key: statusKey, text: `${title}: ${message}` }),
+			redirectUrl: async (title, url, signal) => {
+				const response = await this.broker.request(
+					{ kind: "oauth", title, url },
+					{ signal, fallback: { cancelled: true } },
+				);
+				return "value" in response ? response.value : undefined;
+			},
+		};
+		const running = this.mcp.run({ ...params, ui }).finally(() => {
+			if (this.state.statusEntries.some((entry) => entry.key === statusKey)) {
+				this.emit({ type: "status_entry", key: statusKey, text: undefined });
+			}
+		});
+		if (params.action !== "signin") return running;
+		// A sign-in waits for the browser and can outlast a request, so it runs on its own; its pending
+		// `oauth` interaction lives in the session like any other, and the outcome comes as a notification.
+		void running.then((error) =>
+			this.emit(
+				error
+					? { type: "notification", level: error === "Sign-in cancelled." ? "info" : "error", message: error }
+					: { type: "notification", level: "info", message: `Signed in to MCP server "${params.server}"` },
+			),
+		);
+		return Promise.resolve(undefined);
+	}
+
 	respond(interactionId: string, response: InteractionResponse): boolean {
 		return this.broker.respond(interactionId, response);
 	}
@@ -256,6 +299,7 @@ export class ManagedSession {
 		const session = this.session;
 		// Subscribe before binding so events from session_start handlers are not lost.
 		this.unsubscribe = session.subscribe((event) => this.handlePiEvent(event));
+		this.mcp.onStatus((mcp) => this.emit({ type: "mcp_changed", mcp }));
 		this.resetFromSession();
 		await session.bindExtensions({
 			uiContext: createUIBridge(this.broker, (event) => this.emit(event)),

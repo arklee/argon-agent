@@ -58,7 +58,7 @@ export interface SessionSummary {
 
 export type SessionStatus = "idle" | "running";
 
-export type InteractionKind = "select" | "confirm" | "input" | "editor" | "tool_approval";
+export type InteractionKind = "select" | "confirm" | "input" | "editor" | "tool_approval" | "oauth";
 
 export interface InteractionBase {
 	id: string;
@@ -72,6 +72,11 @@ export type Interaction =
 	| (InteractionBase & { kind: "confirm"; title: string; message: string })
 	| (InteractionBase & { kind: "input"; title: string; placeholder?: string })
 	| (InteractionBase & { kind: "editor"; title: string; prefill?: string })
+	/**
+	 * Sign in through a browser. The client opens `url`; the backend usually sees the redirect itself
+	 * (and resolves the interaction), otherwise the user pastes the redirect URL back as `value`.
+	 */
+	| (InteractionBase & { kind: "oauth"; title: string; url: string })
 	| (InteractionBase & {
 			kind: "tool_approval";
 			toolCallId: string;
@@ -84,6 +89,47 @@ export type InteractionResponse =
 	| { value: string }
 	| { confirmed: boolean }
 	| { decision: "allow" | "allow_session" | "deny"; reason?: string };
+
+// --- MCP (per session: each session loads its own MCP servers, including the project's mcp.json) ---
+
+export type McpExposure = "codemode" | "deferred" | "direct" | "hidden";
+
+/** `needs-auth`: the server wants an OAuth sign-in. `disconnected`: reconnects on the next call. */
+export type McpServerState =
+	| "disabled"
+	| "starting"
+	| "connecting"
+	| "connected"
+	| "needs-auth"
+	| "failed"
+	| "disconnected"
+	| (string & {});
+
+export interface McpServerStatus {
+	name: string;
+	/** Config file (backend path) or extension that defines the server. */
+	source: string;
+	scope?: string;
+	/** URL or command line. */
+	transport: string;
+	enabled: boolean;
+	exposure: McpExposure;
+	state: McpServerState;
+	error?: string;
+	/** Result of the last action (e.g. a failed sign-in). */
+	message?: string;
+	oauth: boolean;
+	hasResources: boolean;
+	tools: { name: string; description?: string }[];
+}
+
+export interface McpStatus {
+	configErrors: string[];
+	overridden: string[];
+	servers: McpServerStatus[];
+}
+
+export type McpAction = "reconnect" | "enable" | "disable" | "signin" | "signout";
 
 export interface StatusEntry {
 	key: string;
@@ -109,6 +155,8 @@ export interface SessionState {
 	compacting: boolean;
 	retry?: { attempt: number; maxAttempts: number; errorMessage: string };
 	lastUsage?: UsageInfo;
+	/** Undefined until the MCP extension reports (or when it is disabled). */
+	mcp?: McpStatus;
 }
 
 export interface SessionSnapshot {
@@ -160,6 +208,7 @@ export type SessionEvent =
 	| { type: "interaction_resolved"; interactionId: string }
 	| { type: "status_entry"; key: string; text?: string }
 	| { type: "notification"; level: "info" | "warning" | "error"; message: string }
+	| { type: "mcp_changed"; mcp: McpStatus }
 	/** Replace the whole state (used after operations that rebuild history, e.g. compaction). */
 	| { type: "reset"; state: SessionState };
 
@@ -222,6 +271,11 @@ export interface Methods {
 		result: Record<string, never>;
 	};
 	"sessions.rename": { params: { sessionId: string; name: string }; result: Record<string, never> };
+	/** `exposure` is required for the "exposure" action. Resolves when the action finished or started in the background. */
+	"sessions.mcpAction": {
+		params: { sessionId: string; server: string; action: McpAction | "exposure"; exposure?: McpExposure };
+		result: { error?: string };
+	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };
 	"interactions.respond": {
 		params: { sessionId: string; interactionId: string; response: InteractionResponse };
