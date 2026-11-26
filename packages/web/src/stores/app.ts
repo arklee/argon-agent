@@ -15,6 +15,7 @@ import {
 	type ModelRef,
 	type PermissionMode,
 	type ProjectPrefs,
+	type ProjectTrustDecision,
 	SessionMirror,
 	type SessionState,
 	type SessionSummary,
@@ -73,6 +74,7 @@ interface AppState {
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	setPermissionMode(mode: PermissionMode): Promise<void>;
 	mcpAction(server: string, action: McpAction | "exposure", exposure?: McpExposure): Promise<void>;
+	setProjectTrust(cwd: string, decision: ProjectTrustDecision): Promise<void>;
 }
 
 let client: AgentClient | undefined;
@@ -441,6 +443,11 @@ export const useApp = create<AppState>((set, get) => ({
 		} catch (error) {
 			toast.error(errorMessage(error));
 		}
+	},
+
+	async setProjectTrust(cwd, decision) {
+		if (!client) return;
+		await client.request("projects.setTrust", { cwd, decision }).catch((e) => toast.error(errorMessage(e)));
 	},
 }));
 

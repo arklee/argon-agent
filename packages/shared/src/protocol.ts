@@ -282,6 +282,8 @@ export interface StatusEntry {
 
 export type ProjectTrustStatus = "not_required" | "trusted" | "untrusted" | "undecided";
 
+export type ProjectTrustDecision = "trust" | "trust_parent" | "deny" | "trust_session" | "deny_session";
+
 export interface ProjectTrustInfo {
 	status: ProjectTrustStatus;
 	/** Folder whose saved decision applies, if any. */
@@ -563,7 +565,7 @@ export interface Methods {
 		result: Record<string, never>;
 	};
 	"projects.setTrust": {
-		params: { cwd: string; decision: "trust" | "trust_parent" | "deny" | "trust_session" | "deny_session" };
+		params: { cwd: string; decision: ProjectTrustDecision };
 		result: Record<string, never>;
 	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };

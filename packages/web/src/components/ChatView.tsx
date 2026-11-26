@@ -3,9 +3,11 @@ import { ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
 import { Composer } from "@/components/Composer";
 import { ContextMeter } from "@/components/ContextMeter";
+import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
 import { ModelCombobox } from "@/components/ModelCombobox";
+import { ProjectTrustBanner, ProjectTrustIndicator } from "@/components/ProjectTrust";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
 import { Transcript } from "@/components/Transcript";
 import { Button } from "@/components/ui/button";
@@ -121,6 +123,8 @@ export function ChatView({ session }: { session: SessionState }) {
 				>
 					{displayPath(session.cwd, environment?.homeDir)}
 				</span>
+				<DiagnosticsPanel session={session} />
+				<ProjectTrustIndicator session={session} />
 				<ContextMeter session={session} />
 				<McpPanel mcp={session.mcp} />
 				<PermissionPicker session={session} />
@@ -128,6 +132,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				<ModelPicker session={session} />
 				{summary && <SessionMenu header session={summary} onRename={() => setRenaming(session.sessionId)} />}
 			</header>
+			<ProjectTrustBanner session={session} />
 
 			{session.items.length === 0 && !session.retry ? (
 				<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">

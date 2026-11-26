@@ -51,22 +51,23 @@
 - [x] Provider 与登录：`auth.*` 协议，登录流程由 backend 持有（`AuthFlows`），任何客户端可应答；设置页里加/换/删 API key、OAuth 登录登出，模型选择器里有“Manage providers…”入口；magpie 社区插件的安装/移除（需二次确认）
 - [ ] 用真实浏览器 OAuth（auth_url 回调、device code）完整走一遍登录；目前只验证了 select 提示和取消
 - [x] 权限设置持久化：默认权限模式、"总是允许"的规则（`$ARGON_HOME/settings.json`；bash 规则按命令前缀，含管道/重定向等的命令永远询问），审批卡片上可直接添加，设置页里可删除
-- [ ] 每个会话的模型、思考级别、权限模式，重新打开会话时恢复
+- [x] 每个会话的模型、思考级别、权限模式，重新打开会话时恢复（模型和思考级别由 pi 从会话文件恢复，权限模式存为 `argon.permission_mode` 自定义条目；恢复失败时作为 model 诊断显示；`npm run smoke` 覆盖）
+- [x] 模型选择器支持输入搜索模型和 provider
 
 ### pi 能力接入
 
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
-- [x] 项目信任（project trust）流程（后端完成，UI 待做）：首次打开项目时询问，确认后才加载项目内的扩展和设置
-- [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误（后端完成，UI 待做）
+- [x] 项目信任（project trust）流程：信任未决的项目先按不信任加载，对话区顶部横幅询问（信任 / 信任上级目录 / 仅本次 / 不信任），顶栏盾牌图标可随时更改；`projects.setTrust` 会重新加载受影响的会话（运行中的等本轮结束）。见 decisions D11
+- [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误：`SessionState.diagnostics`，顶栏警告图标显示数量，弹层列出来源、信息和路径
 - [ ] 更丰富地渲染扩展 widget（目前只显示纯文本）
 
 ### 质量
 
 - [x] backend 测试：用 fake session 测 `translate.ts` 和 `managed-session.ts` 的事件转换
 - [x] `SessionMirror` 测试：缺口、重复事件、重连、后端重启
-- [ ] 带真实会话的端到端冒烟脚本（参考第一版手动跑过的 smoke 脚本）
+- [x] 带真实会话的端到端冒烟脚本：`npm run smoke`（自带 backend，用 gpt-6-luna；覆盖发消息、幂等、bash 审批、sinceSeq 重连、重新打开后设置恢复）
 - [x] CI：typecheck、test、lint
 - [ ] i18n（中文 / 英文）
 
@@ -120,5 +121,8 @@
 - [ ] 扩展调用 `ctx.shutdown()`（`bindExtensions` 的 `shutdownHandler`）还没接
 - [x] 编辑重发后，侧栏标题仍取会话文件里的第一条用户消息（pi `SessionInfo.firstMessage`），而不是当前分支的（已加载会话取当前分支的首条消息，并优先显示自动生成的标题。）
 - [x] 后端没启动或连接断开时，只在侧边栏底部显示一个黄点，没有明显的离线提示；断线期间点击发送会一直等到请求超时（主区域显示重连倒计时，离线时禁止发送并保留草稿。）
+
+- [ ] 项目信任跳过了 pi 的 `project_trust` 扩展事件（用户级扩展无法代为决定）；"仅本次"的信任决定只在内存中，backend 重启后失效
+- [ ] 诊断只能看不能清除；扩展运行时错误会一直累积到 100 条上限
 
 - [x] Argon 全局配置、凭据、会话和项目配置目录与 pi CLI 隔离（D10）
