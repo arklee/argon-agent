@@ -1,10 +1,11 @@
 import type { SessionState } from "@argon/shared";
 import { ShieldCheck, ShieldQuestion } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Composer } from "@/components/Composer";
 import { ContextMeter } from "@/components/ContextMeter";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
+import { ModelCombobox } from "@/components/ModelCombobox";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
 import { Transcript } from "@/components/Transcript";
 import { Button } from "@/components/ui/button";
@@ -23,55 +24,15 @@ import {
 	SelectGroup,
 	SelectItem,
 	SelectLabel,
-	SelectSeparator,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
 import { displayPath, sessionTitle } from "@/lib/format";
 import { useApp } from "@/stores/app";
-import { openSettings } from "@/stores/settings";
-
-const MANAGE = "__argon_manage_providers__";
 
 function ModelPicker({ session }: { session: SessionState }) {
-	const models = useApp((s) => s.models);
 	const setModel = useApp((s) => s.setModel);
-	const byProvider = useMemo(() => {
-		const map = new Map<string, typeof models>();
-		for (const m of models) map.set(m.provider, [...(map.get(m.provider) ?? []), m]);
-		return [...map.entries()];
-	}, [models]);
-	const value = session.model ? `${session.model.provider}/${session.model.id}` : undefined;
-	return (
-		<Select
-			value={value}
-			onValueChange={(v) => {
-				if (v === MANAGE) return openSettings("accounts");
-				const [provider, ...rest] = v.split("/");
-				if (provider) void setModel({ provider, id: rest.join("/") });
-			}}
-		>
-			<SelectTrigger size="sm" className="max-w-56 border-none bg-transparent shadow-none hover:bg-muted">
-				<SelectValue placeholder="Select model" />
-			</SelectTrigger>
-			<SelectContent position="popper" align="end" className="max-h-96">
-				{byProvider.map(([provider, list]) => (
-					<SelectGroup key={provider}>
-						<SelectLabel>{provider}</SelectLabel>
-						{list.map((m) => (
-							<SelectItem key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-								{m.name}
-							</SelectItem>
-						))}
-					</SelectGroup>
-				))}
-				{models.length > 0 && <SelectSeparator />}
-				<SelectItem value={MANAGE} className="text-muted-foreground">
-					{models.length > 0 ? "Manage providers…" : "Connect a provider…"}
-				</SelectItem>
-			</SelectContent>
-		</Select>
-	);
+	return <ModelCombobox value={session.model} onChange={(model) => void setModel(model)} className="max-w-56" />;
 }
 
 function ThinkingPicker({ session }: { session: SessionState }) {

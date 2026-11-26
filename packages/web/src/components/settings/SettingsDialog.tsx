@@ -1,21 +1,14 @@
 import type { PermissionRule, PiSettings, ResourceSettings } from "@argon/shared";
 import { FolderTree, KeyRound, type LucideIcon, Puzzle, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
 import { Group, Loading, Row } from "@/components/settings/parts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectLabel,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
@@ -176,11 +169,6 @@ function DefaultModel() {
 	const current = useSettings((s) => s.settings?.pi.defaultModel);
 	const updatePi = useSettings((s) => s.updatePi);
 	const show = useSettings((s) => s.setSection);
-	const byProvider = useMemo(() => {
-		const map = new Map<string, typeof models>();
-		for (const m of models) map.set(m.provider, [...(map.get(m.provider) ?? []), m]);
-		return [...map.entries()];
-	}, [models]);
 	if (models.length === 0) {
 		return (
 			<Button variant="outline" size="sm" onClick={() => show("accounts")}>
@@ -189,29 +177,13 @@ function DefaultModel() {
 		);
 	}
 	return (
-		<Select
-			value={current ? `${current.provider}/${current.id}` : undefined}
-			onValueChange={(v) => {
-				const [provider, ...rest] = v.split("/");
-				if (provider) void updatePi({ defaultModel: { provider, id: rest.join("/") } });
-			}}
-		>
-			<SelectTrigger size="sm" className="max-w-64 min-w-40">
-				<SelectValue placeholder="Not set" />
-			</SelectTrigger>
-			<SelectContent position="popper" align="end" className="max-h-80">
-				{byProvider.map(([provider, list]) => (
-					<SelectGroup key={provider}>
-						<SelectLabel>{provider}</SelectLabel>
-						{list.map((m) => (
-							<SelectItem key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-								{m.name}
-							</SelectItem>
-						))}
-					</SelectGroup>
-				))}
-			</SelectContent>
-		</Select>
+		<ModelCombobox
+			value={current}
+			placeholder="Not set"
+			onChange={(defaultModel) => void updatePi({ defaultModel })}
+			manageProviders={false}
+			className="max-w-64 border shadow-xs"
+		/>
 	);
 }
 
