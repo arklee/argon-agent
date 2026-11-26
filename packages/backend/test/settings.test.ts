@@ -66,3 +66,13 @@ describe("ArgonSettingsStore", () => {
 		expect(c.defaultPermissionMode).toBe("ask");
 	});
 });
+
+it("normalizes the default tool preset and persists a known choice", async () => {
+	const settings = await store();
+	expect(settings.get().defaultToolPreset).toBe("classic");
+	await settings.update({ defaultToolPreset: "codemode_only" });
+	await settings.load();
+	expect(settings.get().defaultToolPreset).toBe("codemode_only");
+	await settings.update({ defaultToolPreset: "unknown" });
+	expect(settings.get().defaultToolPreset).toBe("classic");
+});

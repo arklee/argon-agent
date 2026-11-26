@@ -16,9 +16,20 @@ import {
 	type InlineExtension,
 } from "@earendil-works/pi-coding-agent";
 
-export function createBuiltinExtensions(): InlineExtension[] {
+import type { ToolPreset } from "./tool-presets.ts";
+
+export function createBuiltinExtensions(codemodeMode: () => ToolPreset["codemodeMode"]): InlineExtension[] {
 	return [
-		{ name: "codemode", factory: createCodemodeExtension(), replaceable: true, builtin: true },
+		{
+			name: "codemode",
+			factory: createCodemodeExtension({
+				get mode() {
+					return codemodeMode();
+				},
+			}),
+			replaceable: true,
+			builtin: true,
+		},
 		{ name: "tool-search", factory: createToolSearchExtension(), replaceable: true, builtin: true },
 		// Never open a browser on the backend machine (it may be remote): sign-in URLs go to the client
 		// as an `oauth` interaction (see mcp-bridge.ts).

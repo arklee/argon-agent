@@ -13,6 +13,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManagedSession } from "../src/managed-session.ts";
 import { ArgonSettingsStore } from "../src/settings.ts";
+import { resolveToolPreset } from "../src/tool-presets.ts";
 
 vi.mock(import("@earendil-works/pi-coding-agent"), async (importOriginal) => ({
 	...(await importOriginal()),
@@ -28,6 +29,8 @@ async function loadSession(
 		modelFallbackMessage?: string;
 		diagnostics?: AgentSessionRuntimeDiagnostic[];
 		setup?: (sessionManager: SessionManager) => void;
+		activeTools?: string[];
+		defaultPreset?: string;
 		toolSources?: Record<string, string>;
 	} = {},
 ) {
@@ -44,11 +47,17 @@ async function loadSession(
 	const bindExtensions = vi.fn(async (_bindings: Parameters<AgentSession["bindExtensions"]>[0]) =>
 		emit({ type: "session_info_changed", name: "Set during bind" }),
 	);
+	let activeTools = options.activeTools ?? ["read", "custom"];
+	const setActiveToolsByName = vi.fn((names: string[]) => {
+		activeTools = names;
+	});
 	const runtime = {
 		cwd,
 		services: { settingsManager },
 		session: {
 			sessionId: sessionManager.getSessionId(),
+			getActiveToolNames: () => activeTools,
+			setActiveToolsByName,
 			sessionManager,
 			subscribe(listener: (event: AgentSessionEvent) => void) {
 				listeners.add(listener);
@@ -81,12 +90,15 @@ async function loadSession(
 	// The SDK classes are nominal. The fake implements the runtime surface used by load and these events.
 	vi.mocked(createAgentSessionRuntime).mockResolvedValueOnce(runtime as unknown as AgentSessionRuntime);
 	let trustStatus: ProjectTrustStatus = "undecided";
+	const settings = new ArgonSettingsStore("/argon");
+	if (options.defaultPreset)
+		vi.spyOn(settings, "get").mockReturnValue({ ...settings.get(), defaultToolPreset: options.defaultPreset });
 	const managed = await ManagedSession.load(
 		{ kind: "new", cwd },
 		{
 			agentDir: "/agent",
 			modelRuntime: {} as ModelRuntime,
-			settings: new ArgonSettingsStore("/argon"),
+			settings,
 			resolveProjectTrust: () => ({ trusted: trustStatus === "trusted", info: { status: trustStatus } }),
 		},
 	);
@@ -95,6 +107,7 @@ async function loadSession(
 	const bindings = bindExtensions.mock.calls[0]![0];
 	return {
 		managed,
+		setActiveToolsByName,
 		emit,
 		events,
 		diagnostics,
@@ -409,5 +422,51 @@ describe("ManagedSession event translation", () => {
 		expect(Object.keys(managed.snapshot().state.tools)).toEqual(["t1/1", "t1"]);
 		expect(managed.snapshot().state.status).toBe("running");
 		expect(managed.snapshot().state.items).toEqual([]);
+	});
+});
+
+describe("session tool presets", () => {
+	it("enforces classic on load and reload while preserving other active tools", async () => {
+		const { managed, session, bindings, setActiveToolsByName } = await loadSession({
+			activeTools: ["read", "codemode", "custom"],
+		});
+		expect(setActiveToolsByName).toHaveBeenCalledWith(["read", "custom"]);
+		managed.setToolPreset(resolveToolPreset("codemode_only"));
+		expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "custom", "codemode"]);
+		session.reload = async () => setActiveToolsByName(["extension"]);
+		await bindings.commandContextActions?.reload();
+		expect(setActiveToolsByName).toHaveBeenLastCalledWith(["extension", "codemode"]);
+	});
+
+	it("persists the choice immediately and applies it once the run settles", async () => {
+		const { managed, emit, events, sessionManager, setActiveToolsByName } = await loadSession();
+		emit({ type: "agent_start" });
+		managed.setToolPreset(resolveToolPreset("codemode"));
+		managed.setToolPreset(resolveToolPreset("codemode"));
+		expect(sessionManager.getEntries()).toMatchObject([
+			{ customType: "argon.tool_preset", data: { preset: "codemode" } },
+		]);
+		expect(setActiveToolsByName).not.toHaveBeenCalled();
+		expect(managed.snapshot().state.toolPresetPending).toBe(true);
+		emit({ type: "agent_settled", aborted: false });
+		expect(setActiveToolsByName).toHaveBeenCalledWith(["read", "custom", "codemode"]);
+		expect(events.map((e) => e.event).filter((e) => e.type === "tool_preset_changed")).toEqual([
+			{ type: "tool_preset_changed", preset: "codemode", pending: true },
+			{ type: "tool_preset_changed", preset: "codemode", pending: false },
+		]);
+	});
+
+	it.each([
+		["codemode", "codemode"],
+		["retired", "codemode_only"],
+	])("restores stored preset %s", async (stored, expected) => {
+		const { managed, setActiveToolsByName } = await loadSession({
+			defaultPreset: "codemode_only",
+			setup: (manager) => {
+				manager.appendCustomEntry("argon.tool_preset", { preset: stored });
+			},
+		});
+		expect(managed.snapshot().state.toolPreset).toBe(expected);
+		expect(setActiveToolsByName).toHaveBeenCalledWith(["read", "custom", "codemode"]);
 	});
 });

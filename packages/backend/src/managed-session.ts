@@ -60,12 +60,13 @@ import {
 import type { ResolvedProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { describeToolCall } from "./tool-display.ts";
+import { resolveToolPreset, type ToolPreset } from "./tool-presets.ts";
 import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
 import { createWriteDiffExtension } from "./write-diff.ts";
 
 const REPLAY_BUFFER_SIZE = 5000;
-/** Custom session entry recording the session's permission mode. */
+const TOOL_PRESET_ENTRY = "argon.tool_preset";
 const PERMISSION_ENTRY = "argon.permission_mode";
 const IDEMPOTENCY_CACHE_SIZE = 200;
 const MAX_PENDING_WRITE_DIFFS = 100;
@@ -134,6 +135,7 @@ export class ManagedSession {
 		private readonly mcp: McpBridge,
 		private readonly agentDir: string,
 		permissionMode: PermissionMode,
+		private appliedToolPreset: ToolPreset,
 		private readonly resolveProjectTrust: ManagedSessionDeps["resolveProjectTrust"],
 		projectTrust: ResolvedProjectTrust | undefined,
 		private readonly sessionHost?: ExtensionSessionHost,
@@ -146,6 +148,7 @@ export class ManagedSession {
 			cwd: runtime.cwd,
 			sessionPath: session.sessionFile,
 		});
+		this.state.toolPreset = appliedToolPreset.id;
 		this.state.permissionMode = permissionMode;
 		this.state.projectTrust = projectTrust?.info;
 		this.appliedProjectTrust = projectTrust?.trusted;
@@ -206,7 +209,7 @@ export class ManagedSession {
 						permissionExtension,
 						writeDiffExtension,
 						nestedDiffExtension,
-						...createBuiltinExtensions(),
+						...createBuiltinExtensions(() => (self?.appliedToolPreset ?? initialPreset).codemodeMode),
 						mcp.extension,
 					],
 				},
@@ -227,6 +230,13 @@ export class ManagedSession {
 					)
 				: SessionManager.open(target.sessionPath);
 		if (target.kind === "new" && target.setup) await target.setup(sessionManager);
+		const entry = sessionManager
+			.getEntries()
+			.findLast((e) => e.type === "custom" && e.customType === TOOL_PRESET_ENTRY);
+		const initialPreset = resolveToolPreset(
+			entry?.type === "custom" ? (entry.data as { preset?: unknown } | null)?.preset : undefined,
+			deps.settings.get().defaultToolPreset,
+		);
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: sessionManager.getCwd(),
 			agentDir: deps.agentDir,
@@ -237,6 +247,7 @@ export class ManagedSession {
 			mcp,
 			deps.agentDir,
 			ManagedSession.storedPermissionMode(sessionManager) ?? deps.settings.defaultPermissionMode,
+			initialPreset,
 			deps.resolveProjectTrust,
 			projectTrust,
 			deps.sessionHost,
@@ -245,6 +256,7 @@ export class ManagedSession {
 		);
 		self = managed;
 		await managed.bind();
+		managed.applyToolPreset(initialPreset);
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
 		managed.reportDiagnostics(true);
 		if (runtime.modelFallbackMessage) {
@@ -327,8 +339,11 @@ export class ManagedSession {
 	}
 
 	private canRefreshProjectTrust(): boolean {
+		return this.trustRefreshPending && this.isIdleForChanges();
+	}
+
+	private isIdleForChanges(): boolean {
 		return (
-			this.trustRefreshPending &&
 			!this.disposed &&
 			!this.isRunning &&
 			!this.session.isStreaming &&
@@ -338,7 +353,12 @@ export class ManagedSession {
 		);
 	}
 
-	private resumeProjectTrust(): void {
+	private resumePendingChanges(): void {
+		if (this.state.toolPresetPending && this.isIdleForChanges()) {
+			const preset = resolveToolPreset(this.state.toolPreset);
+			this.applyToolPreset(preset);
+			this.emit({ type: "tool_preset_changed", preset: preset.id, pending: false });
+		}
 		if (!this.trustRefreshPending || this.trustRefresh) return;
 		void this.applyPendingProjectTrust().catch((error: unknown) => {
 			log.error("could not refresh project trust", error);
@@ -364,7 +384,7 @@ export class ManagedSession {
 						if (answered) return;
 						answered = true;
 						this.promptPreflights--;
-						this.resumeProjectTrust();
+						this.resumePendingChanges();
 					};
 					const streamingBehavior = this.session.isStreaming ? (params.streamingBehavior ?? "followUp") : undefined;
 					this.session
@@ -648,6 +668,25 @@ export class ManagedSession {
 		this.emitThinkingState();
 	}
 
+	private applyToolPreset(preset: ToolPreset): void {
+		const active = this.session.getActiveToolNames();
+		const enableCodemode = preset.codemodeMode !== undefined;
+		this.appliedToolPreset = preset;
+		if (active.includes("codemode") !== enableCodemode) {
+			this.session.setActiveToolsByName(
+				enableCodemode ? [...active, "codemode"] : active.filter((name) => name !== "codemode"),
+			);
+		}
+	}
+
+	setToolPreset(preset: ToolPreset): void {
+		if (this.state.toolPreset === preset.id) return;
+		this.session.sessionManager.appendCustomEntry(TOOL_PRESET_ENTRY, { preset: preset.id });
+		const pending = !this.isIdleForChanges();
+		if (!pending) this.applyToolPreset(preset);
+		this.emit({ type: "tool_preset_changed", preset: preset.id, pending });
+	}
+
 	setPermissionMode(mode: PermissionMode): void {
 		this.emit({ type: "permission_mode_changed", mode });
 		// Stored in the session file, so reopening the session restores it.
@@ -838,11 +877,12 @@ export class ManagedSession {
 		this.reloading = true;
 		try {
 			await this.session.reload();
+			this.applyToolPreset(this.appliedToolPreset);
 			this.hasReloaded = true;
 			this.reportDiagnostics(true);
 		} finally {
 			this.reloading = false;
-			this.resumeProjectTrust();
+			this.resumePendingChanges();
 		}
 	}
 
@@ -1077,7 +1117,7 @@ export class ManagedSession {
 				this.emit({ type: "run_settled", aborted: event.aborted });
 				this.emitContextUsage();
 				this.emitBranches();
-				this.resumeProjectTrust();
+				this.resumePendingChanges();
 				if (!event.aborted) void this.maybeNameSession();
 				return;
 			case "message_start": {
@@ -1199,7 +1239,7 @@ export class ManagedSession {
 					this.emit({ type: "notification", level: "error", message: event.errorMessage });
 				}
 				this.emitContextUsage();
-				this.resumeProjectTrust();
+				this.resumePendingChanges();
 				return;
 			case "entry_appended": {
 				const entry = event.entry;

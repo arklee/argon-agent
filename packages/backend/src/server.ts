@@ -25,6 +25,8 @@ import { log } from "./log.ts";
 import { canonicalProjectPath, projectTrustParent } from "./project-trust.ts";
 import { NotFoundError, type SessionRegistry } from "./registry.ts";
 
+import { findToolPreset, listToolPresets } from "./tool-presets.ts";
+
 const AUTH_TIMEOUT_MS = 5000;
 const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
 
@@ -114,7 +116,7 @@ class Connection {
 	}
 }
 
-function createHandlers(registry: SessionRegistry, config: BackendConfig): HandlerTable {
+export function createHandlers(registry: SessionRegistry, config: BackendConfig): HandlerTable {
 	const empty = {} as Record<string, never>;
 	return {
 		"environment.info": async () => config.environment,
@@ -163,6 +165,13 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		},
 		"sessions.setThinkingLevel": async (params) => {
 			registry.require(params.sessionId).setThinkingLevel(params.level);
+			return empty;
+		},
+		"toolPresets.list": async () => ({ presets: listToolPresets() }),
+		"sessions.setToolPreset": async (params) => {
+			const preset = findToolPreset(params.preset);
+			if (!preset) throw new RequestError("bad_request", "Unknown tool preset");
+			registry.require(params.sessionId).setToolPreset(preset);
 			return empty;
 		},
 		"sessions.setPermissionMode": async (params) => {

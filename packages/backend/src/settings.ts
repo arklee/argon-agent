@@ -11,6 +11,8 @@ import { join } from "node:path";
 import type { ArgonSettings, PermissionMode, PermissionRule, PiSettings, ResourceSettings } from "@argon/shared";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 
+import { resolveToolPreset } from "./tool-presets.ts";
+
 type ThinkingArg = Parameters<SettingsManager["setDefaultThinkingLevel"]>[0];
 type TrustArg = Parameters<SettingsManager["setDefaultProjectTrust"]>[0];
 
@@ -86,7 +88,7 @@ export async function writePiSettings(agentDir: string, patch: Partial<PiSetting
 // Argon settings
 // ---------------------------------------------------------------------------
 
-const DEFAULT_ARGON: ArgonSettings = { permissions: { defaultMode: "ask", rules: [] } };
+const DEFAULT_ARGON: ArgonSettings = { defaultToolPreset: "classic", permissions: { defaultMode: "ask", rules: [] } };
 
 export class ArgonSettingsStore {
 	private current: ArgonSettings = DEFAULT_ARGON;
@@ -105,6 +107,7 @@ export class ArgonSettingsStore {
 			const data = JSON.parse(await readFile(this.path, "utf8")) as Partial<ArgonSettings>;
 			const permissions = (data.permissions ?? {}) as Partial<ArgonSettings["permissions"]>;
 			this.current = {
+				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
 				permissions: {
 					defaultMode: permissions.defaultMode === "auto" ? "auto" : "ask",
 					rules: Array.isArray(permissions.rules)
@@ -126,7 +129,12 @@ export class ArgonSettingsStore {
 	}
 
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
-		this.current = { ...this.current, ...patch, permissions: { ...this.current.permissions, ...patch.permissions } };
+		this.current = {
+			...this.current,
+			...patch,
+			defaultToolPreset: resolveToolPreset(patch.defaultToolPreset ?? this.current.defaultToolPreset).id,
+			permissions: { ...this.current.permissions, ...patch.permissions },
+		};
 		const tmp = `${this.path}.tmp`;
 		await writeFile(tmp, `${JSON.stringify(this.current, null, 2)}\n`, { mode: 0o600 });
 		await rename(tmp, this.path);
