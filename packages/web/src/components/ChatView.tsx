@@ -1,10 +1,11 @@
 import type { SessionState } from "@argon/shared";
 import { ShieldCheck, ShieldQuestion } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Composer } from "@/components/Composer";
 import { ContextMeter } from "@/components/ContextMeter";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
+import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
 import { Transcript } from "@/components/Transcript";
 import { Button } from "@/components/ui/button";
 import {
@@ -127,6 +128,7 @@ export function ChatView({ session }: { session: SessionState }) {
 	const summary = useApp((s) => s.sessions.find((x) => x.sessionId === session.sessionId));
 	const respond = useApp((s) => s.respond);
 
+	const [renaming, setRenaming] = useState<string>();
 	const firstUser = session.items.find((i) => i.kind === "user");
 	const headerTitle =
 		session.name ??
@@ -137,7 +139,11 @@ export function ChatView({ session }: { session: SessionState }) {
 		<>
 			<header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
 				<div className="min-w-0 flex-1">
-					<div className="truncate text-sm font-medium">{headerTitle || "New session"}</div>
+					{summary && renaming === session.sessionId ? (
+						<SessionNameInput session={summary} close={() => setRenaming(undefined)} />
+					) : (
+						<div className="truncate text-sm font-medium">{headerTitle || "New session"}</div>
+					)}
 				</div>
 				<span
 					className="hidden max-w-[35%] shrink truncate font-mono text-xs text-muted-foreground lg:inline"
@@ -150,6 +156,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				<PermissionPicker session={session} />
 				<ThinkingPicker session={session} />
 				<ModelPicker session={session} />
+				{summary && <SessionMenu header session={summary} onRename={() => setRenaming(session.sessionId)} />}
 			</header>
 
 			{session.items.length === 0 && !session.retry ? (
@@ -173,7 +180,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				</div>
 			)}
 
-			<Composer session={session} />
+			<Composer key={session.sessionId} session={session} />
 		</>
 	);
 }

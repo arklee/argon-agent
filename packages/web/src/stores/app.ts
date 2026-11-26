@@ -14,6 +14,7 @@ import {
 	type ModelInfo,
 	type ModelRef,
 	type PermissionMode,
+	type ProjectPrefs,
 	SessionMirror,
 	type SessionState,
 	type SessionSummary,
@@ -34,6 +35,16 @@ interface AppState {
 	sessions: SessionSummary[];
 	sessionStates: Record<string, SessionState>;
 	activeSessionId: string | undefined;
+	projects: ProjectPrefs[];
+	search: string;
+	showHidden: boolean;
+	composerDrafts: Record<string, string>;
+	refreshProjects(): Promise<void>;
+	updateProject(prefs: ProjectPrefs): Promise<void>;
+	duplicateSession(summary: SessionSummary): Promise<void>;
+	deleteSession(summary: SessionSummary): Promise<void>;
+	forkMessage(sessionId: string, itemId: string): Promise<void>;
+	switchBranch(sessionId: string, itemId: string, direction: -1 | 1): Promise<void>;
 	models: ModelInfo[];
 	openingSession: boolean;
 	mcpPanelOpen: boolean;
@@ -50,7 +61,7 @@ interface AppState {
 	/** Clears the queue and returns the removed messages, oldest first. */
 	clearQueue(): Promise<string[]>;
 	editMessage(itemId: string, text: string): Promise<void>;
-	renameSession(name: string): Promise<void>;
+	renameSession(name: string, summary?: SessionSummary): Promise<void>;
 	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", images?: ImageData[]): Promise<void>;
 	abort(): Promise<void>;
 	respond(interactionId: string, response: InteractionResponse): Promise<void>;
@@ -75,12 +86,36 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+async function loadedId(summary: SessionSummary) {
+	if (summary.loaded || !summary.sessionPath) return summary.sessionId;
+	if (!mirror) throw new Error("Not connected");
+	return (await mirror.open(summary.sessionPath)).sessionId;
+}
+
+async function activatePath(path: string, draft?: string, fromSessionId?: string) {
+	const m = mirror;
+	if (!m) throw new Error("Not connected");
+	const state = await m.open(path);
+	if (m !== mirror || (fromSessionId && useApp.getState().activeSessionId !== fromSessionId)) return;
+	useApp.setState((s) => ({
+		activeSessionId: state.sessionId,
+		composerDrafts: draft === undefined ? s.composerDrafts : { ...s.composerDrafts, [state.sessionId]: draft },
+	}));
+	const env = useApp.getState().environment;
+	if (env) localStorage.setItem(LAST_SESSION_KEY(env.id), path);
+	if (fromSessionId) toast("Switched to a new session");
+}
+
 export const useApp = create<AppState>((set, get) => ({
 	newSessionDialog: { open: false },
 	setNewSessionDialog: (newSessionDialog) => set({ newSessionDialog }),
 	connection: undefined,
 	environment: undefined,
 	sessions: [],
+	projects: [],
+	search: "",
+	showHidden: false,
+	composerDrafts: {},
 	sessionStates: {},
 	activeSessionId: undefined,
 	models: [],
@@ -109,6 +144,12 @@ export const useApp = create<AppState>((set, get) => ({
 				show(event.message);
 			}),
 			c.onGlobalEvent((event) => {
+				if (event.type === "projects_changed") void get().refreshProjects();
+				if (event.type === "session_requested" && get().activeSessionId === event.fromSessionId)
+					void activatePath(event.sessionPath, undefined, event.fromSessionId).catch((e) =>
+						toast.error(errorMessage(e)),
+					);
+				if (event.type === "session_unloaded" && get().activeSessionId === event.sessionId) get().clearActiveSession();
 				if (event.type === "sessions_changed" || event.type === "session_unloaded") void get().refreshSessions();
 			}),
 			c.onConnectionChange((connection) => {
@@ -117,6 +158,7 @@ export const useApp = create<AppState>((set, get) => ({
 					set({ environment: connection.environment });
 					void get().refreshSessions();
 					void get().refreshModels();
+					void get().refreshProjects();
 					void restoreLastSession(connection.environment.id);
 				}
 				if (connection.status === "failed" && connection.error.code === "unauthorized") {
@@ -153,6 +195,10 @@ export const useApp = create<AppState>((set, get) => ({
 			sessionStates: {},
 			activeSessionId: undefined,
 			sessions: [],
+			projects: [],
+			search: "",
+			showHidden: false,
+			composerDrafts: {},
 		});
 	},
 
@@ -252,12 +298,61 @@ export const useApp = create<AppState>((set, get) => ({
 		}
 	},
 
-	async renameSession(name) {
-		const sessionId = get().activeSessionId;
-		if (!client || !sessionId) return;
-		await client.request("sessions.rename", { sessionId, name }).catch((e) => toast.error(errorMessage(e)));
+	async refreshProjects() {
+		const c = client;
+		if (!c) return;
+		try {
+			const { projects } = await c.request("projects.list", {});
+			if (client === c) set({ projects });
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
 	},
-
+	async updateProject(prefs) {
+		await getClient()
+			.request("projects.update", prefs)
+			.catch((e) => toast.error(errorMessage(e)));
+	},
+	async renameSession(name, summary) {
+		try {
+			const sessionId = summary ? await loadedId(summary) : get().activeSessionId;
+			if (sessionId) await getClient().request("sessions.rename", { sessionId, name });
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async duplicateSession(summary) {
+		try {
+			const { sessionPath } = await getClient().request("sessions.clone", { sessionId: await loadedId(summary) });
+			await activatePath(sessionPath);
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async deleteSession(summary) {
+		const env = get().environment;
+		try {
+			await getClient().request("sessions.delete", { sessionPath: summary.sessionPath });
+			if (get().activeSessionId === summary.sessionId) get().clearActiveSession();
+			if (env && localStorage.getItem(LAST_SESSION_KEY(env.id)) === summary.sessionPath)
+				localStorage.removeItem(LAST_SESSION_KEY(env.id));
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async forkMessage(sessionId, itemId) {
+		try {
+			const { sessionPath, text } = await getClient().request("sessions.fork", { sessionId, itemId });
+			await activatePath(sessionPath, text);
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async switchBranch(sessionId, itemId, direction) {
+		await getClient()
+			.request("sessions.switchBranch", { sessionId, itemId, direction })
+			.catch((e) => toast.error(errorMessage(e)));
+	},
 	async sendPrompt(text, streamingBehavior, images) {
 		const sessionId = get().activeSessionId;
 		try {

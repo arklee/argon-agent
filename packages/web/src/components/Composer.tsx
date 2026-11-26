@@ -12,6 +12,16 @@ import { useApp } from "@/stores/app";
 
 export function Composer({ session }: { session: SessionState }) {
 	const [text, setText] = useState("");
+	const draft = useApp((s) => s.composerDrafts[session.sessionId]);
+	useEffect(() => {
+		if (draft === undefined) return;
+		setText(draft);
+		useApp.setState((s) => {
+			const composerDrafts = { ...s.composerDrafts };
+			delete composerDrafts[session.sessionId];
+			return { composerDrafts };
+		});
+	}, [session.sessionId, draft]);
 	const [sending, setSending] = useState(false);
 	const connected = useApp((s) => s.connection?.status === "connected");
 	const sendPrompt = useApp((s) => s.sendPrompt);

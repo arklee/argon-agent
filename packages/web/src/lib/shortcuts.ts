@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { groupByProject } from "@/lib/session-order";
+import { groupByProject, visibleProjects } from "@/lib/session-order";
 import { useApp } from "@/stores/app";
 
 const platform =
@@ -37,7 +37,10 @@ export function useGlobalShortcuts() {
 				}
 			} else if (mod && event.altKey && !event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
 				event.preventDefault();
-				const sessions = groupByProject(state.sessions).flatMap((group) => group.sessions);
+				const sessions = visibleProjects(
+					groupByProject(state.sessions, state.projects, state.search),
+					state.showHidden,
+				).flatMap((group) => group.sessions);
 				const index = sessions.findIndex((s) => s.sessionId === state.activeSessionId);
 				const next = sessions[index + (event.key === "ArrowUp" ? -1 : 1)];
 				if (next && !state.openingSession) void state.openSession(next);

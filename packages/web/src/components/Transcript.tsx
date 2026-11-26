@@ -1,5 +1,15 @@
-import type { AssistantBlock, SessionState, TranscriptItem } from "@argon/shared";
-import { Brain, ChevronRight, CircleAlert, CircleStop, Info, Layers, TerminalSquare } from "lucide-react";
+import type { AssistantBlock, BranchPoint, SessionState, TranscriptItem } from "@argon/shared";
+import {
+	Brain,
+	ChevronLeft,
+	ChevronRight,
+	CircleAlert,
+	CircleStop,
+	GitFork,
+	Info,
+	Layers,
+	TerminalSquare,
+} from "lucide-react";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { SessionImages } from "@/components/Images";
@@ -97,9 +107,19 @@ function Notice({ item }: { item: Extract<TranscriptItem, { kind: "notice" }> })
 	);
 }
 
-function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: "user" }>; canEdit: boolean }) {
+function UserMessage({
+	item,
+	canEdit,
+	branch,
+}: {
+	branch?: BranchPoint;
+	item: Extract<TranscriptItem, { kind: "user" }>;
+	canEdit: boolean;
+}) {
 	const editMessage = useApp((s) => s.editMessage);
 	const sessionId = useApp((s) => s.activeSessionId);
+	const switchBranch = useApp((s) => s.switchBranch);
+	const forkMessage = useApp((s) => s.forkMessage);
 	const [editing, setEditing] = useState(false);
 	if (editing) {
 		return (
@@ -126,14 +146,36 @@ function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: 
 				/>
 			)}
 			{item.text && <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{item.text}</div>}
-			<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-				<CopyButton text={item.text} />
-				<IconAction
-					title={canEdit ? "Edit and resend" : "Wait for the current turn to finish"}
-					icon={Pencil}
-					disabled={!canEdit}
-					onClick={() => setEditing(true)}
-				/>
+			<div className="mt-1 flex items-center gap-1">
+				{branch && sessionId && (
+					<div className="flex items-center text-xs tabular-nums text-muted-foreground">
+						<IconAction
+							title="Previous branch"
+							icon={ChevronLeft}
+							disabled={!canEdit || branch.index === 0}
+							onClick={() => void switchBranch(sessionId, item.id, -1)}
+						/>
+						{branch.index + 1} / {branch.count}
+						<IconAction
+							title="Next branch"
+							icon={ChevronRight}
+							disabled={!canEdit || branch.index + 1 >= branch.count}
+							onClick={() => void switchBranch(sessionId, item.id, 1)}
+						/>
+					</div>
+				)}
+				<div className="flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+					<CopyButton text={item.text} />
+					{sessionId && (
+						<IconAction title="Fork from here" icon={GitFork} onClick={() => void forkMessage(sessionId, item.id)} />
+					)}
+					<IconAction
+						title={canEdit ? "Edit and resend" : "Wait for the current turn to finish"}
+						icon={Pencil}
+						disabled={!canEdit}
+						onClick={() => setEditing(true)}
+					/>
+				</div>
 			</div>
 		</div>
 	);
@@ -172,6 +214,7 @@ const Item = memo(
 		tools,
 		pendingApprovals,
 		idle,
+		branch,
 		regenerateFrom,
 	}: {
 		item: TranscriptItem;
@@ -179,6 +222,7 @@ const Item = memo(
 		pendingApprovals: ReadonlySet<string>;
 		/** No turn is running, so messages can be edited. */
 		idle: boolean;
+		branch?: BranchPoint;
 		/** For the last reply: the user item to resend to regenerate it. */
 		regenerateFrom?: Extract<TranscriptItem, { kind: "user" }>;
 	}) {
@@ -190,7 +234,7 @@ const Item = memo(
 			item.kind === "assistant" && item.stopReason !== "aborted" && (item.errorMessage || item.stopReason === "error");
 		switch (item.kind) {
 			case "user":
-				return <UserMessage item={item} canEdit={idle} />;
+				return <UserMessage item={item} canEdit={idle} branch={branch} />;
 			case "assistant":
 				return (
 					<div className="group">
@@ -222,6 +266,8 @@ const Item = memo(
 	(prev, next) =>
 		prev.item === next.item &&
 		prev.idle === next.idle &&
+		prev.branch?.index === next.branch?.index &&
+		prev.branch?.count === next.branch?.count &&
 		prev.regenerateFrom === next.regenerateFrom &&
 		prev.pendingApprovals === next.pendingApprovals &&
 		(next.item.kind !== "assistant" ||
@@ -231,6 +277,18 @@ const Item = memo(
 );
 
 export function Transcript({ session }: { session: SessionState }) {
+	const branches = useMemo(() => {
+		const points = new Map<string, BranchPoint>();
+		if (session.userBranches?.length) {
+			let ordinal = 0;
+			for (const item of session.items) {
+				if (item.kind !== "user") continue;
+				const point = session.userBranches[ordinal++];
+				if (point) points.set(item.id, point);
+			}
+		}
+		return points;
+	}, [session.items, session.userBranches]);
 	const lastItem = session.items.at(-1);
 	const pendingApprovals = useMemo(
 		() => new Set(session.pendingInteractions.flatMap((i) => (i.kind === "tool_approval" ? [i.toolCallId] : []))),
@@ -299,6 +357,7 @@ export function Transcript({ session }: { session: SessionState }) {
 									tools={tools}
 									pendingApprovals={pendingApprovals}
 									idle={idle}
+									branch={branches.get(item.id)}
 									regenerateFrom={item.id === regenerate?.assistantId ? regenerate.user : undefined}
 								/>
 							) : session.retry ? (

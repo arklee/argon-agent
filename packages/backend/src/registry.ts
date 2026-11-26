@@ -88,6 +88,13 @@ export class SessionRegistry {
 
 	/** Delete a session file. Only files pi lists as sessions are accepted, so clients cannot delete anything else. */
 	async delete(sessionPath: string): Promise<void> {
+		// A new session has no file until its first reply: deleting it only unloads it.
+		const unsaved = [...this.sessions.values()].find((s) => s.sessionPath === sessionPath && !existsSync(sessionPath));
+		if (unsaved) {
+			await this.unload(unsaved.sessionId);
+			this.broadcast({ type: "sessions_changed" });
+			return;
+		}
 		const known = (await SessionManager.listAll()).some((info) => info.path === sessionPath);
 		if (!known) throw new NotFoundError(`Not a known session: ${sessionPath}`);
 		for (const session of [...this.sessions.values()]) {
