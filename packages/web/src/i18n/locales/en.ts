@@ -246,6 +246,21 @@ export const en = {
 		switchedSession: "Switched to a new session",
 		title: "Notifications",
 	},
+	presets: {
+		applyNote: "Switching changes the model's tools from the next turn on. The next request rebuilds the prompt cache.",
+		descriptions: {
+			classic: "Separate tools: read, bash, edit, write…",
+			codemode: "Codemode scripts alongside the separate tools",
+			codemode_only: "Tools are reached through codemode scripts",
+		},
+		labels: {
+			classic: "Classic",
+			codemode: "Codemode",
+			codemode_only: "Codemode only",
+		},
+		pending: "Applies after this turn",
+		title: "Tool preset",
+	},
 	sessionMenu: {
 		confirmDelete: "Delete session?",
 		delete: "Delete",
@@ -292,6 +307,9 @@ export const en = {
 		},
 		backend: "Backend: {{name}}",
 		general: {
+			toolPreset: "Default tool preset",
+			toolPresetDescription: "For new sessions. Each session can switch in its header.",
+			tools: "Tools",
 			allAtOnce: "All at once",
 			always: "Always",
 			ask: "Ask",

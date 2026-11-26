@@ -6,6 +6,7 @@ import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
 import { Group, Loading, Row } from "@/components/settings/parts";
+import { presetLabel } from "@/components/ToolPresetPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -211,7 +212,10 @@ function GeneralSection() {
 function GeneralDefaults() {
 	const { t } = useTranslation();
 	const pi = useSettings((s) => s.settings?.pi);
+	const argon = useSettings((s) => s.settings?.argon);
 	const updatePi = useSettings((s) => s.updatePi);
+	const updateArgon = useSettings((s) => s.updateArgon);
+	const presets = useApp((s) => s.toolPresets);
 	if (!pi) return <Loading />;
 	const queueModes = [
 		{ value: "one-at-a-time", label: t("settings.general.oneAtATime") },
@@ -235,6 +239,17 @@ function GeneralDefaults() {
 					/>
 				</Row>
 			</Group>
+			{presets.length > 0 && argon?.defaultToolPreset && (
+				<Group title={t("settings.general.tools")}>
+					<Row label={t("settings.general.toolPreset")} description={t("settings.general.toolPresetDescription")}>
+						<Choice
+							value={argon.defaultToolPreset}
+							options={presets.map((preset) => ({ value: preset.id, label: presetLabel(preset.id, presets, t) }))}
+							onChange={(defaultToolPreset) => void updateArgon({ defaultToolPreset })}
+						/>
+					</Row>
+				</Group>
+			)}
 			<Group title={t("settings.general.conversation")}>
 				<Row label={t("settings.general.steering")} description={t("settings.general.steeringDescription")}>
 					<Choice

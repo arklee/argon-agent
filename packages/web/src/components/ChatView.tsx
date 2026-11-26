@@ -10,6 +10,7 @@ import { McpPanel } from "@/components/McpPanel";
 import { ModelCombobox } from "@/components/ModelCombobox";
 import { ProjectTrustBanner, ProjectTrustIndicator } from "@/components/ProjectTrust";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
+import { ToolPresetPicker } from "@/components/ToolPresetPicker";
 import { Transcript } from "@/components/Transcript";
 import { Button } from "@/components/ui/button";
 import {
@@ -132,6 +133,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				<ProjectTrustIndicator session={session} />
 				<ContextMeter session={session} />
 				<McpPanel mcp={session.mcp} />
+				<ToolPresetPicker session={session} />
 				<PermissionPicker session={session} />
 				<ThinkingPicker session={session} />
 				<ModelPicker session={session} />

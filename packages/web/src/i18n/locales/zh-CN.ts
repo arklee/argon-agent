@@ -249,6 +249,21 @@ export const zhCN = {
 		switchedSession: "已切换到新会话",
 		title: "通知",
 	},
+	presets: {
+		applyNote: "切换后从下一轮起更换模型可用的工具，下一次请求会重建提示词缓存。",
+		descriptions: {
+			classic: "分开的工具：read、bash、edit、write…",
+			codemode: "在分开的工具之外，再提供 codemode 脚本",
+			codemode_only: "所有工具都通过 codemode 脚本调用",
+		},
+		labels: {
+			classic: "传统",
+			codemode: "Codemode",
+			codemode_only: "仅 Codemode",
+		},
+		pending: "本轮结束后生效",
+		title: "工具预设",
+	},
 	sessionMenu: {
 		confirmDelete: "删除会话？",
 		delete: "删除",
@@ -295,6 +310,9 @@ export const zhCN = {
 		},
 		backend: "后端：{{name}}",
 		general: {
+			toolPreset: "默认工具预设",
+			toolPresetDescription: "用于新会话。每个会话都可以在顶栏单独切换。",
+			tools: "工具",
 			allAtOnce: "一次发送全部",
 			always: "始终",
 			ask: "询问",

@@ -21,6 +21,8 @@ import {
 	type SessionState,
 	type SessionSummary,
 	type ThinkingLevel,
+	type ToolPresetId,
+	type ToolPresetInfo,
 	WebSocketAgentClient,
 } from "@argon/shared";
 import { toast } from "sonner";
@@ -52,6 +54,7 @@ interface AppState {
 	forkMessage(sessionId: string, itemId: string): Promise<void>;
 	switchBranch(sessionId: string, itemId: string, direction: -1 | 1): Promise<void>;
 	models: ModelInfo[];
+	toolPresets: ToolPresetInfo[];
 	openingSession: boolean;
 	mcpPanelOpen: boolean;
 
@@ -59,6 +62,7 @@ interface AppState {
 	disconnect(): void;
 	refreshSessions(): Promise<void>;
 	refreshModels(): Promise<void>;
+	refreshToolPresets(): Promise<void>;
 	openSession(summary: SessionSummary): Promise<void>;
 	createSession(cwd: string): Promise<void>;
 	clearActiveSession(): void;
@@ -74,6 +78,7 @@ interface AppState {
 	setModel(model: ModelRef): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	setPermissionMode(mode: PermissionMode): Promise<void>;
+	setToolPreset(preset: ToolPresetId): Promise<void>;
 	mcpAction(server: string, action: McpAction | "exposure", exposure?: McpExposure): Promise<void>;
 	setProjectTrust(cwd: string, decision: ProjectTrustDecision): Promise<void>;
 }
@@ -144,6 +149,7 @@ export const useApp = create<AppState>((set, get) => ({
 	sessionStates: {},
 	activeSessionId: undefined,
 	models: [],
+	toolPresets: [],
 	openingSession: false,
 	mcpPanelOpen: false,
 
@@ -185,6 +191,7 @@ export const useApp = create<AppState>((set, get) => ({
 					set({ environment: connection.environment });
 					void get().refreshSessions();
 					void get().refreshModels();
+					void get().refreshToolPresets();
 					void get().refreshProjects();
 					void restoreLastSession(connection.environment.id);
 				}
@@ -237,6 +244,17 @@ export const useApp = create<AppState>((set, get) => ({
 			set({ sessions });
 		} catch (error) {
 			console.warn("sessions.list failed", error);
+		}
+	},
+
+	async refreshToolPresets() {
+		if (!client) return;
+		try {
+			const { presets } = await client.request("toolPresets.list", {});
+			set({ toolPresets: presets });
+		} catch (error) {
+			// An older backend has no presets; the picker stays hidden.
+			console.warn("toolPresets.list failed", error);
 		}
 	},
 
@@ -425,6 +443,12 @@ export const useApp = create<AppState>((set, get) => ({
 		const sessionId = get().activeSessionId;
 		if (!client || !sessionId) return;
 		await client.request("sessions.setThinkingLevel", { sessionId, level }).catch((e) => toast.error(errorMessage(e)));
+	},
+
+	async setToolPreset(preset) {
+		const sessionId = get().activeSessionId;
+		if (!client || !sessionId) return;
+		await client.request("sessions.setToolPreset", { sessionId, preset }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async setPermissionMode(mode) {
