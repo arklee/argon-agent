@@ -1,6 +1,7 @@
 import type { AssistantBlock, SessionState, TranscriptItem } from "@argon/shared";
 import { Brain, ChevronRight, CircleAlert, CircleStop, Info, Layers, TerminalSquare } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
@@ -85,7 +86,7 @@ function Notice({ item }: { item: Extract<TranscriptItem, { kind: "notice" }> })
 	const [open, setOpen] = useState(false);
 	const Icon = NOTICE_ICON[item.variant];
 	return (
-		<div className="my-3 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
+		<div className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
 			<button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setOpen((o) => !o)}>
 				<Icon className="size-3.5 shrink-0" />
 				<span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
@@ -102,7 +103,7 @@ function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: 
 	const [editing, setEditing] = useState(false);
 	if (editing) {
 		return (
-			<div className="my-4 flex justify-end">
+			<div className="flex justify-end">
 				<MessageEditor
 					initial={item.text}
 					onCancel={() => setEditing(false)}
@@ -115,7 +116,7 @@ function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: 
 		);
 	}
 	return (
-		<div className="group my-4 flex flex-col items-end">
+		<div className="group flex flex-col items-end">
 			{item.imageCount > 0 && sessionId && (
 				<SessionImages
 					sessionId={sessionId}
@@ -165,58 +166,69 @@ function RequestFailure({ message, retry }: { message?: string; retry?: () => vo
 	);
 }
 
-const Item = memo(function Item({
-	item,
-	tools,
-	pendingApprovals,
-	idle,
-	regenerateFrom,
-}: {
-	item: TranscriptItem;
-	tools: SessionState["tools"];
-	pendingApprovals: ReadonlySet<string>;
-	/** No turn is running, so messages can be edited. */
-	idle: boolean;
-	/** For the last reply: the user item to resend to regenerate it. */
-	regenerateFrom?: Extract<TranscriptItem, { kind: "user" }>;
-}) {
-	const editMessage = useApp((s) => s.editMessage);
-	const regenerate = regenerateFrom
-		? () => void editMessage(regenerateFrom.id, regenerateFrom.text).catch(() => undefined)
-		: undefined;
-	const failed =
-		item.kind === "assistant" && item.stopReason !== "aborted" && (item.errorMessage || item.stopReason === "error");
-	switch (item.kind) {
-		case "user":
-			return <UserMessage item={item} canEdit={idle} />;
-		case "assistant":
-			return (
-				<div className="group my-4">
-					<AssistantBlocks
-						blocks={item.blocks}
-						streaming={item.streaming}
-						tools={tools}
-						pendingApprovals={pendingApprovals}
-					/>
-					{failed && <RequestFailure message={item.errorMessage} retry={regenerate} />}
-					{item.stopReason === "aborted" && (
-						<span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-							<CircleStop className="size-3" />
-							Stopped by you
-						</span>
-					)}
-					{!item.streaming && (
-						<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-							<CopyButton text={assistantText(item.blocks)} />
-							{regenerate && !failed && <IconAction title="Regenerate" icon={RotateCcw} onClick={regenerate} />}
-						</div>
-					)}
-				</div>
-			);
-		case "notice":
-			return <Notice item={item} />;
-	}
-});
+const Item = memo(
+	function Item({
+		item,
+		tools,
+		pendingApprovals,
+		idle,
+		regenerateFrom,
+	}: {
+		item: TranscriptItem;
+		tools: SessionState["tools"];
+		pendingApprovals: ReadonlySet<string>;
+		/** No turn is running, so messages can be edited. */
+		idle: boolean;
+		/** For the last reply: the user item to resend to regenerate it. */
+		regenerateFrom?: Extract<TranscriptItem, { kind: "user" }>;
+	}) {
+		const editMessage = useApp((s) => s.editMessage);
+		const regenerate = regenerateFrom
+			? () => void editMessage(regenerateFrom.id, regenerateFrom.text).catch(() => undefined)
+			: undefined;
+		const failed =
+			item.kind === "assistant" && item.stopReason !== "aborted" && (item.errorMessage || item.stopReason === "error");
+		switch (item.kind) {
+			case "user":
+				return <UserMessage item={item} canEdit={idle} />;
+			case "assistant":
+				return (
+					<div className="group">
+						<AssistantBlocks
+							blocks={item.blocks}
+							streaming={item.streaming}
+							tools={tools}
+							pendingApprovals={pendingApprovals}
+						/>
+						{failed && <RequestFailure message={item.errorMessage} retry={regenerate} />}
+						{item.stopReason === "aborted" && (
+							<span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+								<CircleStop className="size-3" />
+								Stopped by you
+							</span>
+						)}
+						{!item.streaming && (
+							<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+								<CopyButton text={assistantText(item.blocks)} />
+								{regenerate && !failed && <IconAction title="Regenerate" icon={RotateCcw} onClick={regenerate} />}
+							</div>
+						)}
+					</div>
+				);
+			case "notice":
+				return <Notice item={item} />;
+		}
+	},
+	(prev, next) =>
+		prev.item === next.item &&
+		prev.idle === next.idle &&
+		prev.regenerateFrom === next.regenerateFrom &&
+		prev.pendingApprovals === next.pendingApprovals &&
+		(next.item.kind !== "assistant" ||
+			next.item.blocks.every(
+				(block) => block.type !== "toolCall" || prev.tools[block.toolCallId] === next.tools[block.toolCallId],
+			)),
+);
 
 export function Transcript({ session }: { session: SessionState }) {
 	const lastItem = session.items.at(-1);
@@ -238,35 +250,77 @@ export function Transcript({ session }: { session: SessionState }) {
 	}, [idle, session.items]);
 	const waitingForFirstToken =
 		session.compacting || (session.status === "running" && (lastItem?.kind !== "assistant" || !lastItem.streaming));
+	const showStatus = !!session.retry || (waitingForFirstToken && session.pendingInteractions.length === 0);
+	const count = session.items.length + Number(showStatus);
+	const list = useRef<VirtualizerHandle>(null);
+	const pinned = useRef(true);
+	const follow = useCallback(() => {
+		if (pinned.current && count) list.current?.scrollToIndex(count - 1, { align: "end" });
+	}, [count]);
+	useLayoutEffect(follow, [follow]);
 	return (
-		<div className="mx-auto w-full max-w-3xl px-6 py-6">
-			{session.items.map((item) => (
-				<Item
-					key={item.id}
-					item={item}
-					tools={session.tools}
-					pendingApprovals={pendingApprovals}
-					idle={idle}
-					regenerateFrom={item.id === regenerate?.assistantId ? regenerate.user : undefined}
-				/>
-			))}
-			{session.retry && (
-				<div
-					role="status"
-					className="my-4 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
-				>
-					<strong>
-						Retrying ({session.retry.attempt}/{session.retry.maxAttempts})…
-					</strong>{" "}
-					{session.retry.errorMessage.split("\n")[0]}
-				</div>
-			)}
-			{waitingForFirstToken && !session.retry && session.pendingInteractions.length === 0 && (
-				<div className="my-4 flex items-center gap-2 text-sm text-muted-foreground">
-					<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
-					{session.compacting ? "Compacting context…" : "Working…"}
-				</div>
-			)}
-		</div>
+		// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
+		<section aria-label="Transcript" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+			<Virtualizer
+				data={{ length: count }}
+				ref={list}
+				bufferSize={1000}
+				onResize={follow}
+				onScroll={(offset: number) => {
+					const handle = list.current;
+					if (handle) pinned.current = handle.scrollSize - offset - handle.viewportSize < 80;
+				}}
+			>
+				{(_: unknown, index: number) => {
+					const item = session.items[index];
+					const tools: SessionState["tools"] = Object.create(null);
+					if (item?.kind === "assistant") {
+						for (const block of item.blocks) {
+							if (block.type !== "toolCall") continue;
+							const tool = session.tools[block.toolCallId];
+							if (tool) tools[block.toolCallId] = tool;
+						}
+					}
+					// Adjacent message margins used to collapse. Include the shared gap in one measured row.
+					const smallGap = item?.kind === "notice" && (index === 0 || session.items[index - 1]?.kind === "notice");
+					return (
+						<div
+							key={item ? `item-${item.id}` : "status"}
+							className={cn(
+								"mx-auto flow-root w-full max-w-3xl px-6",
+								smallGap ? "pt-3" : "pt-4",
+								index === 0 && (smallGap ? "pt-9" : "pt-10"),
+								index === count - 1 && (item?.kind === "notice" ? "pb-9" : "pb-10"),
+							)}
+						>
+							{item ? (
+								<Item
+									item={item}
+									tools={tools}
+									pendingApprovals={pendingApprovals}
+									idle={idle}
+									regenerateFrom={item.id === regenerate?.assistantId ? regenerate.user : undefined}
+								/>
+							) : session.retry ? (
+								<div
+									role="status"
+									className="rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
+								>
+									<strong>
+										Retrying ({session.retry.attempt}/{session.retry.maxAttempts})…
+									</strong>{" "}
+									{session.retry.errorMessage.split("\n")[0]}
+								</div>
+							) : (
+								<div className="flex items-center gap-2 text-sm text-muted-foreground">
+									<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
+									{session.compacting ? "Compacting context…" : "Working…"}
+								</div>
+							)}
+						</div>
+					);
+				}}
+			</Virtualizer>
+		</section>
 	);
 }

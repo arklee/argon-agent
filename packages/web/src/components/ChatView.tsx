@@ -1,6 +1,6 @@
 import type { SessionState } from "@argon/shared";
 import { ShieldCheck, ShieldQuestion } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Composer } from "@/components/Composer";
 import { ContextMeter } from "@/components/ContextMeter";
 import { InteractionCard } from "@/components/InteractionCard";
@@ -122,39 +122,10 @@ function PermissionPicker({ session }: { session: SessionState }) {
 	);
 }
 
-/** Keeps the view pinned to the bottom while the user has not scrolled up. */
-function useStickToBottom(dep: unknown) {
-	const ref = useRef<HTMLDivElement>(null);
-	const pinned = useRef(true);
-	useEffect(() => {
-		const el = ref.current;
-		if (!el) return;
-		const onScroll = () => {
-			pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-		};
-		el.addEventListener("scroll", onScroll, { passive: true });
-		return () => el.removeEventListener("scroll", onScroll);
-	}, []);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run whenever content changes
-	useLayoutEffect(() => {
-		const el = ref.current;
-		if (el && pinned.current) el.scrollTop = el.scrollHeight;
-	}, [dep]);
-	return {
-		ref,
-		pin: () => {
-			pinned.current = true;
-		},
-	};
-}
-
 export function ChatView({ session }: { session: SessionState }) {
 	const environment = useApp((s) => s.environment);
 	const summary = useApp((s) => s.sessions.find((x) => x.sessionId === session.sessionId));
 	const respond = useApp((s) => s.respond);
-	const { ref, pin } = useStickToBottom(session);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: pin to bottom when switching sessions
-	useEffect(() => pin(), [session.sessionId]);
 
 	const firstUser = session.items.find((i) => i.kind === "user");
 	const headerTitle =
@@ -181,16 +152,14 @@ export function ChatView({ session }: { session: SessionState }) {
 				<ModelPicker session={session} />
 			</header>
 
-			<div ref={ref} className="flex-1 overflow-y-auto">
-				{session.items.length === 0 && !session.retry ? (
-					<div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-						<p className="text-lg font-medium">What should we work on?</p>
-						<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>
-					</div>
-				) : (
-					<Transcript session={session} />
-				)}
-			</div>
+			{session.items.length === 0 && !session.retry ? (
+				<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+					<p className="text-lg font-medium">What should we work on?</p>
+					<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>
+				</div>
+			) : (
+				<Transcript key={session.sessionId} session={session} />
+			)}
 
 			{session.pendingInteractions.length > 0 && (
 				<div className="mx-auto w-full max-w-3xl space-y-2 px-6 pb-2">
