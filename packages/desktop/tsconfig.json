@@ -1,0 +1,8 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"types": ["node", "electron"],
+		"lib": ["ES2024"]
+	},
+	"include": ["src", "electron.vite.config.ts"]
+}

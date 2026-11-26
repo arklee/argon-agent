@@ -5,24 +5,41 @@
  */
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import type { CompletionItem } from "@argon/shared";
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 
 const fdCache = new Map<string, string | null>();
 
-function findOnPath(name: string): string | undefined {
-	for (const dir of (process.env.PATH ?? "").split(":")) {
-		if (dir && existsSync(join(dir, name))) return join(dir, name);
+/** Platform-aware lookup; a Windows PATH entry can contain a drive colon and spaces. */
+export function findFd(
+	agentDir: string,
+	platform: string = process.platform,
+	env: NodeJS.ProcessEnv = process.env,
+	exists: (path: string) => boolean = existsSync,
+): string | null {
+	const windows = platform === "win32";
+	const path = windows ? win32 : posix;
+	const names = windows ? ["fd.exe", "fdfind.exe"] : ["fd", "fdfind"];
+	const local = path.join(agentDir, "bin", names[0]!);
+	if (exists(local)) return local;
+	const searchPath =
+		Object.entries(env).find(([key]) => (windows ? key.toLowerCase() === "path" : key === "PATH"))?.[1] ?? "";
+	for (const name of names) {
+		for (const entry of searchPath.split(path.delimiter)) {
+			const dir = entry.replace(/^"(.*)"$/, "$1");
+			if (!dir) continue;
+			const candidate = path.join(dir, name);
+			if (exists(candidate)) return candidate;
+		}
 	}
-	return undefined;
+	return null;
 }
 
 function fdPath(agentDir: string): string | null {
 	const cached = fdCache.get(agentDir);
 	if (cached !== undefined) return cached;
-	const local = join(agentDir, "bin", "fd");
-	const found = existsSync(local) ? local : (findOnPath("fd") ?? findOnPath("fdfind") ?? null);
+	const found = findFd(agentDir);
 	fdCache.set(agentDir, found);
 	return found;
 }

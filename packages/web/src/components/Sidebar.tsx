@@ -99,7 +99,7 @@ export function Sidebar() {
 
 	return (
 		<aside className="flex w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-			<div className="flex h-12 items-center justify-between px-3">
+			<div className="window-sidebar-header flex h-12 shrink-0 items-center justify-between px-3">
 				<span className="text-sm font-semibold tracking-tight">Argon</span>
 				<div className="flex items-center">
 					<Tooltip>

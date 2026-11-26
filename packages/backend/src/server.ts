@@ -409,12 +409,15 @@ export async function startServer(registry: SessionRegistry, config: BackendConf
 		server.listen(config.port, config.host, () => resolve());
 	});
 
+	const address = server.address();
+	if (address && typeof address !== "string") config.port = address.port;
+
 	const hostForUrl = config.host.includes(":") ? `[${config.host}]` : config.host;
 	return {
 		server,
 		url: `ws://${hostForUrl}:${config.port}`,
 		close: async () => {
-			for (const conn of connections) conn.socket.close(1001, "server shutting down");
+			for (const conn of connections) conn.socket.terminate();
 			wss.close();
 			await new Promise<void>((resolve) => server.close(() => resolve()));
 		},

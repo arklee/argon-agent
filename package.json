@@ -20,7 +20,12 @@
 		"smoke": "tsx scripts/smoke.ts",
 		"lint": "biome check .",
 		"format": "biome check --write .",
-		"postinstall": "patch-package"
+		"postinstall": "patch-package",
+		"dev:desktop": "npm run dev -w @argon/desktop",
+		"build:desktop": "npm run build -w @argon/desktop",
+		"pack:desktop": "npm run pack -w @argon/desktop",
+		"dist:desktop": "npm run dist -w @argon/desktop",
+		"smoke:desktop": "node scripts/desktop-smoke.mjs"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.0",

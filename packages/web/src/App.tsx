@@ -19,6 +19,7 @@ export function App() {
 	useSystemTheme();
 	return (
 		<TooltipProvider delayDuration={300}>
+			<div className="window-drag-strip" aria-hidden="true" />
 			<Shell />
 			<Toaster position="top-center" />
 		</TooltipProvider>
@@ -66,12 +67,14 @@ function Shell() {
 			<SettingsDialog />
 			<AddProjectDialog />
 			<Sidebar />
-			<main className="flex min-w-0 flex-1 flex-col">
+			<main className="window-workspace flex min-w-0 flex-1 flex-col">
 				{(connection?.status === "disconnected" || (connection?.status === "connecting" && connection.attempt > 0)) && (
-					<OfflineBanner
-						key={connection.status}
-						retryInMs={connection.status === "disconnected" ? connection.retryInMs : undefined}
-					/>
+					<div className="window-offline-banner">
+						<OfflineBanner
+							key={connection.status}
+							retryInMs={connection.status === "disconnected" ? connection.retryInMs : undefined}
+						/>
+					</div>
 				)}
 				{active ? <ChatView session={active} /> : <Welcome />}
 			</main>

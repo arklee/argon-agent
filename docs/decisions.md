@@ -222,3 +222,15 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 - 纯 backend 描述、前端不能覆盖：表达能力受限于类型词汇表，个别工具想做精致的显示也得先扩充协议。
 
 最终采用折中：backend 描述为主，前端可以覆盖。
+
+## D14. 最小 Electron 壳的打包布局
+
+**决定**：electron-vite 构建 main、独立 backend 入口和复用的 web renderer，electron-builder 输出安装包。pi 与第三方运行时依赖不做 JS 合并，保留 npm 包布局。main / renderer 在 app.asar 中；backend 入口、动态 chunk 和 node_modules 显式 asarUnpack，utilityProcess 从 app.asar.unpacked 的真实路径启动。
+
+**原因**：正式打包冒烟发现，以 asar 内部包路径作为子进程 cwd 会报 ENOTDIR；图像和 Codemode worker、Photon / QuickJS WASM、jiti 也依赖真实文件布局。先整体解包运行时依赖，避免开发模式正常但安装包丢文件或动态加载失败。缩减解包范围和安装包体积留到有完整打包回归后进行。
+
+**传输与页面来源**：按 D6 保留 WebSocket，后端绑定 loopback 随机端口，通过父子进程消息回报 main；main 注入每次启动生成的 token。生产 renderer 使用标准、安全的 `argon://app` 自定义协议，因此可以精确校验 Origin，无需允许 `file://` 的 `null` Origin。页面只使用现有 AgentClient，无 preload API。开发模式只允许 Vite 的精确 Origin。
+
+**生命周期**：CLI 和 utilityProcess 共用纯 Node 的 `startBackend()`。退出先停止连接，再 dispose registry；main 等待退出，超时强制终止。崩溃后最多重启三次并保留连接地址，前端复用既有重连和快照恢复逻辑。运行中的任务仍会中断，不声称能续跑。
+
+**验证范围**：macOS arm64，Electron 45.5.0 / Node 24.22.3；安装包和独立配置冒烟。具体命令、布局和未完成项见 [desktop.md](desktop.md)。签名、公证、更新及其他平台验证仍在阶段 2。

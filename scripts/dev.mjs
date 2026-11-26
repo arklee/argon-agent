@@ -28,9 +28,16 @@ const env = { ...process.env, ARGON_TOKEN: token, ARGON_PORT: port, FORCE_COLOR:
 
 let exiting = false;
 
+// npm.cmd cannot be spawned directly on Windows. npm run supplies its JS entry,
+// which also avoids shell quoting problems when Node/npm are installed under Program Files.
+const npmCli = process.env.npm_execpath;
+if (process.platform === "win32" && !npmCli) throw new Error("Start the dev runner with npm run dev");
+const npmCommand = npmCli ? process.execPath : "npm";
+const npmArgs = (args) => (npmCli ? [npmCli, ...args] : args);
+
 const children = [
-	spawn("npm", ["run", "dev", "-w", "@argon/backend"], { env, stdio: "inherit" }),
-	spawn("npm", ["run", "dev", "-w", "@argon/web"], {
+	spawn(npmCommand, npmArgs(["run", "dev", "-w", "@argon/backend"]), { env, stdio: "inherit" }),
+	spawn(npmCommand, npmArgs(["run", "dev", "-w", "@argon/web"]), {
 		env: { ...env, VITE_ARGON_BACKEND_URL: `ws://127.0.0.1:${port}` },
 		stdio: "inherit",
 	}),

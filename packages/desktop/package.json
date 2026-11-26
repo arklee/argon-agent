@@ -1,0 +1,68 @@
+{
+	"name": "@argon/desktop",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Argon desktop application",
+	"main": "out/main/index.js",
+	"scripts": {
+		"dev": "electron-vite dev",
+		"build": "electron-vite build",
+		"pack": "npm run build && electron-builder --dir",
+		"dist": "npm run build && electron-builder",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"dependencies": {
+		"@earendil-works/pi-ai": "1.6.1",
+		"@earendil-works/pi-coding-agent": "1.6.1",
+		"@earendil-works/pi-tui": "1.6.1",
+		"magpie-pi": "^0.2.0",
+		"proper-lockfile": "^4.1.2",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"electron": "45.5.0",
+		"electron-vite": "6.0.0",
+		"electron-builder": "26.18.0"
+	},
+	"build": {
+		"appId": "dev.argon.desktop",
+		"productName": "Argon",
+		"directories": {
+			"output": "dist"
+		},
+		"files": [
+			"out/**/*",
+			"package.json"
+		],
+		"asar": true,
+		"asarUnpack": [
+			"node_modules/**/*",
+			"out/main/backend.js",
+			"out/main/chunks/**/*"
+		],
+		"npmRebuild": false,
+		"mac": {
+			"target": [
+				"dmg"
+			],
+			"category": "public.app-category.developer-tools"
+		},
+		"win": {
+			"target": [
+				"nsis"
+			]
+		},
+		"linux": {
+			"target": [
+				"AppImage"
+			]
+		},
+		"nsis": {
+			"oneClick": false,
+			"perMachine": false,
+			"allowToChangeInstallationDirectory": true,
+			"createDesktopShortcut": true
+		}
+	}
+}

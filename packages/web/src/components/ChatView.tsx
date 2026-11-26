@@ -125,7 +125,7 @@ export function ChatView({ session }: { session: SessionState }) {
 
 	return (
 		<>
-			<header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+			<header className="window-chat-header flex h-12 shrink-0 items-center gap-2 border-b px-4">
 				<div className="min-w-0 flex-1">
 					{summary && renaming === session.sessionId ? (
 						<SessionNameInput session={summary} close={() => setRenaming(undefined)} />

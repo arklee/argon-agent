@@ -1,27 +1,16 @@
 #!/usr/bin/env node
-/** Argon backend entry point: `tsx src/main.ts` (dev) or spawned by the desktop shell (later). */
+/** Argon backend entry point: `tsx src/main.ts`; the desktop utility entry shares runtime.ts. */
 
 import "./bootstrap.ts";
 
-import { loadConfig } from "./config.ts";
 import { log } from "./log.ts";
-import { SessionRegistry } from "./registry.ts";
-import { startServer } from "./server.ts";
-import { ArgonSettingsStore } from "./settings.ts";
+import { startBackend } from "./runtime.ts";
 
 async function main(): Promise<void> {
-	const config = loadConfig();
-	const settings = new ArgonSettingsStore(config.argonHome, config.permissionModeOverride);
-	await settings.load();
-	const registry = await SessionRegistry.create({
-		settings,
-		argonHome: config.argonHome,
-		agentDir: config.agentDir,
-	});
-	const server = await startServer(registry, config);
-
+	const backend = await startBackend();
+	const { config } = backend;
 	log.info(`Argon backend ${config.environment.argonVersion} (pi ${config.environment.piVersion})`);
-	log.info(`listening on ${server.url}  environment=${config.environment.name} (${config.environment.id})`);
+	log.info(`listening on ${backend.url}  environment=${config.environment.name} (${config.environment.id})`);
 	if (!process.env.ARGON_TOKEN) {
 		log.info(`token: ${config.token}`);
 	}
@@ -34,8 +23,7 @@ async function main(): Promise<void> {
 		}
 		shuttingDown = true;
 		log.info(`${signal} received, shutting down`);
-		await server.close().catch((error) => log.error("server close failed", error));
-		await registry.dispose().catch((error) => log.error("registry dispose failed", error));
+		await backend.close().catch((error) => log.error("backend close failed", error));
 		process.exit(0);
 	};
 	process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -76,14 +76,16 @@
 
 建议尽早做第 1 项的冒烟验证，不必等阶段 1 全部完成。
 
-- [ ] **打包冒烟**：最小的 `packages/desktop`（electron-vite）。main 拉起 utilityProcess 里的 backend，renderer 加载 web 构建产物，打一次正式包，验证 pi 在 asar 中能运行：ESM、worker 文件、photon wasm、jiti 加载用户 TS 扩展、MCP 子进程
-- [ ] 确认 Electron 自带的 Node 版本 ≥ 22.19
-- [ ] backend 生命周期：崩溃后重启并通知前端；应用退出时等待 `runtime.dispose()` 完成（OAuth 写入、MCP 关闭），并提供同步兜底
-- [ ] 传输选型（D6）：先沿用本地 WebSocket（随机端口 + token 由 main 注入）；如有需要，再加 MessagePort 实现的 `AgentClient`
+- [x] **打包冒烟**：`packages/desktop`（electron-vite + electron-builder），main 拉起 utilityProcess backend，renderer 复用 web；已产出 macOS arm64 `.app` / DMG。`npm run smoke:desktop` 覆盖 ESM、Codemode / 图像 worker、QuickJS / Photon WASM、jiti 用户 TS 扩展、MCP 子进程及退出清理。backend 和依赖显式 asarUnpack，见 [桌面开发与打包](desktop.md) 和 D14
+- [x] 确认 Electron 自带的 Node 版本 ≥ 22.19：Electron 45.5.0 的实际 utilityProcess 为 Node 24.22.3
+- [x] backend 基础生命周期：崩溃最多重启三次，复用原端口/token，由前端既有离线提示和 SessionMirror 重连；退出等待 dispose，十秒超时 kill，加应用退出同步兜底。冒烟验证 session_shutdown 和 MCP 清理
+- [ ] 桌面异常恢复验证：真实运行中 backend 崩溃、连续启动失败、退出超时；启动失败后的原生错误提示与重试入口
+- [x] 传输选型（D6）：本地 WebSocket，系统分配随机端口，main 注入 token；`argon://app` 独立 Origin，保留 Host/Origin/token 校验
 - [ ] 原生能力：文件夹选择、系统通知（任务完成、等待审批）、托盘、全局快捷键、在 Finder / 编辑器中打开
-- [ ] 窗口：macOS 红绿灯区域、标题栏拖拽、多窗口
+- [x] 窗口标题栏：macOS 隐藏系统标题栏，红绿灯融入侧栏顶行；Windows 使用原生 Window Controls Overlay，按钮融入应用右上角并跟随系统主题；应用顶栏可拖拽，交互控件排除拖拽，Windows 控件区留白
+- [ ] 窗口：多窗口；Windows 标题栏覆盖、DPI 缩放和系统贴靠行为实机验证
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
-- [ ] 安全：renderer 开启 sandbox + contextIsolation，preload 只暴露最小接口
+- [x] 安全：renderer 开启 sandbox + contextIsolation，禁用 Node integration；没有 preload API，外链交给系统浏览器
 
 ## 沙箱（权限控制的主要手段）
 
@@ -157,3 +159,8 @@
 - [x] Argon 全局配置、凭据、会话和项目配置目录与 pi CLI 隔离（D10）
 - [ ] 两个 backend 共用同一个 `ARGON_HOME` 时（例如 `npm run dev` 和 `npm run smoke` 同时跑），启动时会并发安装 settings 里的 pi 包，npm 报 `ENOTEMPTY`。可考虑给包安装加锁，或冒烟默认用独立的 `ARGON_HOME`
 - [ ] 已卸载且不是当前查看的会话被删除后，前端 mirror 里仍保留它的旧状态，直到刷新页面（不影响显示，只占内存）
+
+- [ ] 桌面打包：Windows/Linux 尚未实机验证；当前全部运行时依赖解包，后续缩减体积时需保留 worker、WASM、动态扩展及子进程路径兼容性（D14）
+
+- [x] Windows 桌面基础适配：按平台/架构定位冒烟可执行文件，动态 ESM 导入使用 file URL；fd 补全支持 Windows PATH 与 .exe；Web dev runner 通过 Node 启动 npm JS 入口，避免直接 spawn npm.cmd；NSIS 按用户安装；补充 PowerShell 使用说明和 Windows 打包冒烟 CI
+- [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出和安装/卸载；Windows CI 尚未在本轮运行
