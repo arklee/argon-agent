@@ -70,6 +70,7 @@ void i18n.use(initReactI18next).init({
 	supportedLngs: ["en", "zh-CN"],
 	initAsync: false,
 	interpolation: { escapeValue: false },
+	showSupportNotice: false,
 });
 
 if (typeof window !== "undefined") {

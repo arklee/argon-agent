@@ -51,7 +51,7 @@ function ThinkingPicker({ session }: { session: SessionState }) {
 				<SelectGroup>
 					<SelectLabel>{t("chat.thinking")}</SelectLabel>
 					{session.availableThinkingLevels.map((level) => (
-						<SelectItem key={thinkingLevelLabel(level, t)} value={thinkingLevelLabel(level, t)}>
+						<SelectItem key={level} value={level}>
 							{thinkingLevelLabel(level, t)}
 						</SelectItem>
 					))}
