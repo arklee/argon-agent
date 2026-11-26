@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { DiffStat } from "@/components/DiffView";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { displayFor, rendererFor, type ToolView } from "@/tools";
+import { childToolsOf, displayFor, rendererFor, type ToolView } from "@/tools";
 
 function StatusIcon({ status }: { status: ToolCallState["status"] }) {
 	switch (status) {
@@ -30,7 +30,9 @@ export function ToolCallCard({
 	display,
 	source,
 	tool,
+	tools,
 	awaitingApproval,
+	nested = false,
 }: {
 	toolCallId: string;
 	name: string;
@@ -39,7 +41,11 @@ export function ToolCallCard({
 	display?: ToolDisplay;
 	source?: string;
 	tool: ToolCallState | undefined;
+	/** The row's tool states, including nested calls (looked up by parent id). */
+	tools?: Record<string, ToolCallState>;
 	awaitingApproval?: boolean;
+	/** Rendered inside another call's card. */
+	nested?: boolean;
 }) {
 	const { t } = useTranslation();
 	const [openState, setOpen] = useState<boolean>();
@@ -48,6 +54,25 @@ export function ToolCallCard({
 	// Small diffs start expanded, like a code review; everything else starts collapsed.
 	const open = openState ?? (diff !== undefined && diff.split("\n").length <= 40 && status !== "blocked");
 	const effectiveArgs = tool?.args ?? args;
+	const children = tools ? childToolsOf(tools, toolCallId) : [];
+	const renderChildren = () =>
+		children.length > 0 ? (
+			<div className="space-y-1.5">
+				{children.map((child) => (
+					<ToolCallCard
+						key={child.toolCallId}
+						toolCallId={child.toolCallId}
+						name={child.name}
+						args={child.args}
+						display={child.display}
+						source={child.source}
+						tool={child}
+						tools={tools}
+						nested
+					/>
+				))}
+			</div>
+		) : null;
 	const view: ToolView = {
 		toolCallId,
 		name,
@@ -55,13 +80,15 @@ export function ToolCallCard({
 		display: displayFor(name, effectiveArgs, display, argsText),
 		args: effectiveArgs,
 		tool,
+		children,
+		renderChildren,
 	};
 	const renderer = rendererFor(view);
 	const summary = renderer.summary?.(view) ?? view.display.summary ?? "";
-	const hasDetails = Boolean(tool?.output) || effectiveArgs !== undefined;
+	const hasDetails = Boolean(tool?.output) || effectiveArgs !== undefined || children.length > 0;
 
 	return (
-		<div className="my-2 overflow-hidden rounded-lg border bg-card text-sm">
+		<div className={cn("overflow-hidden rounded-lg border text-sm", nested ? "bg-background" : "my-2 bg-card")}>
 			<button
 				type="button"
 				onClick={() => hasDetails && setOpen(!open)}
@@ -74,6 +101,11 @@ export function ToolCallCard({
 				)}
 				<span className="font-medium">{view.display.title || name}</span>
 				<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
+				{children.length > 0 && (
+					<span className="shrink-0 text-xs text-muted-foreground">
+						{t("tools.nestedCount", { count: children.length })}
+					</span>
+				)}
 				{diff && <DiffStat diff={diff} />}
 				{awaitingApproval && (
 					<span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">{t("tools.waitingApproval")}</span>
@@ -88,6 +120,7 @@ export function ToolCallCard({
 			{open && (
 				<div className="space-y-2 border-t bg-muted/30 px-3 py-2">
 					<renderer.Body view={view} />
+					{!renderer.placesChildren && renderChildren()}
 				</div>
 			)}
 		</div>

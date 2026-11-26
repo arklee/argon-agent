@@ -1,4 +1,4 @@
-import type { AssistantBlock, BranchPoint, SessionState, TranscriptItem } from "@argon/shared";
+import type { AssistantBlock, BranchPoint, SessionState, ToolCallState, TranscriptItem } from "@argon/shared";
 import {
 	Brain,
 	ChevronLeft,
@@ -77,6 +77,7 @@ function AssistantBlocks({
 								args={block.args}
 								argsText={block.argsText}
 								tool={tools[block.toolCallId]}
+								tools={tools}
 								awaitingApproval={pendingApprovals.has(block.toolCallId)}
 							/>
 						);
@@ -280,14 +281,27 @@ const Item = memo(
 		prev.branch?.count === next.branch?.count &&
 		prev.regenerateFrom === next.regenerateFrom &&
 		prev.pendingApprovals === next.pendingApprovals &&
-		(next.item.kind !== "assistant" ||
-			next.item.blocks.every(
-				(block) => block.type !== "toolCall" || prev.tools[block.toolCallId] === next.tools[block.toolCallId],
-			)),
+		sameTools(prev.tools, next.tools),
 );
+
+/** The row's tools (its calls and their nested calls) are unchanged. */
+function sameTools(a: SessionState["tools"], b: SessionState["tools"]): boolean {
+	const keys = Object.keys(b);
+	return keys.length === Object.keys(a).length && keys.every((key) => a[key] === b[key]);
+}
 
 export function Transcript({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
+	const nestedByParent = useMemo(() => {
+		const byParent = new Map<string, ToolCallState[]>();
+		for (const tool of Object.values(session.tools)) {
+			if (!tool.parentToolCallId) continue;
+			const list = byParent.get(tool.parentToolCallId);
+			if (list) list.push(tool);
+			else byParent.set(tool.parentToolCallId, [tool]);
+		}
+		return byParent;
+	}, [session.tools]);
 	const branches = useMemo(() => {
 		const points = new Map<string, BranchPoint>();
 		if (session.userBranches?.length) {
@@ -348,11 +362,12 @@ export function Transcript({ session }: { session: SessionState }) {
 					const item = session.items[index];
 					const tools: SessionState["tools"] = Object.create(null);
 					if (item?.kind === "assistant") {
-						for (const block of item.blocks) {
-							if (block.type !== "toolCall") continue;
-							const tool = session.tools[block.toolCallId];
-							if (tool) tools[block.toolCallId] = tool;
-						}
+						const add = (toolCallId: string) => {
+							const tool = session.tools[toolCallId];
+							if (tool) tools[toolCallId] = tool;
+							for (const child of nestedByParent.get(toolCallId) ?? []) add(child.toolCallId);
+						};
+						for (const block of item.blocks) if (block.type === "toolCall") add(block.toolCallId);
 					}
 					// Adjacent message margins used to collapse. Include the shared gap in one measured row.
 					const smallGap = item?.kind === "notice" && (index === 0 || session.items[index - 1]?.kind === "notice");

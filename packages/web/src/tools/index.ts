@@ -1,6 +1,7 @@
 import "./renderers";
 
 export {
+	childToolsOf,
 	compactArgs,
 	displayFor,
 	findToolCallBlock,

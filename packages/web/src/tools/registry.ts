@@ -6,7 +6,7 @@
  */
 
 import type { AssistantBlock, ToolCallState, ToolDisplay, TranscriptItem } from "@argon/shared";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 /** Everything a renderer may need about one call. */
 export interface ToolView {
@@ -17,6 +17,10 @@ export interface ToolView {
 	args: unknown;
 	/** Execution state; absent until the call starts. */
 	tool?: ToolCallState;
+	/** Calls this one made (e.g. from a codemode script), in order. */
+	children: ToolCallState[];
+	/** Renders `children` as nested cards; renderers that set `placesChildren` call it themselves. */
+	renderChildren: () => ReactNode;
 }
 
 export interface ToolRenderer {
@@ -26,6 +30,8 @@ export interface ToolRenderer {
 	Body: ComponentType<{ view: ToolView }>;
 	/** What the approval card shows before the call runs. `diff` is the backend's preview, if any. */
 	Preview?: ComponentType<{ view: ToolView; diff?: string }>;
+	/** Body places the nested calls itself (via view.renderChildren); otherwise the card appends them. */
+	placesChildren?: boolean;
 }
 
 const kindRenderers = new Map<string, ToolRenderer>();
@@ -87,4 +93,13 @@ export function findToolCallBlock(items: readonly TranscriptItem[], toolCallId: 
 		}
 	}
 	return undefined;
+}
+
+/** Nested calls of `toolCallId`, ordered by their `<parent>/<n>` suffix. */
+export function childToolsOf(tools: Record<string, ToolCallState>, toolCallId: string): ToolCallState[] {
+	const prefix = `${toolCallId}/`;
+	const order = (tool: ToolCallState) => Number(tool.toolCallId.slice(prefix.length).split("/")[0]);
+	return Object.values(tools)
+		.filter((tool) => tool.parentToolCallId === toolCallId)
+		.sort((a, b) => order(a) - order(b) || a.toolCallId.localeCompare(b.toolCallId));
 }

@@ -6,6 +6,7 @@
 import type { ToolDisplay } from "@argon/shared";
 import { DiffView } from "@/components/DiffView";
 import { SessionImages } from "@/components/Images";
+import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { registerKindRenderer, type ToolView } from "./registry";
@@ -59,8 +60,15 @@ function ShellCommand({ command }: { command: string }) {
 	);
 }
 
+/** Script source with syntax highlighting (a fenced block longer than any fence inside the code). */
 function ScriptSource({ display }: { display: DisplayOf<"script"> }) {
-	return <pre className={cn(codeBlock, "max-h-80")}>{display.source}</pre>;
+	const longest = Math.max(2, ...[...display.source.matchAll(/`+/g)].map((m) => m[0].length));
+	const fence = "`".repeat(longest + 1);
+	return (
+		<div className="max-h-80 overflow-auto text-xs [&_.argon-markdown]:my-0">
+			<Markdown text={`${fence}${display.language}\n${display.source}\n${fence}`} />
+		</div>
+	);
 }
 
 /** Any kind can carry a diff (e.g. from an older backend without display); show it rather than drop it. */
@@ -97,9 +105,11 @@ registerKindRenderer("search", {
 });
 
 registerKindRenderer("script", {
+	placesChildren: true,
 	Body: ({ view }) => (
 		<>
 			<ScriptSource display={view.display as DisplayOf<"script">} />
+			{view.renderChildren()}
 			<Output view={view} />
 		</>
 	),

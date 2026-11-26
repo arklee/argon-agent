@@ -419,7 +419,8 @@ export const zhCN = {
 		xhigh: "极高",
 	},
 	tools: {
-		patternInPath: "在 {{path}} 中匹配 {{pattern}}",
+		nestedCount_one: "{{count, number}} 次调用",
+		nestedCount_other: "{{count, number}} 次调用",
 		waitingApproval: "等待审批",
 	},
 	trust: {

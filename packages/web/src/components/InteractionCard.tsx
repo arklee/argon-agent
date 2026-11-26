@@ -71,6 +71,8 @@ export function InteractionCard({
 				source: toolCall?.source,
 				display: displayFor(interaction.toolName, interaction.args, toolCall?.display),
 				args: interaction.args,
+				children: [],
+				renderChildren: () => null,
 			};
 			const renderer = rendererFor(view);
 			const summary = renderer.summary?.(view) ?? view.display.summary ?? "";

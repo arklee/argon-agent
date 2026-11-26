@@ -419,7 +419,8 @@ export const en = {
 		xhigh: "Extra high",
 	},
 	tools: {
-		patternInPath: "{{pattern}}  in  {{path}}",
+		nestedCount_one: "{{count, number}} call",
+		nestedCount_other: "{{count, number}} calls",
 		waitingApproval: "Waiting for approval",
 	},
 	trust: {
