@@ -1,6 +1,7 @@
 import type { Interaction, InteractionResponse, PermissionRule } from "@argon/shared";
 import { ExternalLink, ShieldQuestion } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { DiffView } from "@/components/DiffView";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +15,7 @@ export function InteractionCard({
 	interaction: Interaction;
 	onRespond: (response: InteractionResponse) => void;
 }) {
+	const { t } = useTranslation();
 	const [text, setText] = useState(interaction.kind === "editor" ? (interaction.prefill ?? "") : "");
 
 	const frame = (title: string, body: ReactNode, actions: ReactNode) => (
@@ -30,25 +32,31 @@ export function InteractionCard({
 	const approvalActions = (toolName: string, rule: PermissionRule | undefined) => (
 		<>
 			<Button variant="ghost" size="sm" onClick={() => onRespond({ decision: "deny" })}>
-				Deny
+				{t("approval.deny")}
 			</Button>
 			<div className="flex-1" />
 			{rule && (
 				<Button
 					variant="ghost"
 					size="sm"
-					title="Saved to Permissions settings; applies to every session on this backend"
+					title={t("approval.ruleDescription")}
 					onClick={() => onRespond({ decision: "allow_always", rule })}
 				>
-					Always allow{" "}
-					{rule.command !== undefined ? <code className="font-mono text-xs">{rule.command}</code> : rule.tool}
+					<Trans
+						t={t}
+						i18nKey="approval.alwaysAllow"
+						shouldUnescape
+						tOptions={{ interpolation: { escapeValue: true } }}
+						values={{ rule: rule.command ?? rule.tool }}
+						components={{ rule: <code className="font-mono text-xs" /> }}
+					/>
 				</Button>
 			)}
 			<Button variant="outline" size="sm" onClick={() => onRespond({ decision: "allow_session" })}>
-				Allow {toolName} for this session
+				{t("approval.allowSession", { tool: toolName })}
 			</Button>
 			<Button size="sm" onClick={() => onRespond({ decision: "allow" })} autoFocus>
-				Allow
+				{t("approval.allow")}
 			</Button>
 		</>
 	);
@@ -58,13 +66,13 @@ export function InteractionCard({
 			const summary = summarizeToolArgs(interaction.toolName, interaction.args);
 			if (interaction.diff) {
 				return frame(
-					`Allow ${interaction.toolName} ${summary}?`,
+					t("approval.questionWithSummary", { tool: interaction.toolName, summary }),
 					<DiffView diff={interaction.diff} className="max-h-80" />,
 					approvalActions(interaction.toolName, interaction.suggestedRule),
 				);
 			}
 			return frame(
-				`Allow ${interaction.toolName}?`,
+				t("approval.question", { tool: interaction.toolName }),
 				<pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap break-all">
 					{summary || JSON.stringify(interaction.args, null, 2)}
 				</pre>,
@@ -77,10 +85,10 @@ export function InteractionCard({
 				<p className="text-sm whitespace-pre-wrap text-muted-foreground">{interaction.message}</p>,
 				<>
 					<Button variant="ghost" size="sm" onClick={() => onRespond({ confirmed: false })}>
-						No
+						{t("common.no")}
 					</Button>
 					<Button size="sm" onClick={() => onRespond({ confirmed: true })} autoFocus>
-						Yes
+						{t("common.yes")}
 					</Button>
 				</>,
 			);
@@ -90,7 +98,7 @@ export function InteractionCard({
 				null,
 				<>
 					<Button variant="ghost" size="sm" onClick={() => onRespond({ cancelled: true })}>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 					{interaction.options.map((option) => (
 						<Button key={option} variant="outline" size="sm" onClick={() => onRespond({ value: option })}>
@@ -103,28 +111,25 @@ export function InteractionCard({
 			return frame(
 				interaction.title,
 				<div className="space-y-2 text-sm text-muted-foreground">
-					<p>
-						Open the sign-in page and finish signing in. If the page you land on does not load (for example when the
-						agent runs on another machine), paste its full URL here.
-					</p>
+					<p>{t("approval.redirectInstructions")}</p>
 					<Textarea
 						value={text}
 						onChange={(e) => setText(e.target.value)}
-						placeholder="Redirect URL (optional)"
+						placeholder={t("approval.redirectPlaceholder")}
 						className="min-h-12 font-mono text-xs"
 					/>
 				</div>,
 				<>
 					<Button variant="ghost" size="sm" onClick={() => onRespond({ cancelled: true })}>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 					<Button variant="outline" size="sm" disabled={!text.trim()} onClick={() => onRespond({ value: text.trim() })}>
-						Submit URL
+						{t("approval.submitUrl")}
 					</Button>
 					<Button size="sm" asChild autoFocus>
 						<a href={interaction.url} target="_blank" rel="noopener noreferrer">
 							<ExternalLink />
-							Open sign-in page
+							{t("common.openSignIn")}
 						</a>
 					</Button>
 				</>,
@@ -142,10 +147,10 @@ export function InteractionCard({
 				/>,
 				<>
 					<Button variant="ghost" size="sm" onClick={() => onRespond({ cancelled: true })}>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 					<Button size="sm" onClick={() => onRespond({ value: text })}>
-						Submit
+						{t("common.submit")}
 					</Button>
 				</>,
 			);

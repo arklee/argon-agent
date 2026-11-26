@@ -1,6 +1,7 @@
 import type { ImageData } from "@argon/shared";
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { IMAGE_TYPES, readFileAsBase64, Thumbnail, toDataUrl } from "@/components/Images";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export function fileReference(path: string): string {
  * agent reads files there and the browser cannot hand over local paths.
  */
 export function useAttachments(insertText: (text: string) => void) {
+	const { t } = useTranslation();
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [uploading, setUploading] = useState(0);
 
@@ -33,14 +35,11 @@ export function useAttachments(insertText: (text: string) => void) {
 			for (const file of files) {
 				try {
 					if (IMAGE_TYPES.has(file.type)) {
-						if (file.size > MAX_IMAGE_BYTES) throw new Error(`${file.name} is larger than 20 MB`);
+						if (file.size > MAX_IMAGE_BYTES) throw new Error(t("attachments.tooLarge", { file: file.name, limit: 20 }));
 						const data = await readFileAsBase64(file);
-						setImages((list) => [
-							...list,
-							{ id: crypto.randomUUID(), name: file.name || "image", mimeType: file.type, data },
-						]);
+						setImages((list) => [...list, { id: crypto.randomUUID(), name: file.name, mimeType: file.type, data }]);
 					} else {
-						if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} is larger than 25 MB`);
+						if (file.size > MAX_FILE_BYTES) throw new Error(t("attachments.tooLarge", { file: file.name, limit: 25 }));
 						setUploading((n) => n + 1);
 						try {
 							const data = await readFileAsBase64(file);
@@ -55,7 +54,7 @@ export function useAttachments(insertText: (text: string) => void) {
 				}
 			}
 		},
-		[insertText],
+		[insertText, t],
 	);
 
 	return {
@@ -76,6 +75,7 @@ export function AttachmentStrip({
 	uploading: boolean;
 	onRemove: (id: string) => void;
 }) {
+	const { t } = useTranslation();
 	if (images.length === 0 && !uploading) return null;
 	return (
 		<div className="flex flex-wrap items-center gap-2 px-3 pt-3">
@@ -85,7 +85,7 @@ export function AttachmentStrip({
 					<Button
 						variant="secondary"
 						size="icon-xs"
-						title={`Remove ${image.name}`}
+						title={t("attachments.remove", { file: image.name || t("images.alt") })}
 						onClick={() => onRemove(image.id)}
 						className="absolute -top-1.5 -right-1.5 size-5 rounded-full opacity-0 shadow group-hover:opacity-100 focus-visible:opacity-100"
 					>
@@ -93,7 +93,7 @@ export function AttachmentStrip({
 					</Button>
 				</div>
 			))}
-			{uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
+			{uploading && <span className="text-xs text-muted-foreground">{t("attachments.uploading")}</span>}
 		</div>
 	);
 }

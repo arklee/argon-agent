@@ -1,6 +1,7 @@
 import type { SessionSummary } from "@argon/shared";
 import { Ellipsis, FolderOpen, FolderPlus, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +66,7 @@ function SessionRow({ session }: { session: SessionSummary }) {
 }
 
 export function Sidebar() {
+	const { t } = useTranslation();
 	const sessions = useApp((s) => s.sessions);
 	const environment = useApp((s) => s.environment);
 	const connection = useApp((s) => s.connection);
@@ -88,36 +90,36 @@ export function Sidebar() {
 							<Button
 								variant="ghost"
 								size="icon-sm"
-								aria-label="Add project"
+								aria-label={t("common.addProject")}
 								onClick={() => setAddProjectOpen(true)}
 								disabled={!environment}
 							>
 								<FolderPlus />
 							</Button>
 						</TooltipTrigger>
-						<TooltipContent>Add project</TooltipContent>
+						<TooltipContent>{t("common.addProject")}</TooltipContent>
 					</Tooltip>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
 								variant="ghost"
 								size="icon-sm"
-								aria-label="New session"
+								aria-label={t("common.newSession")}
 								onClick={() => void newSession()}
 								disabled={!environment}
 							>
 								<SquarePen />
 							</Button>
 						</TooltipTrigger>
-						<TooltipContent>New session in the current project ({shortcutLabels.newSession})</TooltipContent>
+						<TooltipContent>{t("sidebar.newSessionShortcut", { shortcut: shortcutLabels.newSession })}</TooltipContent>
 					</Tooltip>
 				</div>
 			</div>
 
 			<div className="px-3 pb-3">
 				<Input
-					aria-label="Search sessions"
-					placeholder="Search sessions"
+					aria-label={t("sidebar.search")}
+					placeholder={t("sidebar.search")}
 					value={search}
 					onChange={(e) => useApp.setState({ search: e.target.value })}
 					onKeyDown={(e) => {
@@ -129,10 +131,10 @@ export function Sidebar() {
 				{groups.length === 0 && (
 					<div className="flex flex-col items-center px-2 py-6 text-center text-sm text-muted-foreground">
 						{search ? (
-							"No matching sessions"
+							t("sidebar.noMatch")
 						) : (
 							<>
-								No projects yet.
+								{t("sidebar.noProjects")}
 								<Button
 									variant="outline"
 									size="sm"
@@ -141,7 +143,7 @@ export function Sidebar() {
 									disabled={!environment}
 								>
 									<FolderPlus />
-									Add project
+									{t("common.addProject")}
 								</Button>
 							</>
 						)}
@@ -161,20 +163,24 @@ export function Sidebar() {
 							<div className="ml-auto flex items-center">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button variant="ghost" size="icon-xs" aria-label={`Actions for ${group.cwd}`}>
+										<Button
+											variant="ghost"
+											size="icon-xs"
+											aria-label={t("sidebar.projectActions", { path: group.cwd })}
+										>
 											<Ellipsis />
 										</Button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent align="end">
 										<DropdownMenuItem onSelect={() => void updateProject({ cwd: group.cwd, pinned: !group.pinned })}>
-											{group.pinned ? "Unpin" : "Pin"}
+											{group.pinned ? t("sidebar.unpin") : t("sidebar.pin")}
 										</DropdownMenuItem>
 										<DropdownMenuItem onSelect={() => void updateProject({ cwd: group.cwd, hidden: !group.hidden })}>
-											{group.hidden ? "Unhide" : "Hide project"}
+											{group.hidden ? t("sidebar.unhide") : t("sidebar.hide")}
 										</DropdownMenuItem>
 										{group.addedAt !== undefined && group.sessions.length === 0 && !search && (
 											<DropdownMenuItem onSelect={() => void updateProject({ cwd: group.cwd, addedAt: 0 })}>
-												Remove project
+												{t("sidebar.remove")}
 											</DropdownMenuItem>
 										)}
 									</DropdownMenuContent>
@@ -182,7 +188,7 @@ export function Sidebar() {
 								<Button
 									variant="ghost"
 									size="icon-xs"
-									aria-label={`New session in ${group.cwd}`}
+									aria-label={t("sidebar.newInProject", { path: group.cwd })}
 									className="opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100"
 									onClick={() => void newSession(group.cwd)}
 								>
@@ -191,7 +197,7 @@ export function Sidebar() {
 							</div>
 						</div>
 						{group.sessions.length === 0 && (
-							<p className="px-2 pb-1 text-xs text-muted-foreground/70">No sessions yet</p>
+							<p className="px-2 pb-1 text-xs text-muted-foreground/70">{t("sidebar.noSessions")}</p>
 						)}
 						<ul>
 							{group.sessions.map((session) => (
@@ -207,7 +213,7 @@ export function Sidebar() {
 						aria-expanded={showHidden}
 						onClick={() => useApp.setState({ showHidden: !showHidden })}
 					>
-						{showHidden ? "Hide" : "Show"} {hidden} hidden {hidden === 1 ? "project" : "projects"}
+						{t(showHidden ? "sidebar.hideHidden" : "sidebar.showHidden", { count: hidden })}
 					</Button>
 				)}
 			</nav>
@@ -222,13 +228,13 @@ export function Sidebar() {
 						"size-2 rounded-full",
 						connection?.status === "connected" ? "bg-emerald-500" : "animate-pulse bg-amber-500",
 					)}
-					title={connection?.status}
+					title={connection && t(`connection.status.${connection.status}`)}
 				/>
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					aria-label="Settings"
-					title={`Settings (${shortcutLabels.settings})`}
+					aria-label={t("settings.title")}
+					title={t("sidebar.settingsShortcut", { shortcut: shortcutLabels.settings })}
 					disabled={!environment}
 					onClick={() => openSettings()}
 				>

@@ -1,6 +1,7 @@
 import type { SessionState } from "@argon/shared";
 import { ArrowUp, Paperclip, Pencil, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AttachmentStrip, useAttachments } from "@/components/Attachments";
 import { hasMcpPanel } from "@/components/McpPanel";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
 export function Composer({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const [text, setText] = useState("");
 	const draft = useApp((s) => s.composerDrafts[session.sessionId]);
 	useEffect(() => {
@@ -80,7 +82,7 @@ export function Composer({ session }: { session: SessionState }) {
 		}
 		const builtin = matchBuiltin(value, extensionNames);
 		if (builtin?.kind === "unsupported") {
-			toast.warning(`/${builtin.name} is a pi terminal command and is not available in Argon yet`);
+			toast.warning(t("composer.unsupportedCommand", { command: builtin.name }));
 			return;
 		}
 		if (builtin?.kind === "argon") {
@@ -88,7 +90,7 @@ export function Composer({ session }: { session: SessionState }) {
 			if (builtin.name === "compact") void compact(builtin.argument);
 			else if (builtin.name === "name") {
 				if (builtin.argument) void renameSession(builtin.argument);
-				else toast.warning("Usage: /name <session name>");
+				else toast.warning(t("composer.nameUsage"));
 			} else if (builtin.name === "new") void createSession(session.cwd).catch(() => undefined);
 			return;
 		}
@@ -115,7 +117,7 @@ export function Composer({ session }: { session: SessionState }) {
 				<div className="mb-2 flex items-start gap-2 rounded-xl border bg-muted/40 px-3 py-2">
 					<div className="min-w-0 flex-1 space-y-0.5">
 						<div className="text-xs font-medium text-muted-foreground">
-							Queued · sent when the agent {session.queue.steering.length > 0 ? "can take it" : "finishes"}
+							{session.queue.steering.length > 0 ? t("composer.queuedSteering") : t("composer.queuedFollowUp")}
 						</div>
 						{queued.map((q, i) => (
 							<div
@@ -131,7 +133,7 @@ export function Composer({ session }: { session: SessionState }) {
 					<Button
 						variant="ghost"
 						size="xs"
-						title="Move queued messages back into the input"
+						title={t("composer.restoreQueue")}
 						onClick={async () => {
 							const restored = await clearQueue();
 							if (restored.length === 0) return;
@@ -140,9 +142,9 @@ export function Composer({ session }: { session: SessionState }) {
 						}}
 					>
 						<Pencil />
-						Edit
+						{t("composer.editQueue")}
 					</Button>
-					<Button variant="ghost" size="icon-xs" title="Discard queued messages" onClick={() => void clearQueue()}>
+					<Button variant="ghost" size="icon-xs" title={t("composer.discardQueue")} onClick={() => void clearQueue()}>
 						<X />
 					</Button>
 				</div>
@@ -235,7 +237,7 @@ export function Composer({ session }: { session: SessionState }) {
 						}
 					}}
 					rows={1}
-					placeholder={running ? "Queue a follow-up… (⌥↵ to steer)" : "Ask Argon…"}
+					placeholder={running ? t("composer.queueFollowUp") : t("composer.placeholder")}
 					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] outline-none placeholder:text-muted-foreground"
 					autoFocus
 				/>
@@ -248,7 +250,7 @@ export function Composer({ session }: { session: SessionState }) {
 							variant="ghost"
 							size="icon-sm"
 							className="rounded-full text-muted-foreground"
-							title="Attach images or files"
+							title={t("composer.attach")}
 							onClick={() => fileInput.current?.click()}
 						>
 							<Paperclip />
@@ -259,7 +261,7 @@ export function Composer({ session }: { session: SessionState }) {
 								size="icon-sm"
 								className="rounded-full"
 								onClick={() => void abort()}
-								title="Stop (Esc)"
+								title={t("composer.stop")}
 							>
 								<Square className="fill-current" />
 							</Button>
@@ -271,7 +273,7 @@ export function Composer({ session }: { session: SessionState }) {
 								!connected || (!text.trim() && attachments.images.length === 0) || sending || attachments.uploading
 							}
 							onClick={() => void submit()}
-							title="Send"
+							title={t("common.send")}
 						>
 							<ArrowUp />
 						</Button>

@@ -11,6 +11,7 @@ import {
 	TerminalSquare,
 } from "lucide-react";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
 function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
+	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	return (
 		<div className="my-2">
@@ -30,7 +32,7 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }
 				className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
 			>
 				<Brain className={cn("size-3.5", streaming && "animate-pulse")} />
-				{streaming ? "Thinking…" : "Thought"}
+				{streaming ? t("chat.thinkingInProgress") : t("chat.thought")}
 				<ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
 			</button>
 			{open && <div className="mt-1.5 border-l-2 pl-3 text-sm whitespace-pre-wrap text-muted-foreground">{text}</div>}
@@ -116,6 +118,7 @@ function UserMessage({
 	item: Extract<TranscriptItem, { kind: "user" }>;
 	canEdit: boolean;
 }) {
+	const { t } = useTranslation();
 	const editMessage = useApp((s) => s.editMessage);
 	const sessionId = useApp((s) => s.activeSessionId);
 	const switchBranch = useApp((s) => s.switchBranch);
@@ -150,14 +153,14 @@ function UserMessage({
 				{branch && sessionId && (
 					<div className="flex items-center text-xs tabular-nums text-muted-foreground">
 						<IconAction
-							title="Previous branch"
+							title={t("chat.previousBranch")}
 							icon={ChevronLeft}
 							disabled={!canEdit || branch.index === 0}
 							onClick={() => void switchBranch(sessionId, item.id, -1)}
 						/>
 						{branch.index + 1} / {branch.count}
 						<IconAction
-							title="Next branch"
+							title={t("chat.nextBranch")}
 							icon={ChevronRight}
 							disabled={!canEdit || branch.index + 1 >= branch.count}
 							onClick={() => void switchBranch(sessionId, item.id, 1)}
@@ -167,10 +170,10 @@ function UserMessage({
 				<div className="flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 					<CopyButton text={item.text} />
 					{sessionId && (
-						<IconAction title="Fork from here" icon={GitFork} onClick={() => void forkMessage(sessionId, item.id)} />
+						<IconAction title={t("chat.fork")} icon={GitFork} onClick={() => void forkMessage(sessionId, item.id)} />
 					)}
 					<IconAction
-						title={canEdit ? "Edit and resend" : "Wait for the current turn to finish"}
+						title={canEdit ? t("chat.editAndResend") : t("chat.waitForTurn")}
 						icon={Pencil}
 						disabled={!canEdit}
 						onClick={() => setEditing(true)}
@@ -182,17 +185,18 @@ function UserMessage({
 }
 
 function RequestFailure({ message, retry }: { message?: string; retry?: () => void }) {
+	const { t } = useTranslation();
 	const detail = <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs">{message}</pre>;
 	return (
 		<div className="mt-2 space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
 			<div className="flex items-center gap-2 font-medium">
 				<CircleAlert className="size-4 text-destructive" />
-				The request failed
+				{t("chat.requestFailed")}
 			</div>
 			{message &&
 				(message.length > 160 || message.split("\n").length > 2 ? (
 					<details>
-						<summary className="cursor-pointer">Error details</summary>
+						<summary className="cursor-pointer">{t("chat.errorDetails")}</summary>
 						{detail}
 					</details>
 				) : (
@@ -201,7 +205,7 @@ function RequestFailure({ message, retry }: { message?: string; retry?: () => vo
 			{retry && (
 				<Button variant="outline" size="sm" onClick={retry}>
 					<RotateCcw />
-					Retry
+					{t("chat.retry")}
 				</Button>
 			)}
 		</div>
@@ -226,6 +230,7 @@ const Item = memo(
 		/** For the last reply: the user item to resend to regenerate it. */
 		regenerateFrom?: Extract<TranscriptItem, { kind: "user" }>;
 	}) {
+		const { t } = useTranslation();
 		const editMessage = useApp((s) => s.editMessage);
 		const regenerate = regenerateFrom
 			? () => void editMessage(regenerateFrom.id, regenerateFrom.text).catch(() => undefined)
@@ -248,13 +253,15 @@ const Item = memo(
 						{item.stopReason === "aborted" && (
 							<span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
 								<CircleStop className="size-3" />
-								Stopped by you
+								{t("chat.stopped")}
 							</span>
 						)}
 						{!item.streaming && (
 							<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 								<CopyButton text={assistantText(item.blocks)} />
-								{regenerate && !failed && <IconAction title="Regenerate" icon={RotateCcw} onClick={regenerate} />}
+								{regenerate && !failed && (
+									<IconAction title={t("chat.regenerate")} icon={RotateCcw} onClick={regenerate} />
+								)}
 							</div>
 						)}
 					</div>
@@ -277,6 +284,7 @@ const Item = memo(
 );
 
 export function Transcript({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const branches = useMemo(() => {
 		const points = new Map<string, BranchPoint>();
 		if (session.userBranches?.length) {
@@ -317,8 +325,12 @@ export function Transcript({ session }: { session: SessionState }) {
 	}, [count]);
 	useLayoutEffect(follow, [follow]);
 	return (
-		// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
-		<section aria-label="Transcript" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+		<section
+			aria-label={t("chat.transcript")}
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
+			tabIndex={0}
+			className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
+		>
 			<Virtualizer
 				data={{ length: count }}
 				ref={list}
@@ -365,15 +377,23 @@ export function Transcript({ session }: { session: SessionState }) {
 									role="status"
 									className="rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
 								>
-									<strong>
-										Retrying ({session.retry.attempt}/{session.retry.maxAttempts})…
-									</strong>{" "}
-									{session.retry.errorMessage.split("\n")[0]}
+									<Trans
+										t={t}
+										i18nKey="chat.retryStatus"
+										shouldUnescape
+										tOptions={{ interpolation: { escapeValue: true } }}
+										values={{
+											attempt: session.retry.attempt,
+											max: session.retry.maxAttempts,
+											error: session.retry.errorMessage.split("\n")[0],
+										}}
+										components={{ emphasis: <strong /> }}
+									/>
 								</div>
 							) : (
 								<div className="flex items-center gap-2 text-sm text-muted-foreground">
 									<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
-									{session.compacting ? "Compacting context…" : "Working…"}
+									{session.compacting ? t("chat.compacting") : t("chat.working")}
 								</div>
 							)}
 						</div>

@@ -1,6 +1,7 @@
 import type { PermissionRule, PiSettings, ResourceSettings } from "@argon/shared";
 import { FolderTree, KeyRound, type LucideIcon, Puzzle, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
@@ -10,32 +11,34 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
+import { formatNumber, thinkingLevelLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { type SettingsSection, useSettings } from "@/stores/settings";
 
-const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
-	{ id: "general", label: "General", icon: SlidersHorizontal },
-	{ id: "accounts", label: "Providers", icon: KeyRound },
-	{ id: "permissions", label: "Permissions", icon: ShieldCheck },
-	{ id: "plugins", label: "Plugins", icon: Puzzle },
-	{ id: "resources", label: "Resources", icon: FolderTree },
+const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
+	{ id: "general", icon: SlidersHorizontal },
+	{ id: "accounts", icon: KeyRound },
+	{ id: "permissions", icon: ShieldCheck },
+	{ id: "plugins", icon: Puzzle },
+	{ id: "resources", icon: FolderTree },
 ];
 
 export function SettingsDialog() {
+	const { t } = useTranslation();
 	const open = useSettings((s) => s.open);
 	const section = useSettings((s) => s.section);
 	const setSection = useSettings((s) => s.setSection);
 	const close = useSettings((s) => s.close);
 	const environment = useApp((s) => s.environment);
-	const current = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0];
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && close()}>
 			<DialogContent className="flex h-[min(720px,88vh)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
 				<nav className="flex w-52 shrink-0 flex-col gap-0.5 border-r bg-muted/40 p-3">
-					<DialogTitle className="px-2 pt-1 pb-3 text-base">Settings</DialogTitle>
-					{SECTIONS.map(({ id, label, icon: Icon }) => (
+					<DialogTitle className="px-2 pt-1 pb-3 text-base">{t("settings.title")}</DialogTitle>
+					{SECTIONS.map(({ id, icon: Icon }) => (
 						<button
 							key={id}
 							type="button"
@@ -47,20 +50,20 @@ export function SettingsDialog() {
 							)}
 						>
 							<Icon className="size-4" />
-							{label}
+							{t(`settings.${id}.title`)}
 						</button>
 					))}
 					<div className="flex-1" />
 					{environment && (
 						<p className="truncate px-2 text-xs text-muted-foreground" title={environment.homeDir}>
-							Backend: {environment.name}
+							{t("settings.backend", { name: environment.name })}
 						</p>
 					)}
 				</nav>
 				<div className="flex min-w-0 flex-1 flex-col">
 					<header className="border-b px-6 py-4 pr-12">
-						<h2 className="text-base font-semibold">{current?.label}</h2>
-						<DialogDescription className="text-xs">{DESCRIPTIONS[section]}</DialogDescription>
+						<h2 className="text-base font-semibold">{t(`settings.${section}.title`)}</h2>
+						<DialogDescription className="text-xs">{t(`settings.${section}.description`)}</DialogDescription>
 					</header>
 					<div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
 						{section === "general" && <GeneralSection />}
@@ -74,14 +77,6 @@ export function SettingsDialog() {
 		</Dialog>
 	);
 }
-
-const DESCRIPTIONS: Record<SettingsSection, string> = {
-	general: "Defaults for new sessions. Open sessions keep their settings until reopened.",
-	accounts: "Sign in to model providers. Credentials are stored on the backend machine.",
-	permissions: "When Argon asks before the agent runs a tool.",
-	plugins: "Community provider plugins, installed on the backend machine.",
-	resources: "Packages, extensions, skills and prompt templates loaded into sessions.",
-};
 
 // ---------------------------------------------------------------------------
 // Building blocks
@@ -103,15 +98,17 @@ function Choice<T extends string>({
 	options,
 	onChange,
 	placeholder,
+	ariaLabel,
 }: {
 	value: T | undefined;
 	options: { value: T; label: string }[];
 	onChange: (value: T) => void;
 	placeholder?: string;
+	ariaLabel?: string;
 }) {
 	return (
 		<Select value={value} onValueChange={(v) => onChange(v as T)}>
-			<SelectTrigger size="sm" className="min-w-40">
+			<SelectTrigger size="sm" className="min-w-40" aria-label={ariaLabel}>
 				<SelectValue placeholder={placeholder} />
 			</SelectTrigger>
 			<SelectContent position="popper" align="end">
@@ -159,12 +156,9 @@ function TextSetting({
 // ---------------------------------------------------------------------------
 
 const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
-const QUEUE_MODES = [
-	{ value: "one-at-a-time", label: "One at a time" },
-	{ value: "all", label: "All at once" },
-] as const;
 
 function DefaultModel() {
+	const { t } = useTranslation();
 	const models = useApp((s) => s.models);
 	const current = useSettings((s) => s.settings?.pi.defaultModel);
 	const updatePi = useSettings((s) => s.updatePi);
@@ -172,14 +166,14 @@ function DefaultModel() {
 	if (models.length === 0) {
 		return (
 			<Button variant="outline" size="sm" onClick={() => show("accounts")}>
-				Connect a provider
+				{t("settings.general.connectProvider")}
 			</Button>
 		);
 	}
 	return (
 		<ModelCombobox
 			value={current}
-			placeholder="Not set"
+			placeholder={t("settings.general.notSet")}
 			onChange={(defaultModel) => void updatePi({ defaultModel })}
 			manageProviders={false}
 			className="max-w-64 border shadow-xs"
@@ -188,66 +182,101 @@ function DefaultModel() {
 }
 
 function GeneralSection() {
+	const { t } = useTranslation();
+	const [preference, setPreference] = useState(getLanguagePreference);
+	return (
+		<>
+			<Group>
+				<Row label={t("settings.general.language")}>
+					<Choice<LanguagePreference>
+						ariaLabel={t("settings.general.language")}
+						value={preference}
+						options={[
+							{ value: "system", label: t("settings.general.systemLanguage") },
+							{ value: "en", label: t("settings.general.english") },
+							{ value: "zh-CN", label: t("settings.general.simplifiedChinese") },
+						]}
+						onChange={(value) => {
+							setPreference(value);
+							void setLanguagePreference(value);
+						}}
+					/>
+				</Row>
+			</Group>
+			<GeneralDefaults />
+		</>
+	);
+}
+
+function GeneralDefaults() {
+	const { t } = useTranslation();
 	const pi = useSettings((s) => s.settings?.pi);
 	const updatePi = useSettings((s) => s.updatePi);
 	if (!pi) return <Loading />;
+	const queueModes = [
+		{ value: "one-at-a-time", label: t("settings.general.oneAtATime") },
+		{ value: "all", label: t("settings.general.allAtOnce") },
+	] satisfies { value: NonNullable<PiSettings["steeringMode"]>; label: string }[];
 	return (
 		<>
-			<Group title="Model">
-				<Row label="Default model" description="Used by new sessions.">
+			<Group title={t("settings.general.model")}>
+				<Row label={t("settings.general.defaultModel")} description={t("settings.general.defaultModelDescription")}>
 					<DefaultModel />
 				</Row>
-				<Row label="Default thinking level" description="For models that support reasoning.">
+				<Row
+					label={t("settings.general.defaultThinking")}
+					description={t("settings.general.defaultThinkingDescription")}
+				>
 					<Choice
 						value={pi.defaultThinkingLevel}
-						placeholder="Not set"
-						options={THINKING.map((t) => ({ value: t, label: t[0]?.toUpperCase() + t.slice(1) }))}
+						placeholder={t("settings.general.notSet")}
+						options={THINKING.map((level) => ({ value: level, label: thinkingLevelLabel(level, t) }))}
 						onChange={(defaultThinkingLevel) => void updatePi({ defaultThinkingLevel })}
 					/>
 				</Row>
 			</Group>
-			<Group title="Conversation">
-				<Row label="Steering messages" description="Messages sent while the agent works, delivered between steps.">
+			<Group title={t("settings.general.conversation")}>
+				<Row label={t("settings.general.steering")} description={t("settings.general.steeringDescription")}>
 					<Choice
 						value={pi.steeringMode}
-						options={[...QUEUE_MODES]}
+						options={queueModes}
 						onChange={(steeringMode) => void updatePi({ steeringMode })}
 					/>
 				</Row>
-				<Row label="Follow-up messages" description="Messages queued until the agent finishes.">
+				<Row label={t("settings.general.followUp")} description={t("settings.general.followUpDescription")}>
 					<Choice
 						value={pi.followUpMode}
-						options={[...QUEUE_MODES]}
+						options={queueModes}
 						onChange={(followUpMode) => void updatePi({ followUpMode })}
 					/>
 				</Row>
-				<Row label="Automatic compaction" description="Summarize older messages when the context fills up.">
+				<Row label={t("settings.general.autoCompact")} description={t("settings.general.autoCompactDescription")}>
 					<Toggle settingKey="compaction" />
 				</Row>
-				<Row label="Automatic retry" description="Retry requests that fail with transient errors.">
+				<Row label={t("settings.general.autoRetry")} description={t("settings.general.autoRetryDescription")}>
 					<Toggle settingKey="retry" />
 				</Row>
-				<Row label="Skill commands" description="Offer installed skills as /skill:name commands.">
+				<Row label={t("settings.general.skillCommands")} description={t("settings.general.skillCommandsDescription")}>
 					<Toggle settingKey="enableSkillCommands" />
 				</Row>
 			</Group>
-			<Group title="Images">
-				<Row label="Resize large images" description="Downscale attached images before sending them.">
+			<Group title={t("settings.general.images")}>
+				<Row label={t("settings.general.resize")} description={t("settings.general.resizeDescription")}>
 					<Toggle settingKey="imageAutoResize" />
 				</Row>
-				<Row label="Block images" description="Never send images to the model.">
+				<Row label={t("settings.general.blockImages")} description={t("settings.general.blockImagesDescription")}>
 					<Toggle settingKey="blockImages" />
 				</Row>
 			</Group>
-			<Group title="Shell">
-				<Row label="Shell" description="Path of the shell the bash tool runs. Empty: system default.">
+			<Group title={t("settings.general.shell")}>
+				<Row label={t("settings.general.shell")} description={t("settings.general.shellDescription")}>
 					<TextSetting
 						value={pi.shellPath}
 						placeholder="/bin/bash"
 						onSave={(shellPath) => void updatePi({ shellPath })}
 					/>
 				</Row>
-				<Row label="Command prefix" description="Prepended to every command, e.g. to load an environment.">
+				<Row label={t("settings.general.commandPrefix")} description={t("settings.general.commandPrefixDescription")}>
 					<TextSetting
 						value={pi.shellCommandPrefix}
 						placeholder="source ~/.profile &&"
@@ -255,14 +284,14 @@ function GeneralSection() {
 					/>
 				</Row>
 			</Group>
-			<Group title="Projects">
-				<Row label="Trust new projects" description="Whether a project's own extensions and settings load.">
+			<Group title={t("settings.general.projects")}>
+				<Row label={t("settings.general.trustNew")} description={t("settings.general.trustNewDescription")}>
 					<Choice
 						value={pi.defaultProjectTrust}
 						options={[
-							{ value: "ask", label: "Ask" },
-							{ value: "always", label: "Always" },
-							{ value: "never", label: "Never" },
+							{ value: "ask", label: t("settings.general.ask") },
+							{ value: "always", label: t("settings.general.always") },
+							{ value: "never", label: t("settings.general.never") },
 						]}
 						onChange={(defaultProjectTrust) => void updatePi({ defaultProjectTrust })}
 					/>
@@ -278,10 +307,11 @@ function GeneralSection() {
 
 export function describeRule(rule: PermissionRule): string {
 	if (rule.command !== undefined) return rule.command;
-	return rule.tool === "bash" ? "bash (any command)" : rule.tool;
+	return rule.tool === "bash" ? t("settings.permissions.anyBash") : rule.tool;
 }
 
 function PermissionsSection() {
+	const { t } = useTranslation();
 	const argon = useSettings((s) => s.settings?.argon);
 	const updateArgon = useSettings((s) => s.updateArgon);
 	if (!argon) return <Loading />;
@@ -297,24 +327,22 @@ function PermissionsSection() {
 		<>
 			<Group>
 				<Row
-					label="Default mode"
-					description="Read-only tools (read, grep, find, ls) never ask. Each session can still switch modes."
+					label={t("settings.permissions.defaultMode")}
+					description={t("settings.permissions.defaultModeDescription")}
 				>
 					<Choice
 						value={permissions.defaultMode}
 						options={[
-							{ value: "ask", label: "Ask before running" },
-							{ value: "auto", label: "Run without asking" },
+							{ value: "ask", label: t("settings.permissions.ask") },
+							{ value: "auto", label: t("settings.permissions.auto") },
 						]}
 						onChange={(defaultMode) => void updateArgon({ permissions: { ...permissions, defaultMode } })}
 					/>
 				</Row>
 			</Group>
-			<Group title="Always allowed">
+			<Group title={t("settings.permissions.alwaysAllowed")}>
 				{permissions.rules.length === 0 ? (
-					<p className="py-4 text-sm text-muted-foreground">
-						Nothing yet. Choose “Always allow” on an approval request to add a rule.
-					</p>
+					<p className="py-4 text-sm text-muted-foreground">{t("settings.permissions.noRules")}</p>
 				) : (
 					permissions.rules.map((rule) => (
 						<div key={`${rule.tool}\0${rule.command ?? ""}`} className="flex items-center gap-3 py-2.5">
@@ -326,13 +354,13 @@ function PermissionsSection() {
 										<span className="text-muted-foreground"> …</span>
 									</>
 								) : (
-									<span className="font-sans text-muted-foreground">Every call</span>
+									<span className="font-sans text-muted-foreground">{t("settings.permissions.everyCall")}</span>
 								)}
 							</span>
 							<Button
 								variant="ghost"
 								size="icon-xs"
-								aria-label={`Remove rule ${describeRule(rule)}`}
+								aria-label={t("settings.permissions.remove", { rule: describeRule(rule) })}
 								onClick={() => remove(rule)}
 							>
 								<Trash2 />
@@ -341,10 +369,7 @@ function PermissionsSection() {
 					))
 				)}
 			</Group>
-			<p className="text-xs text-muted-foreground">
-				A command rule matches the command itself and the command followed by arguments. Commands that chain, pipe,
-				redirect or substitute always ask.
-			</p>
+			<p className="text-xs text-muted-foreground">{t("settings.permissions.commandMatching")}</p>
 		</>
 	);
 }
@@ -357,7 +382,7 @@ function ResourceList({ label, items }: { label: string; items: string[] }) {
 	return (
 		<div className="py-3">
 			<div className="text-sm">
-				{label} <span className="text-muted-foreground">{items.length}</span>
+				{label} <span className="text-muted-foreground">{formatNumber(items.length)}</span>
 			</div>
 			{items.length > 0 && (
 				<ul className="mt-1.5 space-y-1">
@@ -373,20 +398,22 @@ function ResourceList({ label, items }: { label: string; items: string[] }) {
 }
 
 function ResourceScope({ scope }: { scope: ResourceSettings }) {
+	const { t } = useTranslation();
 	return (
-		<Group title={scope.scope === "global" ? "Global" : "This project"}>
+		<Group title={scope.scope === "global" ? t("settings.resources.global") : t("settings.resources.project")}>
 			<div className="truncate py-2.5 font-mono text-xs text-muted-foreground" title={scope.path}>
 				{scope.path}
 			</div>
-			<ResourceList label="Packages" items={scope.packages} />
-			<ResourceList label="Extensions" items={scope.extensions} />
-			<ResourceList label="Skills" items={scope.skills} />
-			<ResourceList label="Prompt templates" items={scope.prompts} />
+			<ResourceList label={t("settings.resources.packages")} items={scope.packages} />
+			<ResourceList label={t("settings.resources.extensions")} items={scope.extensions} />
+			<ResourceList label={t("settings.resources.skills")} items={scope.skills} />
+			<ResourceList label={t("settings.resources.prompts")} items={scope.prompts} />
 		</Group>
 	);
 }
 
 function ResourcesSection() {
+	const { t } = useTranslation();
 	const resources = useSettings((s) => s.settings?.resources);
 	const cwd = useSettings((s) => s.cwd);
 	if (!resources) return <Loading />;
@@ -396,8 +423,7 @@ function ResourcesSection() {
 				<ResourceScope key={scope.scope} scope={scope} />
 			))}
 			<p className="text-xs text-muted-foreground">
-				Read-only for now: edit the settings files on the backend machine.
-				{!cwd && " Open a session to see a project's resources."}
+				{cwd ? t("settings.resources.readOnly") : t("settings.resources.readOnlyAndOpenSession")}
 			</p>
 		</>
 	);

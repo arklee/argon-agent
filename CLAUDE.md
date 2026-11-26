@@ -64,4 +64,4 @@ npm run lint         # biome；npm run format 自动修复
 - TypeScript strict（开了 `noUncheckedIndexedAccess`）；ESM；包之间直接引用 TS 源码（`exports` 指向 `src/index.ts`）。
 - Biome 负责格式化和 lint（tab 缩进，行宽 120）。`packages/web/src/components/ui` 是 shadcn 生成的代码，不参与 lint，需要时用 `npx shadcn add` 更新。
 - 前端输入框处理 Enter 时必须检查 `isComposing`（中文输入法）。
-- 界面文字目前是英文，以后统一做 i18n。
+- 界面文字统一使用 i18next。以 `en.ts` 为源，新增词条时同步更新 `en.ts` 和 `zh-CN.ts`。后端、pi 和扩展提供的文本保留原文。

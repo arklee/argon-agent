@@ -1,5 +1,6 @@
 import { Loader2, Search, TriangleAlert } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Group, Loading } from "@/components/settings/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,15 @@ type SearchResult = { name: string; version: string; description?: string };
  * backend user's privileges, so `plugins.change` requires the user to have confirmed.
  */
 function ChangeButton({ action, spec }: { action: "install" | "remove"; spec: string }) {
+	const { t } = useTranslation();
 	const changePlugin = useSettings((s) => s.changePlugin);
 	const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
-	const label = action === "install" ? "Install" : "Remove";
+	const label = action === "install" ? t("settings.plugins.install") : t("settings.plugins.remove");
 	if (state === "confirm") {
 		return (
 			<div className="flex items-center gap-1.5">
 				<Button variant="ghost" size="xs" onClick={() => setState("idle")}>
-					Cancel
+					{t("common.cancel")}
 				</Button>
 				<Button
 					variant={action === "install" ? "default" : "destructive"}
@@ -31,7 +33,7 @@ function ChangeButton({ action, spec }: { action: "install" | "remove"; spec: st
 						setState("idle");
 					}}
 				>
-					Confirm {label.toLowerCase()}
+					{action === "install" ? t("settings.plugins.confirmInstall") : t("settings.plugins.confirmRemove")}
 				</Button>
 			</div>
 		);
@@ -45,6 +47,7 @@ function ChangeButton({ action, spec }: { action: "install" | "remove"; spec: st
 }
 
 export function PluginsSection() {
+	const { t } = useTranslation();
 	const plugins = useSettings((s) => s.plugins);
 	const searchPlugins = useSettings((s) => s.searchPlugins);
 	const [query, setQuery] = useState("");
@@ -52,7 +55,7 @@ export function PluginsSection() {
 	const [searching, setSearching] = useState(false);
 	if (!plugins) return <Loading />;
 	if (!plugins.available) {
-		return <p className="py-8 text-center text-sm text-muted-foreground">The plugin host is not available.</p>;
+		return <p className="py-8 text-center text-sm text-muted-foreground">{t("settings.plugins.unavailable")}</p>;
 	}
 	const isInstalled = (name: string) =>
 		plugins.plugins.some((p) => p.spec === name || p.spec.startsWith(`${name}@`) || p.spec.startsWith(`npm:${name}`));
@@ -67,10 +70,7 @@ export function PluginsSection() {
 		<>
 			<div className="mb-6 flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
 				<TriangleAlert className="size-4 shrink-0" />
-				<p>
-					Plugins are third-party code. They run on the backend machine with your user's privileges and can read your
-					files and credentials. Only install plugins you trust.
-				</p>
+				<p>{t("settings.plugins.warning")}</p>
 			</div>
 
 			{plugins.errors.length > 0 && (
@@ -79,9 +79,9 @@ export function PluginsSection() {
 				</pre>
 			)}
 
-			<Group title="Installed">
+			<Group title={t("settings.plugins.installed")}>
 				{plugins.plugins.length === 0 ? (
-					<p className="py-4 text-sm text-muted-foreground">No plugins installed.</p>
+					<p className="py-4 text-sm text-muted-foreground">{t("settings.plugins.noInstalled")}</p>
 				) : (
 					plugins.plugins.map((plugin) => (
 						<div key={plugin.spec} className="flex items-center gap-3 py-2.5">
@@ -91,8 +91,8 @@ export function PluginsSection() {
 							{plugin.managed ? (
 								<ChangeButton action="remove" spec={plugin.spec} />
 							) : (
-								<Badge variant="secondary" title="Configured by hand in magpie's settings">
-									Manual
+								<Badge variant="secondary" title={t("settings.plugins.manualDescription")}>
+									{t("settings.plugins.manual")}
 								</Badge>
 							)}
 						</div>
@@ -100,7 +100,7 @@ export function PluginsSection() {
 				)}
 			</Group>
 
-			<Group title="Find plugins">
+			<Group title={t("settings.plugins.find")}>
 				<form
 					className="flex gap-2 py-3"
 					onSubmit={(e) => {
@@ -116,16 +116,18 @@ export function PluginsSection() {
 							onKeyDown={(e) => {
 								if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
 							}}
-							placeholder="Search community plugins"
+							placeholder={t("settings.plugins.searchPlaceholder")}
 							className="h-8 pl-8"
 						/>
 					</div>
 					<Button type="submit" size="sm" variant="outline" disabled={!query.trim() || searching}>
 						{searching && <Loader2 className="animate-spin" />}
-						Search
+						{t("settings.plugins.search")}
 					</Button>
 				</form>
-				{results?.length === 0 && <p className="pb-3 text-sm text-muted-foreground">No plugins found.</p>}
+				{results?.length === 0 && (
+					<p className="pb-3 text-sm text-muted-foreground">{t("settings.plugins.noResults")}</p>
+				)}
 				{results?.map((result) => (
 					<div key={result.name} className="flex items-center gap-3 py-2.5">
 						<div className="min-w-0 flex-1">
@@ -140,7 +142,7 @@ export function PluginsSection() {
 							)}
 						</div>
 						{isInstalled(result.name) ? (
-							<Badge variant="secondary">Installed</Badge>
+							<Badge variant="secondary">{t("settings.plugins.installed")}</Badge>
 						) : (
 							<ChangeButton action="install" spec={result.name} />
 						)}

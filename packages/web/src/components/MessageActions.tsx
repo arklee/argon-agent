@@ -1,6 +1,7 @@
 import type { AssistantBlock } from "@argon/shared";
 import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,13 +12,14 @@ export function assistantText(blocks: AssistantBlock[]): string {
 }
 
 export function CopyButton({ text, className }: { text: string; className?: string }) {
+	const { t } = useTranslation();
 	const [copied, setCopied] = useState(false);
 	return (
 		<Button
 			variant="ghost"
 			size="icon-xs"
 			className={cn("text-muted-foreground", className)}
-			title="Copy"
+			title={t("common.copy")}
 			disabled={!text}
 			onClick={() => {
 				navigator.clipboard.writeText(text).then(
@@ -25,7 +27,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
 						setCopied(true);
 						setTimeout(() => setCopied(false), 1500);
 					},
-					() => toast.error("Could not copy to the clipboard"),
+					() => toast.error(t("chat.copyFailed")),
 				);
 			}}
 		>
@@ -71,6 +73,7 @@ export function MessageEditor({
 	onCancel: () => void;
 	onSubmit: (text: string) => Promise<void>;
 }) {
+	const { t } = useTranslation();
 	const [text, setText] = useState(initial);
 	const [sending, setSending] = useState(false);
 	const submit = async () => {
@@ -102,15 +105,13 @@ export function MessageEditor({
 				autoFocus
 			/>
 			<div className="mt-1 flex items-center justify-between gap-2">
-				<span className="px-1 text-xs text-muted-foreground">
-					Sends from here; the old reply stays in the session tree
-				</span>
+				<span className="px-1 text-xs text-muted-foreground">{t("chat.editHint")}</span>
 				<div className="flex gap-1.5">
 					<Button variant="ghost" size="sm" onClick={onCancel} disabled={sending}>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 					<Button size="sm" onClick={() => void submit()} disabled={!text.trim() || sending}>
-						Send
+						{t("common.send")}
 					</Button>
 				</div>
 			</div>

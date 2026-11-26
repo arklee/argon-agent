@@ -1,6 +1,7 @@
 import type { DirEntry } from "@argon/shared";
 import { ChevronUp, Folder, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -19,6 +20,7 @@ import { getClient, useApp } from "@/stores/app";
  * through the backend (fs.listDir), so this works the same for a local or a remote backend.
  */
 export function AddProjectDialog() {
+	const { t } = useTranslation();
 	const open = useApp((s) => s.addProjectOpen);
 	const onOpenChange = useApp((s) => s.setAddProjectOpen);
 	const environment = useApp((s) => s.environment);
@@ -75,10 +77,11 @@ export function AddProjectDialog() {
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Add project</DialogTitle>
+					<DialogTitle>{t("common.addProject")}</DialogTitle>
 					<DialogDescription>
-						Choose a folder{environment ? ` on ${environment.name}` : ""}. It is added to the sidebar and a new session
-						starts in it.
+						{environment
+							? t("addProject.descriptionOn", { environment: environment.name })
+							: t("addProject.description")}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -110,7 +113,7 @@ export function AddProjectDialog() {
 					) : error ? (
 						<p className="p-3 text-sm text-destructive">{error}</p>
 					) : entries.length === 0 ? (
-						<p className="p-3 text-sm text-muted-foreground">No subfolders</p>
+						<p className="p-3 text-sm text-muted-foreground">{t("addProject.empty")}</p>
 					) : (
 						<ul className="p-1">
 							{entries.map((entry) => (
@@ -135,7 +138,7 @@ export function AddProjectDialog() {
 					</span>
 					<Button onClick={() => void create(path)} disabled={!path || creating}>
 						{creating && <Loader2 className="animate-spin" />}
-						Add project
+						{t("common.addProject")}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

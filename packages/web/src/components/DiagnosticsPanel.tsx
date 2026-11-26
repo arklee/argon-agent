@@ -1,19 +1,21 @@
 import type { SessionDiagnostic, SessionState } from "@argon/shared";
 import { TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { displayPath } from "@/lib/format";
+import { displayPath, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
-const SOURCE_LABELS: Record<SessionDiagnostic["source"], string> = {
-	resources: "Loading",
-	extension: "Extension",
-	model: "Model",
-};
+const SOURCE_LABELS = {
+	resources: "diagnostics.sourceResources",
+	extension: "diagnostics.sourceExtension",
+	model: "diagnostics.sourceModel",
+} as const satisfies Record<SessionDiagnostic["source"], string>;
 
 /** Header indicator for resource-loading problems, extension errors and model fallbacks. */
 export function DiagnosticsPanel({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const homeDir = useApp((s) => s.environment?.homeDir);
 	const diagnostics = session.diagnostics;
 	if (diagnostics.length === 0) return null;
@@ -29,20 +31,19 @@ export function DiagnosticsPanel({ session }: { session: SessionState }) {
 					variant="ghost"
 					size="sm"
 					className={cn("tabular-nums", tone)}
-					title={`${diagnostics.length} ${diagnostics.length === 1 ? "problem" : "problems"}`}
+					title={t("diagnostics.problemCount", { count: diagnostics.length })}
 				>
 					<TriangleAlert />
-					{diagnostics.length}
+					{formatNumber(diagnostics.length)}
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-[28rem] p-0">
 				<div className="border-b px-3 py-2 text-sm font-medium">
-					Problems
+					{t("diagnostics.title")}
 					<span className="ml-2 text-xs font-normal text-muted-foreground">
-						{errors > 0 && `${errors} ${errors === 1 ? "error" : "errors"}`}
+						{errors > 0 && t("diagnostics.errorCount", { count: errors })}
 						{errors > 0 && errors < diagnostics.length && " · "}
-						{errors < diagnostics.length &&
-							`${diagnostics.length - errors} ${diagnostics.length - errors === 1 ? "warning" : "warnings"}`}
+						{errors < diagnostics.length && t("diagnostics.warningCount", { count: diagnostics.length - errors })}
 					</span>
 				</div>
 				<ul className="max-h-80 divide-y overflow-y-auto">
@@ -55,7 +56,7 @@ export function DiagnosticsPanel({ session }: { session: SessionState }) {
 								)}
 							/>
 							<div className="min-w-0 flex-1 space-y-0.5">
-								<div className="text-muted-foreground">{SOURCE_LABELS[d.source]}</div>
+								<div className="text-muted-foreground">{t(SOURCE_LABELS[d.source])}</div>
 								<div className="whitespace-pre-wrap break-words">{d.message}</div>
 								{d.path && (
 									<div className="truncate font-mono text-muted-foreground" title={d.path}>

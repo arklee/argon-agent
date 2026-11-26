@@ -6,19 +6,8 @@
  * An extension command with the same name wins (it is sent to pi, which runs it).
  */
 
-export interface ArgonCommand {
-	name: string;
-	description: string;
-	/** Whether text after the name is passed on. */
-	takesArgument?: boolean;
-}
-
 /** Built-ins Argon implements natively. */
-export const ARGON_COMMANDS: ArgonCommand[] = [
-	{ name: "compact", description: "Compact the context now (optional: focus instructions)", takesArgument: true },
-	{ name: "name", description: "Rename this session", takesArgument: true },
-	{ name: "new", description: "Start a new session in this project" },
-];
+export const ARGON_COMMANDS = ["compact", "name", "new"] as const;
 
 /** pi TUI built-ins Argon does not support (yet); typing them must not reach the model. */
 const PI_TUI_ONLY = new Set([
@@ -55,7 +44,8 @@ export function matchBuiltin(text: string, extensionCommands: ReadonlySet<string
 	if (!match) return undefined;
 	const name = match[1] ?? "";
 	if (extensionCommands.has(name)) return undefined;
-	if (ARGON_COMMANDS.some((c) => c.name === name)) return { kind: "argon", name, argument: (match[2] ?? "").trim() };
+	if (ARGON_COMMANDS.some((command) => command === name))
+		return { kind: "argon", name, argument: (match[2] ?? "").trim() };
 	if (PI_TUI_ONLY.has(name)) return { kind: "unsupported", name };
 	return undefined;
 }

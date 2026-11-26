@@ -1,14 +1,17 @@
 import type { AuthFlow, AuthPromptInfo, ProviderInfo } from "@argon/shared";
 import { Check, Copy, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Group, Loading } from "@/components/settings/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { latestFlow, useSettings } from "@/stores/settings";
 
 export function AccountsSection() {
+	const { t } = useTranslation();
 	const providers = useSettings((s) => s.providers);
 	const [query, setQuery] = useState("");
 	const filtered = useMemo(() => {
@@ -27,39 +30,42 @@ export function AccountsSection() {
 				<Input
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
-					placeholder="Search providers"
+					placeholder={t("settings.accounts.search")}
 					className="h-8 pl-8"
 				/>
 			</div>
 			{connected.length > 0 && (
-				<Group title="Connected">
+				<Group title={t("settings.accounts.connected")}>
 					{connected.map((p) => (
 						<ProviderRow key={p.id} provider={p} />
 					))}
 				</Group>
 			)}
 			{others.length > 0 && (
-				<Group title={connected.length > 0 ? "Other providers" : "Providers"}>
+				<Group title={connected.length > 0 ? t("settings.accounts.otherProviders") : t("settings.accounts.providers")}>
 					{others.map((p) => (
 						<ProviderRow key={p.id} provider={p} />
 					))}
 				</Group>
 			)}
 			{filtered.length === 0 && (
-				<p className="py-8 text-center text-sm text-muted-foreground">No providers match “{query}”.</p>
+				<p className="py-8 text-center text-sm text-muted-foreground">{t("settings.accounts.noMatch", { query })}</p>
 			)}
 		</>
 	);
 }
 
 function statusText(provider: ProviderInfo): string {
-	if (!provider.auth.configured) return "Not connected";
-	if (provider.stored === "oauth") return "Signed in";
-	if (provider.stored === "api_key") return "API key saved";
-	return provider.auth.label ? `From ${provider.auth.label}` : "Configured by the environment";
+	if (!provider.auth.configured) return t("settings.accounts.notConnected");
+	if (provider.stored === "oauth") return t("settings.accounts.signedIn");
+	if (provider.stored === "api_key") return t("settings.accounts.keySaved");
+	return provider.auth.label
+		? t("settings.accounts.from", { name: provider.auth.label })
+		: t("settings.accounts.environment");
 }
 
 function ProviderRow({ provider }: { provider: ProviderInfo }) {
+	const { t } = useTranslation();
 	const flows = useSettings((s) => s.flows);
 	const login = useSettings((s) => s.login);
 	const logout = useSettings((s) => s.logout);
@@ -80,14 +86,14 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
 						<span className="truncate text-sm font-medium">{provider.name}</span>
-						{provider.origin === "plugin" && <Badge variant="secondary">Plugin</Badge>}
+						{provider.origin === "plugin" && <Badge variant="secondary">{t("settings.accounts.plugin")}</Badge>}
 					</div>
 					<div className="text-xs text-muted-foreground">
 						{statusText(provider)}
 						{provider.auth.configured && provider.modelCount > 0 && (
 							<>
 								{" · "}
-								{provider.modelCount} model{provider.modelCount === 1 ? "" : "s"}
+								{t("settings.accounts.modelCount", { count: provider.modelCount })}
 							</>
 						)}
 					</div>
@@ -103,11 +109,11 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 							>
 								{method.type === "api_key"
 									? provider.stored === "api_key"
-										? "Replace key"
-										: "Add API key"
+										? t("settings.accounts.replaceKey")
+										: t("settings.accounts.addKey")
 									: provider.stored === "oauth"
-										? "Sign in again"
-										: (method.label ?? `Sign in with ${method.name}`)}
+										? t("settings.accounts.signInAgain")
+										: (method.label ?? t("settings.accounts.signInWith", { name: method.name }))}
 							</Button>
 						))}
 					{provider.stored && !running && (
@@ -122,11 +128,11 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 							}}
 						>
 							{busy && <Loader2 className="animate-spin" />}
-							{provider.stored === "oauth" ? "Sign out" : "Remove key"}
+							{provider.stored === "oauth" ? t("common.signOut") : t("settings.accounts.removeKey")}
 						</Button>
 					)}
 					{!provider.auth.configured && provider.methods.length === 0 && (
-						<span className="text-xs text-muted-foreground">Set up through environment variables</span>
+						<span className="text-xs text-muted-foreground">{t("settings.accounts.setupEnvironment")}</span>
 					)}
 				</div>
 			</div>
@@ -136,12 +142,13 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 }
 
 function CopyButton({ text }: { text: string }) {
+	const { t } = useTranslation();
 	const [copied, setCopied] = useState(false);
 	return (
 		<Button
 			variant="ghost"
 			size="icon-xs"
-			aria-label="Copy"
+			aria-label={t("common.copy")}
 			onClick={() => {
 				void navigator.clipboard.writeText(text).then(() => {
 					setCopied(true);
@@ -156,6 +163,7 @@ function CopyButton({ text }: { text: string }) {
 
 /** A login in progress: links and codes from the provider, and the question it waits on. */
 function FlowPanel({ flow }: { flow: AuthFlow }) {
+	const { t } = useTranslation();
 	const cancelFlow = useSettings((s) => s.cancelFlow);
 	const dismissFlow = useSettings((s) => s.dismissFlow);
 	const running = flow.status === "running";
@@ -188,7 +196,7 @@ function FlowPanel({ flow }: { flow: AuthFlow }) {
 
 			{running && deviceCode && (
 				<div className="space-y-2">
-					<p className="text-muted-foreground">Enter this code on the sign-in page:</p>
+					<p className="text-muted-foreground">{t("settings.accounts.deviceCode")}</p>
 					<div className="flex items-center gap-2">
 						<code className="rounded-md border bg-background px-3 py-1.5 font-mono text-lg tracking-widest">
 							{deviceCode.userCode}
@@ -198,7 +206,7 @@ function FlowPanel({ flow }: { flow: AuthFlow }) {
 					<Button size="sm" asChild>
 						<a href={deviceCode.verificationUri} target="_blank" rel="noopener noreferrer">
 							<ExternalLink />
-							Open {new URL(deviceCode.verificationUri).host}
+							{t("settings.accounts.openHost", { host: new URL(deviceCode.verificationUri).host })}
 						</a>
 					</Button>
 				</div>
@@ -206,13 +214,11 @@ function FlowPanel({ flow }: { flow: AuthFlow }) {
 
 			{running && authUrl && !deviceCode && (
 				<div className="space-y-2">
-					<p className="text-muted-foreground">
-						{authUrl.instructions ?? "Finish signing in in your browser, then come back here."}
-					</p>
+					<p className="text-muted-foreground">{authUrl.instructions ?? t("settings.accounts.finishInBrowser")}</p>
 					<Button size="sm" asChild>
 						<a href={authUrl.url} target="_blank" rel="noopener noreferrer">
 							<ExternalLink />
-							Open sign-in page
+							{t("common.openSignIn")}
 						</a>
 					</Button>
 				</div>
@@ -223,23 +229,26 @@ function FlowPanel({ flow }: { flow: AuthFlow }) {
 			{running && !flow.prompt && (
 				<p className="flex items-center gap-2 text-xs text-muted-foreground">
 					<Loader2 className="size-3.5 animate-spin" />
-					{progress?.message ?? (authUrl || deviceCode ? "Waiting for the provider…" : "Starting…")}
+					{progress?.message ??
+						(authUrl || deviceCode ? t("settings.accounts.waiting") : t("settings.accounts.starting"))}
 				</p>
 			)}
 
 			{flow.status === "failed" && (
-				<p className="text-xs whitespace-pre-wrap text-destructive">Sign-in failed: {flow.error ?? "unknown error"}</p>
+				<p className="text-xs whitespace-pre-wrap text-destructive">
+					{t("settings.accounts.signInFailed", { error: flow.error ?? t("settings.accounts.unknownError") })}
+				</p>
 			)}
 
 			<div className="flex justify-end">
 				{running ? (
 					<Button variant="ghost" size="xs" onClick={() => void cancelFlow(flow.flowId)}>
-						Cancel
+						{t("common.cancel")}
 					</Button>
 				) : (
 					<Button variant="ghost" size="xs" onClick={() => dismissFlow(flow.flowId)}>
 						<X />
-						Dismiss
+						{t("settings.accounts.dismiss")}
 					</Button>
 				)}
 			</div>
@@ -248,6 +257,7 @@ function FlowPanel({ flow }: { flow: AuthFlow }) {
 }
 
 function PromptForm({ flowId, prompt }: { flowId: string; prompt: AuthPromptInfo }) {
+	const { t } = useTranslation();
 	const respondFlow = useSettings((s) => s.respondFlow);
 	const [value, setValue] = useState("");
 	const [sending, setSending] = useState(false);
@@ -300,13 +310,13 @@ function PromptForm({ flowId, prompt }: { flowId: string; prompt: AuthPromptInfo
 					onKeyDown={(e) => {
 						if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault();
 					}}
-					placeholder={prompt.placeholder ?? (prompt.type === "manual_code" ? "Paste the code or redirect URL" : "")}
+					placeholder={prompt.placeholder ?? (prompt.type === "manual_code" ? t("settings.accounts.pasteCode") : "")}
 					className="h-8 flex-1 bg-background font-mono text-xs"
 					autoFocus
 				/>
 				<Button type="submit" size="sm" disabled={!value.trim() || sending}>
 					{sending && <Loader2 className="animate-spin" />}
-					{prompt.type === "secret" ? "Save" : "Continue"}
+					{prompt.type === "secret" ? t("common.save") : t("settings.accounts.continue")}
 				</Button>
 			</div>
 		</form>

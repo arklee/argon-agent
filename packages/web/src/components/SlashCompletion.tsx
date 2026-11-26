@@ -1,5 +1,6 @@
 import type { CompletionItem, SlashCommand } from "@argon/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ARGON_COMMANDS } from "@/lib/builtin-commands";
 import { cn } from "@/lib/utils";
 import { getClient } from "@/stores/app";
@@ -52,6 +53,7 @@ function rankCommands(commands: SlashCommand[], query: string): SlashCommand[] {
  * loaded extensions show up without a refresh.
  */
 export function useSlashCompletion(sessionId: string, text: string, cursor: number = text.length) {
+	const { t } = useTranslation();
 	const [extensionCommands, setCommands] = useState<SlashCommand[]>([]);
 	const extensionNames = useMemo(
 		() => new Set(extensionCommands.filter((c) => c.source === "extension").map((c) => c.name)),
@@ -61,15 +63,15 @@ export function useSlashCompletion(sessionId: string, text: string, cursor: numb
 	const commands = useMemo<SlashCommand[]>(
 		() => [
 			...extensionCommands,
-			...ARGON_COMMANDS.filter((c) => !extensionNames.has(c.name)).map((c) => ({
-				name: c.name,
-				description: c.description,
+			...ARGON_COMMANDS.filter((name) => !extensionNames.has(name)).map((name) => ({
+				name,
+				description: t(`commands.${name}`),
 				source: "extension" as const,
 				origin: "argon",
 				completesArguments: false,
 			})),
 		],
-		[extensionCommands, extensionNames],
+		[extensionCommands, extensionNames, t],
 	);
 	const [argItems, setArgItems] = useState<{ forText: string; items: CompletionItem[] }>();
 	const [dismissedFor, setDismissedFor] = useState<string>();

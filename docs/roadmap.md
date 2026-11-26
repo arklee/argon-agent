@@ -70,7 +70,7 @@
 - [x] `SessionMirror` 测试：缺口、重复事件、重连、后端重启
 - [x] 带真实会话的端到端冒烟脚本：`npm run smoke`（自带 backend，用 gpt-6-luna；覆盖发消息、幂等、bash 审批、sinceSeq 重连、重新打开后设置恢复）
 - [x] CI：typecheck、test、lint
-- [ ] i18n（中文 / 英文）
+- [x] i18n（中文 / 英文）：内置简体中文和英文，可在通用设置中即时切换。
 
 ## 阶段 2：Electron 桌面壳
 

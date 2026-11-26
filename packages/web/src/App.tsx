@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { ChatView } from "@/components/ChatView";
 import { ConnectScreen } from "@/components/ConnectScreen";
@@ -79,20 +80,21 @@ function Shell() {
 }
 
 function KeyboardShortcuts() {
+	const { t } = useTranslation();
 	const { helpOpen, setHelpOpen } = useGlobalShortcuts();
 	return (
 		<Dialog open={helpOpen} onOpenChange={setHelpOpen}>
 			<DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
-				<DialogTitle>Keyboard shortcuts</DialogTitle>
+				<DialogTitle>{t("shortcuts.title")}</DialogTitle>
 				<dl className="space-y-2 text-sm">
 					{[
-						["New session", shortcutLabels.newSession],
-						["Previous / next session", shortcutLabels.switchSession],
-						["Stop from composer", "Esc"],
-						["Focus composer", shortcutLabels.focus],
-						["Settings", shortcutLabels.settings],
-						["Type in composer", "Any printable character"],
-						["Keyboard shortcuts", "?"],
+						[t("common.newSession"), shortcutLabels.newSession],
+						[t("shortcuts.switchSession"), shortcutLabels.switchSession],
+						[t("shortcuts.stop"), "Esc"],
+						[t("shortcuts.focus"), shortcutLabels.focus],
+						[t("settings.title"), shortcutLabels.settings],
+						[t("shortcuts.type"), t("shortcuts.printable")],
+						[t("shortcuts.title"), "?"],
 					].map(([label, keys]) => (
 						<div key={label} className="flex justify-between gap-3">
 							<dt>{label}</dt>

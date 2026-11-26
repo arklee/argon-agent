@@ -1,5 +1,6 @@
 import type { SessionState } from "@argon/shared";
 import { Layers, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -9,7 +10,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatTokens } from "@/lib/format";
+import { formatCurrency, formatPercent, formatTokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
@@ -36,6 +37,7 @@ function Ring({ percent, className }: { percent: number; className?: string }) {
 
 /** Header indicator of how full the context window is, with a manual compaction action. */
 export function ContextMeter({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const compact = useApp((s) => s.compact);
 	const usage = session.contextUsage;
 	if (!usage) return null;
@@ -54,27 +56,33 @@ export function ContextMeter({ session }: { session: SessionState }) {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="sm" className={cn("tabular-nums", tone)} title="Context usage">
+				<Button variant="ghost" size="sm" className={cn("tabular-nums", tone)} title={t("context.usage")}>
 					{session.compacting ? <Loader2 className="animate-spin" /> : <Ring percent={percent ?? 0} />}
-					{session.compacting ? "Compacting" : percent === null ? "—" : `${Math.round(percent)}%`}
+					{session.compacting ? t("context.compacting") : percent === null ? "—" : formatPercent(percent)}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuLabel>Context window</DropdownMenuLabel>
+				<DropdownMenuLabel>{t("context.window")}</DropdownMenuLabel>
 				<div className="space-y-1 px-2 pb-2 text-xs text-muted-foreground">
 					<div className="flex justify-between">
-						<span>Used</span>
+						<span>{t("context.used")}</span>
 						<span className="tabular-nums">
-							{usage.tokens === null ? "unknown until the next reply" : formatTokens(usage.tokens)} /{" "}
-							{formatTokens(usage.contextWindow)}
+							{t("context.tokenUsage", {
+								used: usage.tokens === null ? t("context.unknownUsage") : formatTokens(usage.tokens),
+								total: formatTokens(usage.contextWindow),
+							})}
 						</span>
 					</div>
 					{last && (
 						<div className="flex justify-between">
-							<span>Last request</span>
+							<span>{t("context.lastRequest")}</span>
 							<span className="tabular-nums">
-								{formatTokens(last.totalTokens)} tok
-								{last.costTotal > 0 ? ` · $${last.costTotal.toFixed(3)}` : ""}
+								{last.costTotal > 0
+									? t("context.tokensWithCost", {
+											tokens: formatTokens(last.totalTokens),
+											cost: formatCurrency(last.costTotal),
+										})
+									: t("context.tokens", { tokens: formatTokens(last.totalTokens) })}
 							</span>
 						</div>
 					)}
@@ -83,9 +91,9 @@ export function ContextMeter({ session }: { session: SessionState }) {
 				<DropdownMenuItem disabled={!canCompact} onSelect={() => void compact()}>
 					<Layers />
 					<div>
-						<div>Compact now</div>
+						<div>{t("context.compactNow")}</div>
 						<div className="text-xs text-muted-foreground">
-							{session.status === "running" ? "Stops the current turn first" : "Summarize older messages"}
+							{session.status === "running" ? t("context.stopFirst") : t("context.compactDescription")}
 						</div>
 					</div>
 				</DropdownMenuItem>

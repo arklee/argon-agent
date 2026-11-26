@@ -1,6 +1,7 @@
 import type { SessionSummary } from "@argon/shared";
 import { Ellipsis } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -21,10 +22,11 @@ import { sessionTitle } from "@/lib/format";
 import { useApp } from "@/stores/app";
 
 export function SessionNameInput({ session, close }: { session: SessionSummary; close: () => void }) {
+	const { t } = useTranslation();
 	const [name, setName] = useState(session.name || sessionTitle(session));
 	return (
 		<Input
-			aria-label="Session name"
+			aria-label={t("sessionMenu.name")}
 			className="h-7"
 			value={name}
 			autoFocus
@@ -58,6 +60,7 @@ export function SessionMenu({
 	className?: string;
 	header?: boolean;
 }) {
+	const { t } = useTranslation();
 	const [deleting, setDeleting] = useState(false);
 	const pendingAction = useRef<"rename" | "delete" | undefined>(undefined);
 	return (
@@ -68,7 +71,7 @@ export function SessionMenu({
 						variant="ghost"
 						size="icon-xs"
 						className={className}
-						aria-label={`Actions for ${sessionTitle(session)}`}
+						aria-label={t("common.actionsFor", { name: sessionTitle(session) })}
 					>
 						<Ellipsis />
 					</Button>
@@ -89,10 +92,10 @@ export function SessionMenu({
 							pendingAction.current = "rename";
 						}}
 					>
-						Rename
+						{t("sessionMenu.rename")}
 					</DropdownMenuItem>
 					<DropdownMenuItem onSelect={() => void useApp.getState().duplicateSession(session)}>
-						{header ? "Duplicate session" : "Duplicate"}
+						{header ? t("sessionMenu.duplicateSession") : t("sessionMenu.duplicate")}
 					</DropdownMenuItem>
 					<DropdownMenuItem
 						variant="destructive"
@@ -101,20 +104,20 @@ export function SessionMenu({
 							pendingAction.current = "delete";
 						}}
 					>
-						{header ? "Delete session" : "Delete"}
+						{header ? t("sessionMenu.deleteSession") : t("sessionMenu.delete")}
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 			<Dialog open={deleting} onOpenChange={setDeleting}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Delete session?</DialogTitle>
-						<DialogDescription>This removes the session file.</DialogDescription>
+						<DialogTitle>{t("sessionMenu.confirmDelete")}</DialogTitle>
+						<DialogDescription>{t("sessionMenu.deleteDescription")}</DialogDescription>
 					</DialogHeader>
 					<p className="truncate text-sm">{sessionTitle(session)}</p>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setDeleting(false)}>
-							Cancel
+							{t("common.cancel")}
 						</Button>
 						<Button
 							variant="destructive"
@@ -123,7 +126,7 @@ export function SessionMenu({
 								void useApp.getState().deleteSession(session);
 							}}
 						>
-							Delete
+							{t("sessionMenu.delete")}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

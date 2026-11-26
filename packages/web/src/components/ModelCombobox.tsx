@@ -1,6 +1,7 @@
 import type { ModelInfo, ModelRef } from "@argon/shared";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
@@ -15,7 +16,7 @@ const key = (m: ModelRef) => `${m.provider}/${m.id}`;
 export function ModelCombobox({
 	value,
 	onChange,
-	placeholder = "Select model",
+	placeholder,
 	align = "end",
 	className,
 	manageProviders = true,
@@ -28,6 +29,7 @@ export function ModelCombobox({
 	/** Offer "Manage providers…" (opens settings). */
 	manageProviders?: boolean;
 }) {
+	const { t } = useTranslation();
 	const models = useApp((s) => s.models);
 	const providers = useSettings((s) => s.providers);
 	const [open, setOpen] = useState(false);
@@ -104,7 +106,7 @@ export function ModelCombobox({
 				)}
 			>
 				<span className={cn("truncate", !current && !value && "text-muted-foreground")}>
-					{current?.name ?? value?.id ?? placeholder}
+					{current?.name ?? value?.id ?? placeholder ?? t("models.select")}
 				</span>
 				<ChevronDown className="size-4 shrink-0 opacity-50" />
 			</PopoverTrigger>
@@ -115,8 +117,8 @@ export function ModelCombobox({
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
 						onKeyDown={onKeyDown}
-						placeholder="Search models or providers"
-						aria-label="Search models or providers"
+						placeholder={t("models.search")}
+						aria-label={t("models.search")}
 						role="combobox"
 						aria-expanded
 						aria-controls="model-combobox-list"
@@ -128,7 +130,7 @@ export function ModelCombobox({
 				<div ref={listRef} id="model-combobox-list" role="listbox" className="max-h-80 overflow-y-auto p-1">
 					{flat.length === 0 && (
 						<p className="px-2 py-6 text-center text-sm text-muted-foreground">
-							{models.length === 0 ? "No models available" : "No models match"}
+							{models.length === 0 ? t("models.empty") : t("models.noMatch")}
 						</p>
 					)}
 					{groups.map(([provider, list]) => (
@@ -174,7 +176,7 @@ export function ModelCombobox({
 							}}
 							className="w-full rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						>
-							{models.length > 0 ? "Manage providers…" : "Connect a provider…"}
+							{models.length > 0 ? t("models.manageProviders") : t("models.connectProvider")}
 						</button>
 					</div>
 				)}

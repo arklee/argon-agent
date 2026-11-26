@@ -1,12 +1,15 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { t } = useTranslation()
   return (
     <Sonner
       theme="system"
+      containerAriaLabel={t("notifications.title")}
       className="toaster group"
       icons={{
         success: (
@@ -34,6 +37,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        closeButtonAriaLabel: t("notifications.dismiss"),
         classNames: {
           toast: "cn-toast",
         },

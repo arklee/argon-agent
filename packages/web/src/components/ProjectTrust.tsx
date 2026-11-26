@@ -1,6 +1,7 @@
 import type { ProjectTrustDecision, SessionState } from "@argon/shared";
 import { ChevronDown, Loader2, ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -29,6 +30,7 @@ function useTrustAction(cwd: string) {
 
 /** Shown while the project's trust is undecided: its .argon resources are not loaded yet. */
 export function ProjectTrustBanner({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const homeDir = useApp((s) => s.environment?.homeDir);
 	const { busy, run } = useTrustAction(session.cwd);
 	const trust = session.projectTrust;
@@ -38,21 +40,25 @@ export function ProjectTrustBanner({ session }: { session: SessionState }) {
 		<div role="status" className="flex items-center gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm">
 			<ShieldQuestion className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
 			<p className="min-w-0 flex-1">
-				<span className="font-medium">Trust this project?</span>{" "}
-				<span className="text-muted-foreground">
-					It has its own settings or extensions in <code className="font-mono text-xs">.argon</code>. They stay off
-					until you trust the folder; extensions run with full access.
-				</span>
+				<Trans
+					t={t}
+					i18nKey="trust.banner"
+					components={{
+						heading: <span className="font-medium" />,
+						details: <span className="text-muted-foreground" />,
+						folder: <code className="font-mono text-xs" />,
+					}}
+				/>
 			</p>
 			<div className="flex shrink-0 items-center gap-1">
 				<Button size="xs" variant="ghost" disabled={busy !== undefined} onClick={() => void run("deny")}>
 					{busy === "deny" && <Loader2 className="animate-spin" />}
-					Don’t trust
+					{t("trust.deny")}
 				</Button>
 				<div className="flex">
 					<Button size="xs" className="rounded-r-none" disabled={busy !== undefined} onClick={() => void run("trust")}>
 						{busy === "trust" && <Loader2 className="animate-spin" />}
-						Trust
+						{t("trust.allow")}
 					</Button>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
@@ -60,7 +66,7 @@ export function ProjectTrustBanner({ session }: { session: SessionState }) {
 								size="xs"
 								className="rounded-l-none border-l border-primary-foreground/20 px-1"
 								disabled={busy !== undefined}
-								aria-label="More trust options"
+								aria-label={t("trust.moreOptions")}
 							>
 								<ChevronDown />
 							</Button>
@@ -69,7 +75,7 @@ export function ProjectTrustBanner({ session }: { session: SessionState }) {
 							{trust.parentPath && (
 								<DropdownMenuItem onSelect={() => void run("trust_parent")}>
 									<div className="min-w-0">
-										<div>Trust parent folder</div>
+										<div>{t("trust.parent")}</div>
 										<div className="truncate font-mono text-xs text-muted-foreground">
 											{displayPath(trust.parentPath, homeDir)}
 										</div>
@@ -78,15 +84,15 @@ export function ProjectTrustBanner({ session }: { session: SessionState }) {
 							)}
 							<DropdownMenuItem onSelect={() => void run("trust_session")}>
 								<div>
-									<div>Trust for now</div>
-									<div className="text-xs text-muted-foreground">Until the backend restarts</div>
+									<div>{t("trust.temporary")}</div>
+									<div className="text-xs text-muted-foreground">{t("trust.untilRestart")}</div>
 								</div>
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem onSelect={() => void run("deny_session")}>
 								<div>
-									<div>Not now</div>
-									<div className="text-xs text-muted-foreground">Ask again after the backend restarts</div>
+									<div>{t("trust.later")}</div>
+									<div className="text-xs text-muted-foreground">{t("trust.askAfterRestart")}</div>
 								</div>
 							</DropdownMenuItem>
 						</DropdownMenuContent>
@@ -99,6 +105,7 @@ export function ProjectTrustBanner({ session }: { session: SessionState }) {
 
 /** Header indicator for projects with trust-gated resources, once a decision exists. */
 export function ProjectTrustIndicator({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const homeDir = useApp((s) => s.environment?.homeDir);
 	const { busy, run } = useTrustAction(session.cwd);
 	const trust = session.projectTrust;
@@ -112,24 +119,28 @@ export function ProjectTrustIndicator({ session }: { session: SessionState }) {
 					variant="ghost"
 					size="sm"
 					className={trusted ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400"}
-					title={trusted ? "Project trusted" : "Project not trusted"}
+					title={trusted ? t("trust.trusted") : t("trust.untrusted")}
 				>
 					{busy ? <Loader2 className="animate-spin" /> : trusted ? <ShieldCheck /> : <ShieldOff />}
-					{!trusted && "Untrusted"}
+					{!trusted && t("trust.untrustedBadge")}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-72">
 				<DropdownMenuLabel className="font-normal">
-					<div className="font-medium text-foreground">{trusted ? "Project trusted" : "Project not trusted"}</div>
+					<div className="font-medium text-foreground">{trusted ? t("trust.trusted") : t("trust.untrusted")}</div>
 					<div className="text-xs text-muted-foreground">
-						{trusted
-							? "Settings and extensions in .argon are loaded."
-							: "Settings and extensions in .argon are not loaded."}
+						<Trans t={t} i18nKey={trusted ? "trust.loaded" : "trust.notLoaded"} components={{ folder: <code /> }} />
 						{trust.savedPath && (
-							<>
-								{" "}
-								Saved for <span className="font-mono">{displayPath(trust.savedPath, homeDir)}</span>.
-							</>
+							<div>
+								<Trans
+									t={t}
+									i18nKey="trust.savedFor"
+									shouldUnescape
+									tOptions={{ interpolation: { escapeValue: true } }}
+									values={{ path: displayPath(trust.savedPath, homeDir) }}
+									components={{ path: <code className="font-mono" /> }}
+								/>
+							</div>
 						)}
 					</div>
 				</DropdownMenuLabel>
@@ -138,33 +149,37 @@ export function ProjectTrustIndicator({ session }: { session: SessionState }) {
 					<>
 						<DropdownMenuItem onSelect={() => void run("deny")}>
 							<ShieldOff />
-							Stop trusting this project
+							{t("trust.revoke")}
 						</DropdownMenuItem>
 						<DropdownMenuItem onSelect={() => void run("deny_session")}>
 							<ShieldOff />
-							Turn off for now
+							{t("trust.temporarilyRevoke")}
 						</DropdownMenuItem>
 					</>
 				) : (
 					<>
 						<DropdownMenuItem onSelect={() => void run("trust")}>
 							<ShieldCheck />
-							Trust this project
+							{t("trust.trustProject")}
 						</DropdownMenuItem>
 						{trust.parentPath && (
 							<DropdownMenuItem onSelect={() => void run("trust_parent")}>
 								<ShieldCheck />
 								<span className="min-w-0 truncate">
-									Trust parent folder{" "}
-									<span className="font-mono text-xs text-muted-foreground">
-										{displayPath(trust.parentPath, homeDir)}
-									</span>
+									<Trans
+										t={t}
+										i18nKey="trust.parentWithPath"
+										shouldUnescape
+										tOptions={{ interpolation: { escapeValue: true } }}
+										values={{ path: displayPath(trust.parentPath, homeDir) }}
+										components={{ path: <code className="font-mono text-xs text-muted-foreground" /> }}
+									/>
 								</span>
 							</DropdownMenuItem>
 						)}
 						<DropdownMenuItem onSelect={() => void run("trust_session")}>
 							<ShieldCheck />
-							Trust for now
+							{t("trust.temporary")}
 						</DropdownMenuItem>
 					</>
 				)}

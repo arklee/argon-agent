@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export function Group({ title, children }: { title?: string; children: ReactNode }) {
 	return (
@@ -22,5 +23,6 @@ export function Row({ label, description, children }: { label: string; descripti
 }
 
 export function Loading() {
-	return <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>;
+	const { t } = useTranslation();
+	return <p className="py-8 text-center text-sm text-muted-foreground">{t("common.loading")}</p>;
 }

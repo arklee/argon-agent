@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * App store. Holds UI-facing state only; session state comes from the shared SessionMirror,
  * which owns ordering, gap detection and resync. Nothing here does IO except through AgentClient.
@@ -82,7 +83,7 @@ let mirror: SessionMirror | undefined;
 let disposers: Array<() => void> = [];
 
 export function getClient(): AgentClient {
-	if (!client) throw new Error("Not connected");
+	if (!client) throw new Error(t("notifications.notConnected"));
 	return client;
 }
 
@@ -94,13 +95,13 @@ function errorMessage(error: unknown): string {
 
 async function loadedId(summary: SessionSummary) {
 	if (summary.loaded || !summary.sessionPath) return summary.sessionId;
-	if (!mirror) throw new Error("Not connected");
+	if (!mirror) throw new Error(t("notifications.notConnected"));
 	return (await mirror.open(summary.sessionPath)).sessionId;
 }
 
 async function activatePath(path: string, draft?: string, fromSessionId?: string) {
 	const m = mirror;
-	if (!m) throw new Error("Not connected");
+	if (!m) throw new Error(t("notifications.notConnected"));
 	const state = await m.open(path);
 	if (m !== mirror || (fromSessionId && useApp.getState().activeSessionId !== fromSessionId)) return;
 	useApp.setState((s) => ({
@@ -109,7 +110,7 @@ async function activatePath(path: string, draft?: string, fromSessionId?: string
 	}));
 	const env = useApp.getState().environment;
 	if (env) localStorage.setItem(LAST_SESSION_KEY(env.id), path);
-	if (fromSessionId) toast("Switched to a new session");
+	if (fromSessionId) toast(t("notifications.switchedSession"));
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -245,7 +246,7 @@ export const useApp = create<AppState>((set, get) => ({
 			const { models } = await client.request("models.list", {});
 			set({ models });
 		} catch (error) {
-			toast.error(`Could not load models: ${errorMessage(error)}`);
+			toast.error(t("notifications.loadModels", { error: errorMessage(error) }));
 		}
 	},
 
@@ -261,7 +262,7 @@ export const useApp = create<AppState>((set, get) => ({
 			const envId = get().environment?.id;
 			if (envId && state.sessionPath) localStorage.setItem(LAST_SESSION_KEY(envId), state.sessionPath);
 		} catch (error) {
-			toast.error(`Could not open session: ${errorMessage(error)}`);
+			toast.error(t("notifications.openSession", { error: errorMessage(error) }));
 		} finally {
 			set({ openingSession: false });
 		}
@@ -277,7 +278,7 @@ export const useApp = create<AppState>((set, get) => ({
 			if (envId && state.sessionPath) localStorage.setItem(LAST_SESSION_KEY(envId), state.sessionPath);
 			void get().refreshSessions();
 		} catch (error) {
-			toast.error(`Could not create session: ${errorMessage(error)}`);
+			toast.error(t("notifications.createSession", { error: errorMessage(error) }));
 			throw error;
 		} finally {
 			set({ openingSession: false });
@@ -315,8 +316,7 @@ export const useApp = create<AppState>((set, get) => ({
 	async editMessage(itemId, text) {
 		const sessionId = get().activeSessionId;
 		try {
-			if (client?.connection.status !== "connected" || !sessionId)
-				throw new Error("Connect to the backend to send a message");
+			if (client?.connection.status !== "connected" || !sessionId) throw new Error(t("notifications.connectToSend"));
 			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.editMessage", { sessionId, itemId, text, clientMessageId });
 		} catch (error) {
@@ -383,8 +383,7 @@ export const useApp = create<AppState>((set, get) => ({
 	async sendPrompt(text, streamingBehavior, images) {
 		const sessionId = get().activeSessionId;
 		try {
-			if (client?.connection.status !== "connected" || !sessionId)
-				throw new Error("Connect to the backend to send a message");
+			if (client?.connection.status !== "connected" || !sessionId) throw new Error(t("notifications.connectToSend"));
 			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.prompt", {
 				sessionId,
@@ -410,7 +409,7 @@ export const useApp = create<AppState>((set, get) => ({
 		if (!client || !sessionId) return;
 		try {
 			const { accepted } = await client.request("interactions.respond", { sessionId, interactionId, response });
-			if (!accepted) toast.warning("This request was already answered or has expired");
+			if (!accepted) toast.warning(t("notifications.answered"));
 		} catch (error) {
 			toast.error(errorMessage(error));
 		}

@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type ConnectionConfig, DEFAULT_BACKEND_URL } from "@/lib/connection";
 
 export function ConnectScreen({ error, onConnect }: { error?: string; onConnect: (config: ConnectionConfig) => void }) {
+	const { t } = useTranslation();
 	const [url, setUrl] = useState(DEFAULT_BACKEND_URL);
 	const [token, setToken] = useState("");
 	return (
@@ -16,27 +18,30 @@ export function ConnectScreen({ error, onConnect }: { error?: string; onConnect:
 				}}
 			>
 				<div className="space-y-1">
-					<h1 className="text-xl font-semibold">Connect to Argon</h1>
+					<h1 className="text-xl font-semibold">{t("connection.title")}</h1>
 					<p className="text-sm text-muted-foreground">
-						Start the backend with <code className="rounded bg-muted px-1">npm run dev</code> and open the link it
-						prints, or paste the token here.
+						<Trans
+							t={t}
+							i18nKey="connection.instructions"
+							components={{ command: <code className="rounded bg-muted px-1" /> }}
+						/>
 					</p>
 				</div>
 				{error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 				<div className="space-y-1.5">
 					<label htmlFor="argon-backend-url" className="text-sm font-medium">
-						Backend URL
+						{t("connection.backendUrl")}
 					</label>
 					<Input id="argon-backend-url" value={url} onChange={(e) => setUrl(e.target.value)} />
 				</div>
 				<div className="space-y-1.5">
 					<label htmlFor="argon-token" className="text-sm font-medium">
-						Token
+						{t("connection.token")}
 					</label>
 					<Input id="argon-token" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
 				</div>
 				<Button type="submit" className="w-full" disabled={!token.trim()}>
-					Connect
+					{t("connection.connect")}
 				</Button>
 			</form>
 		</div>

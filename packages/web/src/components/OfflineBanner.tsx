@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export function OfflineBanner({ retryInMs }: { retryInMs?: number }) {
+	const { t } = useTranslation();
 	const [seconds, setSeconds] = useState(Math.ceil((retryInMs ?? 0) / 1000));
 	useEffect(() => {
 		if (retryInMs === undefined) return;
@@ -10,7 +12,7 @@ export function OfflineBanner({ retryInMs }: { retryInMs?: number }) {
 	}, [retryInMs]);
 	return (
 		<div role="status" className="border-b bg-amber-500/10 px-4 py-1.5 text-sm">
-			Disconnected from the backend — reconnecting… {retryInMs !== undefined && `(${seconds}s)`}
+			{retryInMs === undefined ? t("connection.offline") : t("connection.offlineCountdown", { seconds })}
 		</div>
 	);
 }

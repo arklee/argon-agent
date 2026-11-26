@@ -1,6 +1,7 @@
 import type { SessionState } from "@argon/shared";
 import { ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Composer } from "@/components/Composer";
 import { ContextMeter } from "@/components/ContextMeter";
 import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
@@ -29,7 +30,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { displayPath, sessionTitle } from "@/lib/format";
+import { displayPath, sessionTitle, thinkingLevelLabel } from "@/lib/format";
 import { useApp } from "@/stores/app";
 
 function ModelPicker({ session }: { session: SessionState }) {
@@ -38,6 +39,7 @@ function ModelPicker({ session }: { session: SessionState }) {
 }
 
 function ThinkingPicker({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const setThinkingLevel = useApp((s) => s.setThinkingLevel);
 	if (session.availableThinkingLevels.length <= 1) return null;
 	return (
@@ -47,10 +49,10 @@ function ThinkingPicker({ session }: { session: SessionState }) {
 			</SelectTrigger>
 			<SelectContent position="popper" align="end">
 				<SelectGroup>
-					<SelectLabel>Thinking</SelectLabel>
+					<SelectLabel>{t("chat.thinking")}</SelectLabel>
 					{session.availableThinkingLevels.map((level) => (
-						<SelectItem key={level} value={level}>
-							{level}
+						<SelectItem key={thinkingLevelLabel(level, t)} value={thinkingLevelLabel(level, t)}>
+							{thinkingLevelLabel(level, t)}
 						</SelectItem>
 					))}
 				</SelectGroup>
@@ -60,6 +62,7 @@ function ThinkingPicker({ session }: { session: SessionState }) {
 }
 
 function PermissionPicker({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const setPermissionMode = useApp((s) => s.setPermissionMode);
 	const ask = session.permissionMode === "ask";
 	return (
@@ -67,11 +70,11 @@ function PermissionPicker({ session }: { session: SessionState }) {
 			<DropdownMenuTrigger asChild>
 				<Button variant="ghost" size="sm" className="text-muted-foreground">
 					{ask ? <ShieldQuestion /> : <ShieldCheck className="text-amber-600 dark:text-amber-400" />}
-					{ask ? "Ask" : "Auto"}
+					{ask ? t("chat.ask") : t("chat.auto")}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuLabel>Tool permissions</DropdownMenuLabel>
+				<DropdownMenuLabel>{t("chat.permissionMode")}</DropdownMenuLabel>
 				<DropdownMenuSeparator />
 				<DropdownMenuRadioGroup
 					value={session.permissionMode}
@@ -79,14 +82,14 @@ function PermissionPicker({ session }: { session: SessionState }) {
 				>
 					<DropdownMenuRadioItem value="ask">
 						<div>
-							<div>Ask before changes</div>
-							<div className="text-xs text-muted-foreground">Read-only tools run freely</div>
+							<div>{t("chat.askChanges")}</div>
+							<div className="text-xs text-muted-foreground">{t("chat.allowReadOnly")}</div>
 						</div>
 					</DropdownMenuRadioItem>
 					<DropdownMenuRadioItem value="auto">
 						<div>
-							<div>Run everything</div>
-							<div className="text-xs text-muted-foreground">pi's default: no approvals</div>
+							<div>{t("chat.runEverything")}</div>
+							<div className="text-xs text-muted-foreground">{t("chat.noApprovals")}</div>
 						</div>
 					</DropdownMenuRadioItem>
 				</DropdownMenuRadioGroup>
@@ -96,6 +99,7 @@ function PermissionPicker({ session }: { session: SessionState }) {
 }
 
 export function ChatView({ session }: { session: SessionState }) {
+	const { t } = useTranslation();
 	const environment = useApp((s) => s.environment);
 	const summary = useApp((s) => s.sessions.find((x) => x.sessionId === session.sessionId));
 	const respond = useApp((s) => s.respond);
@@ -105,7 +109,7 @@ export function ChatView({ session }: { session: SessionState }) {
 	const headerTitle =
 		session.name ??
 		(firstUser?.kind === "user" ? firstUser.text.split("\n")[0]?.slice(0, 80) : undefined) ??
-		(summary ? sessionTitle(summary) : "New session");
+		(summary ? sessionTitle(summary) : t("common.untitledSession"));
 
 	return (
 		<>
@@ -114,7 +118,7 @@ export function ChatView({ session }: { session: SessionState }) {
 					{summary && renaming === session.sessionId ? (
 						<SessionNameInput session={summary} close={() => setRenaming(undefined)} />
 					) : (
-						<div className="truncate text-sm font-medium">{headerTitle || "New session"}</div>
+						<div className="truncate text-sm font-medium">{headerTitle || t("common.untitledSession")}</div>
 					)}
 				</div>
 				<span
@@ -136,7 +140,7 @@ export function ChatView({ session }: { session: SessionState }) {
 
 			{session.items.length === 0 && !session.retry ? (
 				<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
-					<p className="text-lg font-medium">What should we work on?</p>
+					<p className="text-lg font-medium">{t("chat.welcome")}</p>
 					<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>
 				</div>
 			) : (

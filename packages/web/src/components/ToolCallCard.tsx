@@ -1,6 +1,7 @@
 import type { ToolCallState } from "@argon/shared";
 import { Ban, Check, ChevronRight, CircleDashed, Hand, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { DiffStat, DiffView } from "@/components/DiffView";
 import { SessionImages } from "@/components/Images";
 import { formatDuration, summarizeToolArgs } from "@/lib/format";
@@ -35,6 +36,7 @@ export function ToolCallCard({
 	tool: ToolCallState | undefined;
 	awaitingApproval?: boolean;
 }) {
+	const { t } = useTranslation();
 	const [openState, setOpen] = useState<boolean>();
 	const sessionId = useApp((s) => s.activeSessionId);
 	const status = tool?.status ?? "pending";
@@ -61,7 +63,7 @@ export function ToolCallCard({
 				<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
 				{diff && <DiffStat diff={diff} />}
 				{awaitingApproval && (
-					<span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">Waiting for approval</span>
+					<span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">{t("tools.waitingApproval")}</span>
 				)}
 				{tool?.durationMs !== undefined && (
 					<span className="shrink-0 text-xs text-muted-foreground">{formatDuration(tool.durationMs)}</span>

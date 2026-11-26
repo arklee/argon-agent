@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * Settings, provider accounts and plugins. Backend-wide state (not per session), fetched on demand
  * while the settings dialog is open; login flows are owned by the backend and pushed as events.
@@ -102,7 +103,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	onGlobalEvent(event) {
 		if (event.type === "auth_flow") {
 			set((s) => ({ flows: { ...s.flows, [event.flow.flowId]: event.flow } }));
-			if (event.flow.status === "succeeded") toast.success(`Signed in to ${event.flow.providerName}`);
+			if (event.flow.status === "succeeded")
+				toast.success(t("notifications.signedIn", { provider: event.flow.providerName }));
 		}
 		if (event.type === "providers_changed" && get().open) {
 			void get().refreshProviders();
@@ -115,7 +117,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			const { providers } = await getClient().request("providers.list", {});
 			set({ providers });
 		} catch (e) {
-			toast.error(`Could not load providers: ${errorMessage(e)}`);
+			toast.error(t("notifications.loadProviders", { error: errorMessage(e) }));
 		}
 	},
 	async refreshFlows() {
@@ -131,7 +133,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			const settings = await getClient().request("settings.get", { cwd: get().cwd });
 			set({ settings });
 		} catch (e) {
-			toast.error(`Could not load settings: ${errorMessage(e)}`);
+			toast.error(t("notifications.loadSettings", { error: errorMessage(e) }));
 		}
 	},
 	async refreshPlugins() {
@@ -149,7 +151,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		try {
 			await getClient().request("settings.update", { pi: patch });
 		} catch (e) {
-			toast.error(`Could not save: ${errorMessage(e)}`);
+			toast.error(t("notifications.save", { error: errorMessage(e) }));
 		}
 		await get().refreshSettings();
 	},
@@ -159,7 +161,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		try {
 			await getClient().request("settings.update", { argon: patch });
 		} catch (e) {
-			toast.error(`Could not save: ${errorMessage(e)}`);
+			toast.error(t("notifications.save", { error: errorMessage(e) }));
 		}
 		await get().refreshSettings();
 	},
@@ -174,7 +176,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	async respondFlow(flowId, promptId, value) {
 		try {
 			const { accepted } = await getClient().request("auth.respond", { flowId, promptId, value });
-			if (!accepted) toast.warning("This step was already answered or has expired");
+			if (!accepted) toast.warning(t("notifications.stepAnswered"));
 		} catch (e) {
 			toast.error(errorMessage(e));
 		}
@@ -204,14 +206,17 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			const { results } = await getClient().request("plugins.search", { query });
 			return results;
 		} catch (e) {
-			toast.error(`Search failed: ${errorMessage(e)}`);
+			toast.error(t("notifications.searchFailed", { error: errorMessage(e) }));
 			return [];
 		}
 	},
 	async changePlugin(action, spec) {
 		try {
 			const { message } = await getClient().request("plugins.change", { action, spec, confirmed: true });
-			toast.success(message || (action === "install" ? `Installed ${spec}` : `Removed ${spec}`));
+			toast.success(
+				message ||
+					(action === "install" ? t("notifications.installed", { spec }) : t("notifications.removed", { spec })),
+			);
 			await get().refreshPlugins();
 			return true;
 		} catch (e) {

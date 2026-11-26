@@ -1,7 +1,9 @@
 import type { ImageData } from "@argon/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { getClient } from "@/stores/app";
 
@@ -18,7 +20,7 @@ export function readFileAsBase64(file: File): Promise<string> {
 			const result = String(reader.result ?? "");
 			resolve(result.slice(result.indexOf(",") + 1));
 		};
-		reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+		reader.onerror = () => reject(reader.error ?? new Error(t("images.readFailed")));
 		reader.readAsDataURL(file);
 	});
 }
@@ -44,6 +46,7 @@ function loadImages(sessionId: string, ref: { toolCallId?: string; itemId?: stri
 }
 
 export function Thumbnail({ src, className }: { src: string; className?: string }) {
+	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	return (
 		<>
@@ -56,7 +59,7 @@ export function Thumbnail({ src, className }: { src: string; className?: string 
 			</button>
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent className="max-w-[90vw] p-2 sm:max-w-[90vw]">
-					<DialogTitle className="sr-only">Image</DialogTitle>
+					<DialogTitle className="sr-only">{t("images.alt")}</DialogTitle>
 					<img src={src} alt="" className="max-h-[85vh] w-full object-contain" />
 				</DialogContent>
 			</Dialog>
@@ -78,6 +81,7 @@ export function SessionImages({
 	count: number;
 	className?: string;
 }) {
+	const { t } = useTranslation();
 	const [images, setImages] = useState<ImageData[]>();
 	useEffect(() => {
 		let cancelled = false;
@@ -93,16 +97,12 @@ export function SessionImages({
 	if (images === undefined) {
 		return (
 			<div className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", className)}>
-				<Loader2 className="size-3 animate-spin" /> Loading {count} image{count === 1 ? "" : "s"}…
+				<Loader2 className="size-3 animate-spin" /> {t("images.loadingCount", { count })}
 			</div>
 		);
 	}
 	if (images.length === 0) {
-		return (
-			<p className={cn("text-xs text-muted-foreground", className)}>
-				{count} image{count === 1 ? "" : "s"}
-			</p>
-		);
+		return <p className={cn("text-xs text-muted-foreground", className)}>{t("images.count", { count })}</p>;
 	}
 	return (
 		<div className={cn("flex flex-wrap gap-2", className)}>
