@@ -97,6 +97,15 @@
 - [ ] 多客户端并发：同一会话的占用、接管、只读旁观
 - [ ] 托管纯 web 客户端（浏览器或手机直接访问 daemon）
 
+## 工具预设与工具显示（设计见 decisions D13）
+
+本轮只实现传统模式、codemode、codemode only 三个预设，pi-codex-conversion 的模式只在设计上预留。
+
+- [ ] 1. 显示层：前端 presenter 注册表和按类型（shell / file_read / file_change / search / script / generic）划分的渲染器；把 `summarizeToolArgs` 和现有 diff 显示迁移过去；backend 给调用附上 `source`。外观基本不变
+- [ ] 2. 嵌套调用：`ToolCallState.parentToolCallId`，`translate` 保留嵌套事件，`script` 卡片显示子调用（含 diff）；修正 codemode 卡片的摘要（format.ts 仍写着旧名 `exec`）和脚本代码高亮
+- [ ] 3. 预设选择：全局默认 + 会话级切换（存会话文件，两轮之间生效）；预设如何作用到 pi 配置（`defaultTools`、`codemode.mode`）
+- [ ] 4. 审批策略按显示类型：迁移 `READ_ONLY_TOOLS` 和规则建议；嵌套调用的审批粒度作为预设选项
+
 ## 阶段 4：对 pi 的深度定制（按需）
 
 按 D7 的优先级处理，先确认官方是否已有等价入口。

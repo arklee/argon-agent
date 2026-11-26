@@ -198,3 +198,19 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 ## D12. 前端 i18n
 
 **决定**：使用 i18next 和 react-i18next，同步加载内置的英文和简体中文词条。语言偏好保存在客户端的 localStorage 中，同一个后端可同时服务使用不同界面语言的客户端。后端、pi 和扩展提供的原始文本暂不翻译。
+
+## D13. 工具预设与工具显示
+
+**背景**：pi 的工具体系可能大改。Argon 要支持多套“工具预设”：传统模式（read / write / edit / bash 等分开的工具）、pi 的 codemode、codemode only，以后还可能参考 pi-codex-conversion 的几种模式（Structured、Code、TS Notebook、VM Code，工具是 `exec_command`、`apply_patch`、`exec`、`notebook` 等）。每种预设有自己的工具，也要能控制这些工具怎么显示。此前 Argon 对工具的假设是写死的：前端按工具名写摘要、只有 edit/write 有 diff、`READ_ONLY_TOOLS` 固定、“始终允许”规则只认 bash、嵌套调用一律丢掉。
+
+**决定**：
+
+1. **预设是 backend 概念**，负责：启用哪些工具、如何配置 pi（例如 `defaultTools`、`codemode.mode`）、审批策略。全局设置给出默认预设；每个会话可以单独切换，存在会话文件里（与权限模式相同），在两轮之间生效。切换会改变工具列表和系统提示词，下一次请求的缓存会全部失效。
+2. **显示映射在前端按工具名做**（`packages/web/src/tools/`）：presenter 注册表把 `ToolCallState` 映射成显示描述，再由按类型划分的渲染器显示。显示类型按语义划分，不按工具名：`shell`、`file_read`、`file_change`（一开始就支持多文件，以容纳 `apply_patch`）、`search`、`script`（带子调用）、`generic`。不认识的工具一律用 `generic`，所以前端缺少某个 presenter 时只会显示得朴素一些，不会出错。
+3. **backend 给每个调用附上来源标识**（`source`，例如 `builtin`、`builtin:codemode`、`npm:<包名>`、`mcp:<server>`，只是字符串）。前端先按“来源 + 工具名”查找 presenter，找不到再按工具名查找，避免不同预设里的同名工具互相冲突。
+4. **presenter 注册表是所有预设共用的**，与当前启用哪个预设无关。会话可能中途切换过预设，旧调用也必须能正确显示。预设只能调整显示偏好（例如子调用默认展开还是折叠）。
+5. **嵌套调用是一等公民**：`ToolCallState` 记录 `parentToolCallId`，`translate` 不再丢掉嵌套事件，`script` 卡片下列出子调用，每个子调用用各自的渲染器显示。
+6. **需要文件读写的部分仍在 backend 计算**（diff 预览、write diff 持久化，见 `write-diff.ts`），前端只显示。
+7. **审批策略逐步跟着显示类型走**：`shell` 用命令前缀规则，`file_read` / `search` 视为只读。嵌套调用是整段脚本一起审批还是逐个审批，作为预设的选项，先不定死。
+
+**考虑过的方案**：在 backend 计算显示描述、随协议下发。这样 pi 和扩展的工具知识只留在 backend，远程 backend 启用新预设时前端也不用升级。最终选择在前端映射，代价是：backend 用了前端不认识的工具时，只能降级为通用卡片。
