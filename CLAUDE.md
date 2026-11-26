@@ -53,6 +53,7 @@ backend 能执行 shell 命令，所以：默认只监听 127.0.0.1；WebSocket 
 npm run dev          # backend (tsx watch, :7878) + web (vite, :5173)，就绪后自动打开带 token 的链接（--no-open / ARGON_NO_OPEN=1 关闭）
 npm run typecheck    # 所有包
 npm test             # vitest
+npm run smoke        # 端到端冒烟（真实 backend 和模型）
 npm run lint         # biome；npm run format 自动修复
 ```
 
