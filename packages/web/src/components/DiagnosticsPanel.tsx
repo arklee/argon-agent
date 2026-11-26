@@ -17,9 +17,12 @@ const SOURCE_LABELS = {
 export function DiagnosticsPanel({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
 	const homeDir = useApp((s) => s.environment?.homeDir);
+	const clearDiagnostics = useApp((s) => s.clearDiagnostics);
 	const diagnostics = session.diagnostics;
 	if (diagnostics.length === 0) return null;
 	const errors = diagnostics.filter((d) => d.level === "error").length;
+	// Loading problems describe the current state; only extension and model reports can be dismissed.
+	const clearable = diagnostics.some((d) => d.source !== "resources");
 	const tone = errors > 0 ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400";
 	// Newest first.
 	const entries = [...diagnostics].reverse();
@@ -38,13 +41,26 @@ export function DiagnosticsPanel({ session }: { session: SessionState }) {
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-[28rem] p-0">
-				<div className="border-b px-3 py-2 text-sm font-medium">
-					{t("diagnostics.title")}
-					<span className="ml-2 text-xs font-normal text-muted-foreground">
-						{errors > 0 && t("diagnostics.errorCount", { count: errors })}
-						{errors > 0 && errors < diagnostics.length && " · "}
-						{errors < diagnostics.length && t("diagnostics.warningCount", { count: diagnostics.length - errors })}
+				<div className="flex items-center gap-2 border-b py-1.5 pr-1.5 pl-3 text-sm font-medium">
+					<span className="min-w-0 flex-1">
+						{t("diagnostics.title")}
+						<span className="ml-2 text-xs font-normal text-muted-foreground">
+							{errors > 0 && t("diagnostics.errorCount", { count: errors })}
+							{errors > 0 && errors < diagnostics.length && " · "}
+							{errors < diagnostics.length && t("diagnostics.warningCount", { count: diagnostics.length - errors })}
+						</span>
 					</span>
+					{clearable && (
+						<Button
+							variant="ghost"
+							size="xs"
+							className="text-muted-foreground"
+							title={t("diagnostics.clearDescription")}
+							onClick={() => void clearDiagnostics()}
+						>
+							{t("diagnostics.clear")}
+						</Button>
+					)}
 				</div>
 				<ul className="max-h-80 divide-y overflow-y-auto">
 					{entries.map((d) => (
@@ -56,7 +72,14 @@ export function DiagnosticsPanel({ session }: { session: SessionState }) {
 								)}
 							/>
 							<div className="min-w-0 flex-1 space-y-0.5">
-								<div className="text-muted-foreground">{t(SOURCE_LABELS[d.source])}</div>
+								<div className="flex items-center gap-1.5 text-muted-foreground">
+									{t(SOURCE_LABELS[d.source])}
+									{(d.count ?? 1) > 1 && (
+										<span className="rounded bg-muted px-1 tabular-nums">
+											{t("diagnostics.repeated", { count: d.count ?? 1 })}
+										</span>
+									)}
+								</div>
 								<div className="whitespace-pre-wrap break-words">{d.message}</div>
 								{d.path && (
 									<div className="truncate font-mono text-muted-foreground" title={d.path}>

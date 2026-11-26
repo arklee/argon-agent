@@ -1,9 +1,19 @@
-import type { PermissionRule, PiSettings, ResourceSettings } from "@argon/shared";
-import { FolderTree, KeyRound, type LucideIcon, Puzzle, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import type { PermissionRule, PiSettings, ProjectPiSettings, ResourceSettings } from "@argon/shared";
+import {
+	FolderTree,
+	KeyRound,
+	type LucideIcon,
+	Puzzle,
+	RotateCcw,
+	ShieldCheck,
+	SlidersHorizontal,
+	Trash2,
+} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
+import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings/EnabledModelsEditor";
 import { PluginsSection } from "@/components/settings/PluginsSection";
 import { Group, Loading, Row } from "@/components/settings/parts";
 import { presetLabel } from "@/components/ToolPresetPicker";
@@ -13,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
-import { formatNumber, thinkingLevelLabel } from "@/lib/format";
+import { basename, displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { type SettingsSection, useSettings } from "@/stores/settings";
@@ -83,13 +93,80 @@ export function SettingsDialog() {
 // Building blocks
 // ---------------------------------------------------------------------------
 
-function Toggle({ settingKey }: { settingKey: keyof PiSettings }) {
-	const pi = useSettings((s) => s.settings?.pi);
+/** The pi settings of the scope the dialog edits: global, or the project's file over the global values. */
+function useScopedPi() {
+	const scope = useSettings((s) => s.scope);
+	const settings = useSettings((s) => s.settings);
 	const updatePi = useSettings((s) => s.updatePi);
+	const updateProject = useSettings((s) => s.updateProject);
+	const project = scope === "project" ? settings?.project : undefined;
+	const values: PiSettings | undefined = settings && (project ? { ...settings.pi, ...project.values } : settings.pi);
+	return {
+		project,
+		values,
+		overridden: (key: keyof ProjectPiSettings) => project !== undefined && key in project.values,
+		update: (patch: Partial<ProjectPiSettings>) => (project ? updateProject(patch) : updatePi(patch)),
+		reset: (key: keyof ProjectPiSettings) => updateProject({}, [key]),
+	};
+}
+
+/** A settings row that, in project scope, marks project overrides and can reset them to the global value. */
+function ScopedRow({
+	settingKey,
+	label,
+	description,
+	children,
+}: {
+	settingKey: keyof ProjectPiSettings;
+	label: string;
+	description?: string;
+	children: ReactNode;
+}) {
+	const { t } = useTranslation();
+	const { overridden, reset } = useScopedPi();
+	const isSet = overridden(settingKey);
+	return (
+		<Row
+			label={label}
+			description={
+				isSet ? (
+					<>
+						{description}
+						<span className="mt-0.5 flex items-center gap-1 text-primary">
+							<span className="size-1.5 rounded-full bg-primary" />
+							{t("settings.general.setForProject")}
+						</span>
+					</>
+				) : (
+					description
+				)
+			}
+		>
+			{children}
+			{isSet && (
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					className="ml-1 text-muted-foreground"
+					aria-label={t("settings.general.useGlobal")}
+					title={t("settings.general.useGlobal")}
+					onClick={() => void reset(settingKey)}
+				>
+					<RotateCcw />
+				</Button>
+			)}
+		</Row>
+	);
+}
+
+type BooleanSetting = "compaction" | "retry" | "enableSkillCommands" | "imageAutoResize" | "blockImages";
+
+function Toggle({ settingKey }: { settingKey: BooleanSetting }) {
+	const { values, update } = useScopedPi();
 	return (
 		<Switch
-			checked={pi?.[settingKey] === true}
-			onCheckedChange={(checked) => void updatePi({ [settingKey]: checked })}
+			checked={values?.[settingKey] === true}
+			onCheckedChange={(checked) => void update({ [settingKey]: checked })}
 		/>
 	);
 }
@@ -161,8 +238,7 @@ const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 function DefaultModel() {
 	const { t } = useTranslation();
 	const models = useApp((s) => s.models);
-	const current = useSettings((s) => s.settings?.pi.defaultModel);
-	const updatePi = useSettings((s) => s.updatePi);
+	const { values, update } = useScopedPi();
 	const show = useSettings((s) => s.setSection);
 	if (models.length === 0) {
 		return (
@@ -173,37 +249,129 @@ function DefaultModel() {
 	}
 	return (
 		<ModelCombobox
-			value={current}
+			value={values?.defaultModel}
 			placeholder={t("settings.general.notSet")}
-			onChange={(defaultModel) => void updatePi({ defaultModel })}
+			onChange={(defaultModel) => void update({ defaultModel })}
 			manageProviders={false}
 			className="max-w-64 border shadow-xs"
 		/>
 	);
 }
 
+function EnabledModels() {
+	const { t } = useTranslation();
+	const { values, update } = useScopedPi();
+	const [editing, setEditing] = useState(false);
+	const patterns = values?.enabledModels ?? [];
+	return (
+		<>
+			<Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+				{enabledModelsSummary(patterns, t)}
+			</Button>
+			<EnabledModelsEditor
+				open={editing}
+				onOpenChange={setEditing}
+				patterns={patterns}
+				onChange={(enabledModels) => void update({ enabledModels })}
+			/>
+		</>
+	);
+}
+
+function ScopeSwitch() {
+	const { t } = useTranslation();
+	const cwd = useSettings((s) => s.cwd);
+	const scope = useSettings((s) => s.scope);
+	const setScope = useSettings((s) => s.setScope);
+	if (!cwd) return null;
+	const options = [
+		{ value: "global", label: t("settings.general.scopeGlobal") },
+		{ value: "project", label: `${t("settings.general.scopeProject")} · ${basename(cwd) || cwd}` },
+	] as const;
+	return (
+		<fieldset
+			aria-label={t("settings.general.scope")}
+			className="m-0 min-w-0 border-0 mb-5 flex rounded-lg bg-muted p-0.5"
+		>
+			{options.map((option) => (
+				<button
+					key={option.value}
+					type="button"
+					aria-pressed={scope === option.value}
+					title={option.value === "project" ? cwd : undefined}
+					onClick={() => setScope(option.value)}
+					className={cn(
+						"min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors",
+						scope === option.value && "bg-background font-medium text-foreground shadow-xs",
+					)}
+				>
+					{option.label}
+				</button>
+			))}
+		</fieldset>
+	);
+}
+
+/** Where project settings are saved, and why they might not apply. */
+function ProjectScopeNote() {
+	const { t } = useTranslation();
+	const homeDir = useApp((s) => s.environment?.homeDir);
+	const { project } = useScopedPi();
+	if (!project) return null;
+	return (
+		<div className="mb-5 space-y-2 text-xs text-muted-foreground">
+			<p>
+				<Trans
+					t={t}
+					i18nKey="settings.general.projectFile"
+					shouldUnescape
+					tOptions={{ interpolation: { escapeValue: true } }}
+					values={{ path: displayPath(project.path, homeDir) }}
+					components={{ path: <code className="font-mono break-all" /> }}
+				/>
+			</p>
+			{!project.trusted && (
+				<p className="rounded-md bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-300">
+					{t("settings.general.projectUntrusted")}
+				</p>
+			)}
+			{project.error && (
+				<p className="rounded-md bg-destructive/10 px-3 py-2 text-destructive">
+					{t("settings.general.projectInvalid", { error: project.error })}
+				</p>
+			)}
+		</div>
+	);
+}
+
 function GeneralSection() {
 	const { t } = useTranslation();
 	const [preference, setPreference] = useState(getLanguagePreference);
+	const scope = useSettings((s) => s.scope);
 	return (
 		<>
-			<Group>
-				<Row label={t("settings.general.language")}>
-					<Choice<LanguagePreference>
-						ariaLabel={t("settings.general.language")}
-						value={preference}
-						options={[
-							{ value: "system", label: t("settings.general.systemLanguage") },
-							{ value: "en", label: t("settings.general.english") },
-							{ value: "zh-CN", label: t("settings.general.simplifiedChinese") },
-						]}
-						onChange={(value) => {
-							setPreference(value);
-							void setLanguagePreference(value);
-						}}
-					/>
-				</Row>
-			</Group>
+			<ScopeSwitch />
+			{scope === "project" ? (
+				<ProjectScopeNote />
+			) : (
+				<Group>
+					<Row label={t("settings.general.language")}>
+						<Choice<LanguagePreference>
+							ariaLabel={t("settings.general.language")}
+							value={preference}
+							options={[
+								{ value: "system", label: t("settings.general.systemLanguage") },
+								{ value: "en", label: t("settings.general.english") },
+								{ value: "zh-CN", label: t("settings.general.simplifiedChinese") },
+							]}
+							onChange={(value) => {
+								setPreference(value);
+								void setLanguagePreference(value);
+							}}
+						/>
+					</Row>
+				</Group>
+			)}
 			<GeneralDefaults />
 		</>
 	);
@@ -211,12 +379,14 @@ function GeneralSection() {
 
 function GeneralDefaults() {
 	const { t } = useTranslation();
-	const pi = useSettings((s) => s.settings?.pi);
+	const { project, values: pi, update } = useScopedPi();
 	const argon = useSettings((s) => s.settings?.argon);
 	const updatePi = useSettings((s) => s.updatePi);
 	const updateArgon = useSettings((s) => s.updateArgon);
 	const presets = useApp((s) => s.toolPresets);
 	if (!pi) return <Loading />;
+	// Backend-wide choices (tool preset, project trust) have no project-level setting.
+	const global = project === undefined;
 	const queueModes = [
 		{ value: "one-at-a-time", label: t("settings.general.oneAtATime") },
 		{ value: "all", label: t("settings.general.allAtOnce") },
@@ -224,10 +394,15 @@ function GeneralDefaults() {
 	return (
 		<>
 			<Group title={t("settings.general.model")}>
-				<Row label={t("settings.general.defaultModel")} description={t("settings.general.defaultModelDescription")}>
+				<ScopedRow
+					settingKey="defaultModel"
+					label={t("settings.general.defaultModel")}
+					description={t("settings.general.defaultModelDescription")}
+				>
 					<DefaultModel />
-				</Row>
-				<Row
+				</ScopedRow>
+				<ScopedRow
+					settingKey="defaultThinkingLevel"
 					label={t("settings.general.defaultThinking")}
 					description={t("settings.general.defaultThinkingDescription")}
 				>
@@ -235,11 +410,18 @@ function GeneralDefaults() {
 						value={pi.defaultThinkingLevel}
 						placeholder={t("settings.general.notSet")}
 						options={THINKING.map((level) => ({ value: level, label: thinkingLevelLabel(level, t) }))}
-						onChange={(defaultThinkingLevel) => void updatePi({ defaultThinkingLevel })}
+						onChange={(defaultThinkingLevel) => void update({ defaultThinkingLevel })}
 					/>
-				</Row>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="enabledModels"
+					label={t("settings.general.enabledModels")}
+					description={t("settings.general.enabledModelsDescription")}
+				>
+					<EnabledModels />
+				</ScopedRow>
 			</Group>
-			{presets.length > 0 && argon?.defaultToolPreset && (
+			{global && presets.length > 0 && argon?.defaultToolPreset && (
 				<Group title={t("settings.general.tools")}>
 					<Row label={t("settings.general.toolPreset")} description={t("settings.general.toolPresetDescription")}>
 						<Choice
@@ -251,67 +433,105 @@ function GeneralDefaults() {
 				</Group>
 			)}
 			<Group title={t("settings.general.conversation")}>
-				<Row label={t("settings.general.steering")} description={t("settings.general.steeringDescription")}>
+				<ScopedRow
+					settingKey="steeringMode"
+					label={t("settings.general.steering")}
+					description={t("settings.general.steeringDescription")}
+				>
 					<Choice
 						value={pi.steeringMode}
 						options={queueModes}
-						onChange={(steeringMode) => void updatePi({ steeringMode })}
+						onChange={(steeringMode) => void update({ steeringMode })}
 					/>
-				</Row>
-				<Row label={t("settings.general.followUp")} description={t("settings.general.followUpDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="followUpMode"
+					label={t("settings.general.followUp")}
+					description={t("settings.general.followUpDescription")}
+				>
 					<Choice
 						value={pi.followUpMode}
 						options={queueModes}
-						onChange={(followUpMode) => void updatePi({ followUpMode })}
+						onChange={(followUpMode) => void update({ followUpMode })}
 					/>
-				</Row>
-				<Row label={t("settings.general.autoCompact")} description={t("settings.general.autoCompactDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="compaction"
+					label={t("settings.general.autoCompact")}
+					description={t("settings.general.autoCompactDescription")}
+				>
 					<Toggle settingKey="compaction" />
-				</Row>
-				<Row label={t("settings.general.autoRetry")} description={t("settings.general.autoRetryDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="retry"
+					label={t("settings.general.autoRetry")}
+					description={t("settings.general.autoRetryDescription")}
+				>
 					<Toggle settingKey="retry" />
-				</Row>
-				<Row label={t("settings.general.skillCommands")} description={t("settings.general.skillCommandsDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="enableSkillCommands"
+					label={t("settings.general.skillCommands")}
+					description={t("settings.general.skillCommandsDescription")}
+				>
 					<Toggle settingKey="enableSkillCommands" />
-				</Row>
+				</ScopedRow>
 			</Group>
 			<Group title={t("settings.general.images")}>
-				<Row label={t("settings.general.resize")} description={t("settings.general.resizeDescription")}>
+				<ScopedRow
+					settingKey="imageAutoResize"
+					label={t("settings.general.resize")}
+					description={t("settings.general.resizeDescription")}
+				>
 					<Toggle settingKey="imageAutoResize" />
-				</Row>
-				<Row label={t("settings.general.blockImages")} description={t("settings.general.blockImagesDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="blockImages"
+					label={t("settings.general.blockImages")}
+					description={t("settings.general.blockImagesDescription")}
+				>
 					<Toggle settingKey="blockImages" />
-				</Row>
+				</ScopedRow>
 			</Group>
 			<Group title={t("settings.general.shell")}>
-				<Row label={t("settings.general.shell")} description={t("settings.general.shellDescription")}>
+				<ScopedRow
+					settingKey="shellPath"
+					label={t("settings.general.shell")}
+					description={t("settings.general.shellDescription")}
+				>
 					<TextSetting
 						value={pi.shellPath}
 						placeholder="/bin/bash"
-						onSave={(shellPath) => void updatePi({ shellPath })}
+						onSave={(shellPath) => void update({ shellPath })}
 					/>
-				</Row>
-				<Row label={t("settings.general.commandPrefix")} description={t("settings.general.commandPrefixDescription")}>
+				</ScopedRow>
+				<ScopedRow
+					settingKey="shellCommandPrefix"
+					label={t("settings.general.commandPrefix")}
+					description={t("settings.general.commandPrefixDescription")}
+				>
 					<TextSetting
 						value={pi.shellCommandPrefix}
 						placeholder="source ~/.profile &&"
-						onSave={(shellCommandPrefix) => void updatePi({ shellCommandPrefix })}
+						onSave={(shellCommandPrefix) => void update({ shellCommandPrefix })}
 					/>
-				</Row>
+				</ScopedRow>
 			</Group>
-			<Group title={t("settings.general.projects")}>
-				<Row label={t("settings.general.trustNew")} description={t("settings.general.trustNewDescription")}>
-					<Choice
-						value={pi.defaultProjectTrust}
-						options={[
-							{ value: "ask", label: t("settings.general.ask") },
-							{ value: "always", label: t("settings.general.always") },
-							{ value: "never", label: t("settings.general.never") },
-						]}
-						onChange={(defaultProjectTrust) => void updatePi({ defaultProjectTrust })}
-					/>
-				</Row>
-			</Group>
+			{global && (
+				<Group title={t("settings.general.projects")}>
+					<Row label={t("settings.general.trustNew")} description={t("settings.general.trustNewDescription")}>
+						<Choice
+							value={pi.defaultProjectTrust}
+							options={[
+								{ value: "ask", label: t("settings.general.ask") },
+								{ value: "always", label: t("settings.general.always") },
+								{ value: "never", label: t("settings.general.never") },
+							]}
+							onChange={(defaultProjectTrust) => void updatePi({ defaultProjectTrust })}
+						/>
+					</Row>
+				</Group>
+			)}
 		</>
 	);
 }

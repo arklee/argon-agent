@@ -37,7 +37,17 @@ import { findToolCallBlock } from "@/tools";
 
 function ModelPicker({ session }: { session: SessionState }) {
 	const setModel = useApp((s) => s.setModel);
-	return <ModelCombobox value={session.model} onChange={(model) => void setModel(model)} className="max-w-56" />;
+	const setThinkingLevel = useApp((s) => s.setThinkingLevel);
+	return (
+		<ModelCombobox
+			value={session.model}
+			cwd={session.cwd}
+			onChange={(model, thinkingLevel) =>
+				void setModel(model).then(() => (thinkingLevel ? setThinkingLevel(thinkingLevel) : undefined))
+			}
+			className="max-w-56"
+		/>
+	);
 }
 
 function ThinkingPicker({ session }: { session: SessionState }) {

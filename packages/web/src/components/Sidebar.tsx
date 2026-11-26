@@ -1,5 +1,16 @@
 import type { SessionSummary } from "@argon/shared";
-import { Ellipsis, FolderOpen, FolderPlus, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
+import {
+	Archive,
+	ArrowLeft,
+	Ellipsis,
+	FolderOpen,
+	FolderPlus,
+	Pin,
+	Plus,
+	Server,
+	Settings,
+	SquarePen,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
@@ -75,10 +86,16 @@ export function Sidebar() {
 	const projects = useApp((s) => s.projects);
 	const search = useApp((s) => s.search);
 	const showHidden = useApp((s) => s.showHidden);
+	const showArchived = useApp((s) => s.showArchived);
 	const updateProject = useApp((s) => s.updateProject);
-	const all = useMemo(() => groupByProject(sessions, projects, search), [sessions, projects, search]);
-	const groups = visibleProjects(all, showHidden);
-	const hidden = all.filter((g) => g.hidden).length;
+	const all = useMemo(
+		() => groupByProject(sessions, projects, search, { archived: showArchived }),
+		[sessions, projects, search, showArchived],
+	);
+	// Archived sessions are shown whatever their project's visibility.
+	const groups = showArchived ? all : visibleProjects(all, showHidden);
+	const hidden = showArchived ? 0 : all.filter((g) => g.hidden).length;
+	const archivedCount = useMemo(() => sessions.filter((s) => s.archived).length, [sessions]);
 
 	return (
 		<aside className="flex w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -128,7 +145,26 @@ export function Sidebar() {
 				/>
 			</div>
 			<nav className="flex-1 overflow-y-auto px-2 pb-2">
-				{groups.length === 0 && (
+				{showArchived && (
+					<div className="mb-2 flex items-center gap-1 px-1">
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							aria-label={t("sidebar.backToSessions")}
+							title={t("sidebar.backToSessions")}
+							onClick={() => useApp.setState({ showArchived: false })}
+						>
+							<ArrowLeft />
+						</Button>
+						<span className="text-xs font-medium">{t("sidebar.archivedTitle")}</span>
+					</div>
+				)}
+				{showArchived && groups.length === 0 && (
+					<p className="px-2 py-6 text-center text-sm text-muted-foreground">
+						{search ? t("sidebar.noMatch") : t("sidebar.noArchived")}
+					</p>
+				)}
+				{!showArchived && groups.length === 0 && (
 					<div className="flex flex-col items-center px-2 py-6 text-center text-sm text-muted-foreground">
 						{search ? (
 							t("sidebar.noMatch")
@@ -160,7 +196,7 @@ export function Sidebar() {
 								<FolderOpen className="size-3.5 shrink-0" />
 								<span className="truncate">{basename(group.cwd) || group.cwd}</span>
 							</span>
-							<div className="ml-auto flex items-center">
+							<div className={cn("ml-auto flex items-center", showArchived && "hidden")}>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<Button
@@ -206,6 +242,17 @@ export function Sidebar() {
 						</ul>
 					</section>
 				))}
+				{!showArchived && archivedCount > 0 && (
+					<Button
+						variant="ghost"
+						size="sm"
+						className="text-muted-foreground"
+						onClick={() => useApp.setState({ showArchived: true })}
+					>
+						<Archive />
+						{t("sidebar.archived", { count: archivedCount })}
+					</Button>
+				)}
 				{hidden > 0 && (
 					<Button
 						variant="ghost"

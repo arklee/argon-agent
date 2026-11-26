@@ -46,6 +46,12 @@ interface AppState {
 	projects: ProjectPrefs[];
 	search: string;
 	showHidden: boolean;
+	showArchived: boolean;
+	unloadedSessions: Record<string, true>;
+	modelScopes: Record<string, { scoped: (ModelRef & { thinkingLevel?: ThinkingLevel })[]; warnings: string[] } | null>;
+	refreshModelScope(cwd: string): Promise<void>;
+	setArchived(summary: SessionSummary, archived: boolean): Promise<void>;
+	clearDiagnostics(): Promise<void>;
 	composerDrafts: Record<string, string>;
 	refreshProjects(): Promise<void>;
 	updateProject(prefs: ProjectPrefs): Promise<void>;
@@ -98,6 +104,28 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+async function activeLoadedSessionId(rethrow = false): Promise<string | undefined> {
+	const id = useApp.getState().activeSessionId;
+	const m = mirror;
+	if (!id || !m) return undefined;
+	if (!m.isUnloaded(id)) return id;
+	try {
+		const state = await m.reopen(id);
+		if (m !== mirror || useApp.getState().activeSessionId !== id) return undefined;
+		return state.sessionId;
+	} catch (error) {
+		if (rethrow) throw error;
+		toast.error(t("notifications.openSession", { error: errorMessage(error) }));
+		return undefined;
+	}
+}
+
+function refreshActiveModelScope(): void {
+	const state = useApp.getState();
+	const cwd = state.activeSessionId ? state.sessionStates[state.activeSessionId]?.cwd : undefined;
+	if (cwd) void state.refreshModelScope(cwd);
+}
+
 async function loadedId(summary: SessionSummary) {
 	if (summary.loaded || !summary.sessionPath) return summary.sessionId;
 	if (!mirror) throw new Error(t("notifications.notConnected"));
@@ -145,6 +173,9 @@ export const useApp = create<AppState>((set, get) => ({
 	projects: [],
 	search: "",
 	showHidden: false,
+	showArchived: false,
+	unloadedSessions: {},
+	modelScopes: {},
 	composerDrafts: {},
 	sessionStates: {},
 	activeSessionId: undefined,
@@ -164,10 +195,13 @@ export const useApp = create<AppState>((set, get) => ({
 			m.subscribe((sessionId, state) => {
 				set((s) => {
 					const next = { ...s.sessionStates };
+					const unloadedSessions = { ...s.unloadedSessions };
+					if (m.isUnloaded(sessionId)) unloadedSessions[sessionId] = true;
+					else delete unloadedSessions[sessionId];
 					if (state) next[sessionId] = state;
 					else delete next[sessionId];
 					const activeGone = !state && s.activeSessionId === sessionId;
-					return { sessionStates: next, activeSessionId: activeGone ? undefined : s.activeSessionId };
+					return { unloadedSessions, sessionStates: next, activeSessionId: activeGone ? undefined : s.activeSessionId };
 				});
 			}),
 			m.onNotification((_sessionId, event) => {
@@ -176,13 +210,15 @@ export const useApp = create<AppState>((set, get) => ({
 			}),
 			c.onGlobalEvent((event) => {
 				useSettings.getState().onGlobalEvent(event);
-				if (event.type === "providers_changed") void get().refreshModels();
+				if (event.type === "providers_changed") {
+					void get().refreshModels();
+					refreshActiveModelScope();
+				}
 				if (event.type === "projects_changed") void get().refreshProjects();
 				if (event.type === "session_requested" && get().activeSessionId === event.fromSessionId)
 					void activatePath(event.sessionPath, undefined, event.fromSessionId).catch((e) =>
 						toast.error(errorMessage(e)),
 					);
-				if (event.type === "session_unloaded" && get().activeSessionId === event.sessionId) get().clearActiveSession();
 				if (event.type === "sessions_changed" || event.type === "session_unloaded") void get().refreshSessions();
 			}),
 			c.onConnectionChange((connection) => {
@@ -191,6 +227,7 @@ export const useApp = create<AppState>((set, get) => ({
 					set({ environment: connection.environment });
 					void get().refreshSessions();
 					void get().refreshModels();
+					refreshActiveModelScope();
 					void get().refreshToolPresets();
 					void get().refreshProjects();
 					void restoreLastSession(connection.environment.id);
@@ -233,6 +270,9 @@ export const useApp = create<AppState>((set, get) => ({
 			projects: [],
 			search: "",
 			showHidden: false,
+			showArchived: false,
+			unloadedSessions: {},
+			modelScopes: {},
 			composerDrafts: {},
 		});
 	},
@@ -240,8 +280,22 @@ export const useApp = create<AppState>((set, get) => ({
 	async refreshSessions() {
 		if (!client) return;
 		try {
-			const { sessions } = await client.request("sessions.list", {});
+			const c = client;
+			const { sessions } = await c.request("sessions.list", {});
+			if (client !== c) return;
 			set({ sessions });
+			const { activeSessionId, sessionStates, environment } = get();
+			const path = activeSessionId ? sessionStates[activeSessionId]?.sessionPath : undefined;
+			if (
+				activeSessionId &&
+				mirror?.isUnloaded(activeSessionId) &&
+				path &&
+				!sessions.some((session) => session.sessionPath === path)
+			) {
+				get().clearActiveSession();
+				if (environment && localStorage.getItem(LAST_SESSION_KEY(environment.id)) === path)
+					localStorage.removeItem(LAST_SESSION_KEY(environment.id));
+			}
 		} catch (error) {
 			console.warn("sessions.list failed", error);
 		}
@@ -256,6 +310,36 @@ export const useApp = create<AppState>((set, get) => ({
 			// An older backend has no presets; the picker stays hidden.
 			console.warn("toolPresets.list failed", error);
 		}
+	},
+
+	async refreshModelScope(cwd) {
+		const c = client;
+		if (!c) return;
+		try {
+			const { scoped, scopeWarnings } = await c.request("models.list", { cwd });
+			if (client === c)
+				set((s) => ({
+					modelScopes: {
+						...s.modelScopes,
+						[cwd]: scoped === undefined ? null : { scoped, warnings: scopeWarnings ?? [] },
+					},
+				}));
+		} catch (error) {
+			toast.error(t("notifications.loadModels", { error: errorMessage(error) }));
+		}
+	},
+	async setArchived(summary, archived) {
+		try {
+			await getClient().request("sessions.setArchived", { sessionPath: summary.sessionPath, archived });
+			await get().refreshSessions();
+		} catch (error) {
+			toast.error(errorMessage(error));
+		}
+	},
+	async clearDiagnostics() {
+		const sessionId = await activeLoadedSessionId();
+		if (!client || !sessionId) return;
+		await client.request("sessions.clearDiagnostics", { sessionId }).catch((error) => toast.error(errorMessage(error)));
 	},
 
 	async refreshModels() {
@@ -273,7 +357,7 @@ export const useApp = create<AppState>((set, get) => ({
 		set({ openingSession: true });
 		try {
 			const state =
-				summary.loaded || !summary.sessionPath
+				mirror.isUnloaded(summary.sessionId) || summary.loaded || !summary.sessionPath
 					? await mirror.attach(summary.sessionId)
 					: await mirror.open(summary.sessionPath);
 			set({ activeSessionId: state.sessionId });
@@ -312,7 +396,7 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 
 	async compact(customInstructions) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		await client
 			.request("sessions.compact", { sessionId, customInstructions })
@@ -320,7 +404,7 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 
 	async clearQueue() {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return [];
 		try {
 			const { steering, followUp } = await client.request("sessions.clearQueue", { sessionId });
@@ -332,8 +416,8 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 
 	async editMessage(itemId, text) {
-		const sessionId = get().activeSessionId;
 		try {
+			const sessionId = await activeLoadedSessionId(true);
 			if (client?.connection.status !== "connected" || !sessionId) throw new Error(t("notifications.connectToSend"));
 			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.editMessage", { sessionId, itemId, text, clientMessageId });
@@ -360,7 +444,7 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 	async renameSession(name, summary) {
 		try {
-			const sessionId = summary ? await loadedId(summary) : get().activeSessionId;
+			const sessionId = summary ? await loadedId(summary) : await activeLoadedSessionId();
 			if (sessionId) await getClient().request("sessions.rename", { sessionId, name });
 		} catch (e) {
 			toast.error(errorMessage(e));
@@ -387,6 +471,11 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 	async forkMessage(sessionId, itemId) {
 		try {
+			if (sessionId === get().activeSessionId) {
+				const loaded = await activeLoadedSessionId();
+				if (!loaded) return;
+				sessionId = loaded;
+			}
 			const { sessionPath, text } = await getClient().request("sessions.fork", { sessionId, itemId });
 			await activatePath(sessionPath, text);
 		} catch (e) {
@@ -394,13 +483,18 @@ export const useApp = create<AppState>((set, get) => ({
 		}
 	},
 	async switchBranch(sessionId, itemId, direction) {
+		if (sessionId === get().activeSessionId) {
+			const loaded = await activeLoadedSessionId();
+			if (!loaded) return;
+			sessionId = loaded;
+		}
 		await getClient()
 			.request("sessions.switchBranch", { sessionId, itemId, direction })
 			.catch((e) => toast.error(errorMessage(e)));
 	},
 	async sendPrompt(text, streamingBehavior, images) {
-		const sessionId = get().activeSessionId;
 		try {
+			const sessionId = await activeLoadedSessionId(true);
 			if (client?.connection.status !== "connected" || !sessionId) throw new Error(t("notifications.connectToSend"));
 			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.prompt", {
@@ -418,13 +512,13 @@ export const useApp = create<AppState>((set, get) => ({
 
 	async abort() {
 		const sessionId = get().activeSessionId;
-		if (!client || !sessionId) return;
+		if (!client || !sessionId || mirror?.isUnloaded(sessionId)) return;
 		await client.request("sessions.abort", { sessionId }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async respond(interactionId, response) {
 		const sessionId = get().activeSessionId;
-		if (!client || !sessionId) return;
+		if (!client || !sessionId || mirror?.isUnloaded(sessionId)) return;
 		try {
 			const { accepted } = await client.request("interactions.respond", { sessionId, interactionId, response });
 			if (!accepted) toast.warning(t("notifications.answered"));
@@ -434,31 +528,31 @@ export const useApp = create<AppState>((set, get) => ({
 	},
 
 	async setModel(model) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		await client.request("sessions.setModel", { sessionId, model }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async setThinkingLevel(level) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		await client.request("sessions.setThinkingLevel", { sessionId, level }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async setToolPreset(preset) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		await client.request("sessions.setToolPreset", { sessionId, preset }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async setPermissionMode(mode) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		await client.request("sessions.setPermissionMode", { sessionId, mode }).catch((e) => toast.error(errorMessage(e)));
 	},
 
 	async mcpAction(server, action, exposure) {
-		const sessionId = get().activeSessionId;
+		const sessionId = await activeLoadedSessionId();
 		if (!client || !sessionId) return;
 		try {
 			const { error } = await client.request("sessions.mcpAction", { sessionId, server, action, exposure });
@@ -484,4 +578,15 @@ function currentProject(): string | undefined {
 
 export function useActiveSession(): SessionState | undefined {
 	return useApp((s) => (s.activeSessionId ? s.sessionStates[s.activeSessionId] : undefined));
+}
+
+// Track cwd rather than session identity: sessions in the same project share a scope.
+useApp.subscribe((state, previous) => {
+	const cwd = state.activeSessionId ? state.sessionStates[state.activeSessionId]?.cwd : undefined;
+	const previousCwd = previous.activeSessionId ? previous.sessionStates[previous.activeSessionId]?.cwd : undefined;
+	if (cwd && cwd !== previousCwd) void state.refreshModelScope(cwd);
+});
+
+export function useModelScope(cwd: string | undefined) {
+	return useApp((state) => (cwd === undefined ? undefined : state.modelScopes[cwd]));
 }

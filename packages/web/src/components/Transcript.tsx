@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Virtualizer, type VirtualizerHandle } from "virtua";
+import { type CacheSnapshot, Virtualizer, type VirtualizerHandle } from "virtua";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
@@ -290,6 +290,8 @@ function sameTools(a: SessionState["tools"], b: SessionState["tools"]): boolean 
 	return keys.length === Object.keys(a).length && keys.every((key) => a[key] === b[key]);
 }
 
+const rowCaches = new Map<string, CacheSnapshot>();
+
 export function Transcript({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
 	const nestedByParent = useMemo(() => {
@@ -337,6 +339,19 @@ export function Transcript({ session }: { session: SessionState }) {
 	const count = session.items.length + Number(showStatus);
 	const list = useRef<VirtualizerHandle>(null);
 	const pinned = useRef(true);
+	const cache = useMemo(() => rowCaches.get(session.sessionId), [session.sessionId]);
+	useLayoutEffect(() => {
+		const handle = list.current;
+		return () => {
+			if (!handle) return;
+			rowCaches.delete(session.sessionId);
+			rowCaches.set(session.sessionId, handle.cache);
+			if (rowCaches.size > 20) {
+				const oldest = rowCaches.keys().next().value;
+				if (oldest !== undefined) rowCaches.delete(oldest);
+			}
+		};
+	}, [session.sessionId]);
 	const follow = useCallback(() => {
 		if (pinned.current && count) list.current?.scrollToIndex(count - 1, { align: "end" });
 	}, [count]);
@@ -344,11 +359,23 @@ export function Transcript({ session }: { session: SessionState }) {
 	return (
 		<section
 			aria-label={t("chat.transcript")}
+			onKeyDown={(event) => {
+				const target = event.target;
+				if (target instanceof HTMLElement && (target.closest("input, textarea") || target.isContentEditable)) return;
+				if (event.key !== "Home" && event.key !== "End") return;
+				event.preventDefault();
+				pinned.current = event.key === "End";
+				if (count)
+					list.current?.scrollToIndex(event.key === "Home" ? 0 : count - 1, {
+						align: event.key === "Home" ? "start" : "end",
+					});
+			}}
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
 			tabIndex={0}
 			className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
 		>
 			<Virtualizer
+				cache={cache}
 				data={{ length: count }}
 				ref={list}
 				bufferSize={1000}
@@ -411,7 +438,7 @@ export function Transcript({ session }: { session: SessionState }) {
 							) : (
 								<div className="flex items-center gap-2 text-sm text-muted-foreground">
 									<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
-									{session.compacting ? t("chat.compacting") : t("chat.working")}
+									{session.compacting ? t("chat.compacting") : (session.workingMessage ?? t("chat.working"))}
 								</div>
 							)}
 						</div>

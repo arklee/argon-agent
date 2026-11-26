@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AttachmentStrip, useAttachments } from "@/components/Attachments";
+import { ExtensionWidgets } from "@/components/ExtensionWidgets";
 import { hasMcpPanel } from "@/components/McpPanel";
 import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
 import { Button } from "@/components/ui/button";
@@ -149,6 +150,7 @@ export function Composer({ session }: { session: SessionState }) {
 					</Button>
 				</div>
 			)}
+			<ExtensionWidgets widgets={session.widgets} placement="aboveEditor" className="mb-2" />
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for files; the textarea and attach button are the accessible inputs */}
 			<div
 				className={cn(
@@ -280,6 +282,7 @@ export function Composer({ session }: { session: SessionState }) {
 					</div>
 				</div>
 			</div>
+			<ExtensionWidgets widgets={session.widgets} placement="belowEditor" className="mt-2" />
 		</div>
 	);
 }

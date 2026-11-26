@@ -1,13 +1,15 @@
-import type { ModelInfo, ModelRef } from "@argon/shared";
+import type { ModelInfo, ModelRef, ThinkingLevel } from "@argon/shared";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/stores/app";
+import { useApp, useModelScope } from "@/stores/app";
 import { openSettings, useSettings } from "@/stores/settings";
 
 const key = (m: ModelRef) => `${m.provider}/${m.id}`;
+/** Group id of the project's enabled models (pi's enabledModels), listed first. */
+const ENABLED = "\0enabled";
 
 /**
  * Model picker with type-to-search. Every whitespace-separated term has to match the provider
@@ -20,9 +22,13 @@ export function ModelCombobox({
 	align = "end",
 	className,
 	manageProviders = true,
+	cwd,
 }: {
 	value: ModelRef | undefined;
-	onChange: (model: ModelRef) => void;
+	/** `thinkingLevel`: set by an enabledModels pattern such as `sonnet:high`. */
+	onChange: (model: ModelRef, thinkingLevel?: ThinkingLevel) => void;
+	/** Project whose enabled models are offered first (none: list every model). */
+	cwd?: string;
 	placeholder?: string;
 	align?: "start" | "end";
 	className?: string;
@@ -32,7 +38,9 @@ export function ModelCombobox({
 	const { t } = useTranslation();
 	const models = useApp((s) => s.models);
 	const providers = useSettings((s) => s.providers);
+	const scope = useModelScope(cwd);
 	const [open, setOpen] = useState(false);
+	const [showAll, setShowAll] = useState(false);
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const listRef = useRef<HTMLDivElement>(null);
@@ -43,7 +51,15 @@ export function ModelCombobox({
 	}, [open, providers]);
 	const providerName = (id: string) => providers?.find((p) => p.id === id)?.name ?? id;
 
-	const groups = useMemo(() => {
+	const enabled = useMemo(() => {
+		if (!scope?.scoped.length) return [];
+		const byKey = new Map(models.map((m) => [key(m), m]));
+		return scope.scoped.flatMap((ref) => byKey.get(key(ref)) ?? []);
+	}, [models, scope]);
+	const listAll = showAll || query.trim() !== "" || enabled.length === 0;
+
+	const groups = useMemo((): [string, ModelInfo[]][] => {
+		if (!listAll) return [[ENABLED, enabled]];
 		const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
 		const names = new Map(providers?.map((p) => [p.id, p.name]));
 		const map = new Map<string, ModelInfo[]>();
@@ -52,7 +68,7 @@ export function ModelCombobox({
 			if (terms.every((t) => haystack.includes(t))) map.set(m.provider, [...(map.get(m.provider) ?? []), m]);
 		}
 		return [...map.entries()];
-	}, [models, providers, query]);
+	}, [models, providers, query, listAll, enabled]);
 	const flat = useMemo(() => groups.flatMap(([, list]) => list), [groups]);
 
 	// On open and on each new query: highlight the current model (no query) or the first match.
@@ -72,7 +88,10 @@ export function ModelCombobox({
 
 	const choose = (model: ModelInfo) => {
 		setOpen(false);
-		if (!value || key(model) !== key(value)) onChange({ provider: model.provider, id: model.id });
+		const thinkingLevel = scope?.scoped.find((ref) => key(ref) === key(model))?.thinkingLevel;
+		if (!value || key(model) !== key(value) || thinkingLevel) {
+			onChange({ provider: model.provider, id: model.id }, thinkingLevel);
+		}
 	};
 	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.nativeEvent.isComposing) return;
@@ -96,7 +115,11 @@ export function ModelCombobox({
 			open={open}
 			onOpenChange={(next) => {
 				setOpen(next);
-				if (next) setQuery("");
+				if (next) {
+					setQuery("");
+					// Start with the enabled models, unless the current model is not one of them.
+					setShowAll(value !== undefined && !enabled.some((m) => key(m) === key(value)));
+				}
 			}}
 		>
 			<PopoverTrigger
@@ -135,7 +158,9 @@ export function ModelCombobox({
 					)}
 					{groups.map(([provider, list]) => (
 						<div key={provider}>
-							<div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">{providerName(provider)}</div>
+							<div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+								{provider === ENABLED ? t("models.enabled") : providerName(provider)}
+							</div>
 							{list.map((m) => {
 								index += 1;
 								const i = index;
@@ -159,6 +184,11 @@ export function ModelCombobox({
 										<span className="min-w-0 flex-1 truncate" title={m.id}>
 											{m.name}
 										</span>
+										{provider === ENABLED && (
+											<span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">
+												{providerName(m.provider)}
+											</span>
+										)}
 										{selected && <Check className="size-4 shrink-0" />}
 									</div>
 								);
@@ -166,6 +196,17 @@ export function ModelCombobox({
 						</div>
 					))}
 				</div>
+				{enabled.length > 0 && !query.trim() && (
+					<div className="border-t p-1">
+						<button
+							type="button"
+							onClick={() => setShowAll((all) => !all)}
+							className="w-full rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						>
+							{showAll ? t("models.showEnabled") : t("models.showAll")}
+						</button>
+					</div>
+				)}
 				{manageProviders && (
 					<div className="border-t p-1">
 						<button

@@ -11,6 +11,8 @@ import type {
 	GlobalEvent,
 	PiSettings,
 	PluginInfo,
+	ProjectPiSettings,
+	ProjectSettingsInfo,
 	ProviderInfo,
 	ResourceSettings,
 } from "@argon/shared";
@@ -21,6 +23,7 @@ import { getClient, useApp } from "@/stores/app";
 export type SettingsSection = "general" | "accounts" | "permissions" | "plugins" | "resources";
 
 interface SettingsData {
+	project?: ProjectSettingsInfo;
 	pi: PiSettings;
 	resources: ResourceSettings[];
 	argon: ArgonSettings;
@@ -34,6 +37,9 @@ interface PluginsData {
 
 interface SettingsState {
 	open: boolean;
+	scope: "global" | "project";
+	setScope(scope: "global" | "project"): void;
+	updateProject(set: Partial<ProjectPiSettings>, unset?: (keyof ProjectPiSettings)[]): Promise<void>;
 	section: SettingsSection;
 	/** Project whose settings files are shown under Resources (the active session's cwd). */
 	cwd: string | undefined;
@@ -71,6 +77,7 @@ function errorMessage(error: unknown): string {
 }
 
 const initial = {
+	scope: "global" as const,
 	providers: undefined,
 	flows: {},
 	settings: undefined,
@@ -84,11 +91,14 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	...initial,
 
 	show(section, cwd) {
-		set({ open: true, section: section ?? get().section, cwd });
+		set({ open: true, section: section ?? get().section, cwd, scope: cwd ? get().scope : "global" });
 		void get().refreshSettings();
 		void get().refreshProviders();
 		void get().refreshFlows();
 		void get().refreshPlugins();
+	},
+	setScope(scope) {
+		set({ scope });
 	},
 	close() {
 		set({ open: false });
@@ -146,6 +156,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	},
 
 	async updatePi(patch) {
+		const cwd = get().cwd;
 		const current = get().settings;
 		if (current) set({ settings: { ...current, pi: { ...current.pi, ...patch } } });
 		try {
@@ -154,6 +165,24 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			toast.error(t("notifications.save", { error: errorMessage(e) }));
 		}
 		await get().refreshSettings();
+		if ("enabledModels" in patch) await refreshModelScopes(cwd);
+	},
+	async updateProject(patch, unset) {
+		const cwd = get().cwd;
+		if (!cwd) return;
+		const current = get().settings;
+		if (current?.project) {
+			const values = { ...current.project.values, ...patch };
+			for (const key of unset ?? []) delete values[key];
+			set({ settings: { ...current, project: { ...current.project, values } } });
+		}
+		try {
+			await getClient().request("settings.updateProject", { cwd, set: patch, unset });
+		} catch (e) {
+			toast.error(t("notifications.save", { error: errorMessage(e) }));
+		}
+		await get().refreshSettings();
+		if ("enabledModels" in patch || unset?.includes("enabledModels")) await refreshModelScopes(cwd);
 	},
 	async updateArgon(patch) {
 		const current = get().settings;
@@ -238,4 +267,12 @@ export function latestFlow(flows: Record<string, AuthFlow>, providerId: string):
 	return Object.values(flows)
 		.filter((f) => f.providerId === providerId)
 		.sort((a, b) => b.startedAt - a.startedAt)[0];
+}
+
+async function refreshModelScopes(cwd: string | undefined): Promise<void> {
+	const app = useApp.getState();
+	const activeCwd = app.activeSessionId ? app.sessionStates[app.activeSessionId]?.cwd : undefined;
+	await Promise.all(
+		[...new Set([cwd, activeCwd])].filter((path): path is string => !!path).map((path) => app.refreshModelScope(path)),
+	);
 }

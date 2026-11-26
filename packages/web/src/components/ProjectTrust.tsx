@@ -130,6 +130,18 @@ export function ProjectTrustIndicator({ session }: { session: SessionState }) {
 					<div className="font-medium text-foreground">{trusted ? t("trust.trusted") : t("trust.untrusted")}</div>
 					<div className="text-xs text-muted-foreground">
 						<Trans t={t} i18nKey={trusted ? "trust.loaded" : "trust.notLoaded"} components={{ folder: <code /> }} />
+						{trust.decidedBy && (
+							<div>
+								<Trans
+									t={t}
+									i18nKey="trust.decidedBy"
+									shouldUnescape
+									tOptions={{ interpolation: { escapeValue: true } }}
+									values={{ path: displayPath(trust.decidedBy, homeDir) }}
+									components={{ path: <code className="font-mono break-all" /> }}
+								/>
+							</div>
+						)}
 						{trust.savedPath && (
 							<div>
 								<Trans

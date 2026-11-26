@@ -5,16 +5,22 @@ interface ProjectGroup extends ProjectPrefs {
 	latest: number;
 }
 
-export function groupByProject(sessions: SessionSummary[], projects: ProjectPrefs[], search: string): ProjectGroup[] {
+export function groupByProject(
+	sessions: SessionSummary[],
+	projects: ProjectPrefs[],
+	search: string,
+	options?: { archived?: boolean },
+): ProjectGroup[] {
 	const groups = new Map<string, ProjectGroup>();
 	const prefs = new Map(projects.map((p) => [p.cwd, p]));
 	const query = search.trim().toLowerCase();
 	// Added projects are listed even before their first session (while searching: when the path matches).
 	for (const project of projects) {
-		if (!project.addedAt || (query && !project.cwd.toLowerCase().includes(query))) continue;
+		if (options?.archived || !project.addedAt || (query && !project.cwd.toLowerCase().includes(query))) continue;
 		groups.set(project.cwd, { ...project, sessions: [], latest: project.addedAt });
 	}
 	for (const session of sessions) {
+		if (!!session.archived !== !!options?.archived) continue;
 		if (
 			query &&
 			![session.name, session.firstMessage, session.cwd].some((value) => value?.toLowerCase().includes(query))

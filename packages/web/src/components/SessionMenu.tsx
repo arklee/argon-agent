@@ -98,6 +98,12 @@ export function SessionMenu({
 						{header ? t("sessionMenu.duplicateSession") : t("sessionMenu.duplicate")}
 					</DropdownMenuItem>
 					<DropdownMenuItem
+						disabled={!session.sessionPath}
+						onSelect={() => void useApp.getState().setArchived(session, !session.archived)}
+					>
+						{session.archived ? t("sessionMenu.unarchive") : t("sessionMenu.archive")}
+					</DropdownMenuItem>
+					<DropdownMenuItem
 						variant="destructive"
 						disabled={!session.sessionPath}
 						onSelect={() => {
