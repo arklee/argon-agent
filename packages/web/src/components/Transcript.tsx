@@ -1,10 +1,11 @@
 import type { AssistantBlock, SessionState, TranscriptItem } from "@argon/shared";
-import { Brain, ChevronRight, Info, Layers, TerminalSquare } from "lucide-react";
+import { Brain, ChevronRight, CircleAlert, CircleStop, Info, Layers, TerminalSquare } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
 import { ToolCallCard } from "@/components/ToolCallCard";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 
@@ -137,6 +138,33 @@ function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: 
 	);
 }
 
+function RequestFailure({ message, retry }: { message?: string; retry?: () => void }) {
+	const detail = <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-xs">{message}</pre>;
+	return (
+		<div className="mt-2 space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+			<div className="flex items-center gap-2 font-medium">
+				<CircleAlert className="size-4 text-destructive" />
+				The request failed
+			</div>
+			{message &&
+				(message.length > 160 || message.split("\n").length > 2 ? (
+					<details>
+						<summary className="cursor-pointer">Error details</summary>
+						{detail}
+					</details>
+				) : (
+					detail
+				))}
+			{retry && (
+				<Button variant="outline" size="sm" onClick={retry}>
+					<RotateCcw />
+					Retry
+				</Button>
+			)}
+		</div>
+	);
+}
+
 const Item = memo(function Item({
 	item,
 	tools,
@@ -153,6 +181,11 @@ const Item = memo(function Item({
 	regenerateFrom?: Extract<TranscriptItem, { kind: "user" }>;
 }) {
 	const editMessage = useApp((s) => s.editMessage);
+	const regenerate = regenerateFrom
+		? () => void editMessage(regenerateFrom.id, regenerateFrom.text).catch(() => undefined)
+		: undefined;
+	const failed =
+		item.kind === "assistant" && item.stopReason !== "aborted" && (item.errorMessage || item.stopReason === "error");
 	switch (item.kind) {
 		case "user":
 			return <UserMessage item={item} canEdit={idle} />;
@@ -165,20 +198,17 @@ const Item = memo(function Item({
 						tools={tools}
 						pendingApprovals={pendingApprovals}
 					/>
-					{item.errorMessage && item.stopReason !== "aborted" && (
-						<p className="mt-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{item.errorMessage}</p>
+					{failed && <RequestFailure message={item.errorMessage} retry={regenerate} />}
+					{item.stopReason === "aborted" && (
+						<span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+							<CircleStop className="size-3" />
+							Stopped by you
+						</span>
 					)}
-					{item.stopReason === "aborted" && <p className="mt-1 text-xs text-muted-foreground">Stopped</p>}
 					{!item.streaming && (
 						<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 							<CopyButton text={assistantText(item.blocks)} />
-							{regenerateFrom && (
-								<IconAction
-									title="Regenerate"
-									icon={RotateCcw}
-									onClick={() => void editMessage(regenerateFrom.id, regenerateFrom.text).catch(() => undefined)}
-								/>
-							)}
+							{regenerate && !failed && <IconAction title="Regenerate" icon={RotateCcw} onClick={regenerate} />}
 						</div>
 					)}
 				</div>
@@ -220,14 +250,21 @@ export function Transcript({ session }: { session: SessionState }) {
 					regenerateFrom={item.id === regenerate?.assistantId ? regenerate.user : undefined}
 				/>
 			))}
-			{waitingForFirstToken && session.pendingInteractions.length === 0 && (
+			{session.retry && (
+				<div
+					role="status"
+					className="my-4 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
+				>
+					<strong>
+						Retrying ({session.retry.attempt}/{session.retry.maxAttempts})…
+					</strong>{" "}
+					{session.retry.errorMessage.split("\n")[0]}
+				</div>
+			)}
+			{waitingForFirstToken && !session.retry && session.pendingInteractions.length === 0 && (
 				<div className="my-4 flex items-center gap-2 text-sm text-muted-foreground">
 					<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
-					{session.compacting
-						? "Compacting context…"
-						: session.retry
-							? `Retrying (${session.retry.attempt}/${session.retry.maxAttempts})…`
-							: "Working…"}
+					{session.compacting ? "Compacting context…" : "Working…"}
 				</div>
 			)}
 		</div>

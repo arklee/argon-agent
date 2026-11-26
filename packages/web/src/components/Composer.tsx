@@ -13,6 +13,7 @@ import { useApp } from "@/stores/app";
 export function Composer({ session }: { session: SessionState }) {
 	const [text, setText] = useState("");
 	const [sending, setSending] = useState(false);
+	const connected = useApp((s) => s.connection?.status === "connected");
 	const sendPrompt = useApp((s) => s.sendPrompt);
 	const abort = useApp((s) => s.abort);
 	const clearQueue = useApp((s) => s.clearQueue);
@@ -60,7 +61,7 @@ export function Composer({ session }: { session: SessionState }) {
 	const submit = async (behavior?: "steer" | "followUp") => {
 		const value = text.trim();
 		const images = attachments.images;
-		if ((!value && images.length === 0) || sending || attachments.uploading) return;
+		if ((!value && images.length === 0) || sending || attachments.uploading || !connected) return;
 		// The GUI has a real MCP manager; pi would only print a text status for a bare /mcp.
 		if (value === "/mcp" && hasMcpPanel(session.mcp)) {
 			setMcpPanelOpen(true);
@@ -175,6 +176,7 @@ export function Composer({ session }: { session: SessionState }) {
 					}}
 				/>
 				<textarea
+					id="argon-composer"
 					onPaste={(e) => {
 						const files = [...e.clipboardData.files];
 						if (files.length === 0) return;
@@ -193,7 +195,7 @@ export function Composer({ session }: { session: SessionState }) {
 						if (e.nativeEvent.isComposing) return;
 						if (suggestions.length > 0) {
 							const current = suggestions[Math.min(activeIndex, suggestions.length - 1)];
-							if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+							if (!e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
 								e.preventDefault();
 								const step = e.key === "ArrowDown" ? 1 : -1;
 								setActiveIndex((i) => (i + step + suggestions.length) % suggestions.length);
@@ -247,7 +249,7 @@ export function Composer({ session }: { session: SessionState }) {
 								size="icon-sm"
 								className="rounded-full"
 								onClick={() => void abort()}
-								title="Stop"
+								title="Stop (Esc)"
 							>
 								<Square className="fill-current" />
 							</Button>
@@ -255,7 +257,9 @@ export function Composer({ session }: { session: SessionState }) {
 						<Button
 							size="icon-sm"
 							className={cn("rounded-full", !text.trim() && attachments.images.length === 0 && "opacity-40")}
-							disabled={(!text.trim() && attachments.images.length === 0) || sending || attachments.uploading}
+							disabled={
+								!connected || (!text.trim() && attachments.images.length === 0) || sending || attachments.uploading
+							}
 							onClick={() => void submit()}
 							title="Send"
 						>

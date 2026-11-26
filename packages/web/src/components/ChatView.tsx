@@ -182,7 +182,7 @@ export function ChatView({ session }: { session: SessionState }) {
 			</header>
 
 			<div ref={ref} className="flex-1 overflow-y-auto">
-				{session.items.length === 0 ? (
+				{session.items.length === 0 && !session.retry ? (
 					<div className="flex h-full flex-col items-center justify-center gap-1 text-center">
 						<p className="text-lg font-medium">What should we work on?</p>
 						<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>

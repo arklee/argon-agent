@@ -1,29 +1,13 @@
-import type { SessionSummary } from "@argon/shared";
 import { FolderOpen, Plus, Server, SquarePen } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { basename, relativeTime, sessionTitle } from "@/lib/format";
+import { groupByProject } from "@/lib/session-order";
+import { shortcutLabels } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
-
-interface ProjectGroup {
-	cwd: string;
-	sessions: SessionSummary[];
-	latest: number;
-}
-
-function groupByProject(sessions: SessionSummary[]): ProjectGroup[] {
-	const groups = new Map<string, ProjectGroup>();
-	for (const session of sessions) {
-		const group = groups.get(session.cwd) ?? { cwd: session.cwd, sessions: [], latest: 0 };
-		group.sessions.push(session);
-		group.latest = Math.max(group.latest, session.modifiedAt);
-		groups.set(session.cwd, group);
-	}
-	return [...groups.values()].sort((a, b) => b.latest - a.latest);
-}
 
 export function Sidebar() {
 	const sessions = useApp((s) => s.sessions);
@@ -31,7 +15,8 @@ export function Sidebar() {
 	const openSession = useApp((s) => s.openSession);
 	const environment = useApp((s) => s.environment);
 	const connection = useApp((s) => s.connection);
-	const [dialog, setDialog] = useState<{ open: boolean; path?: string }>({ open: false });
+	const dialog = useApp((s) => s.newSessionDialog);
+	const setDialog = useApp((s) => s.setNewSessionDialog);
 	const groups = useMemo(() => groupByProject(sessions), [sessions]);
 
 	return (
@@ -50,7 +35,7 @@ export function Sidebar() {
 							<SquarePen />
 						</Button>
 					</TooltipTrigger>
-					<TooltipContent>New session</TooltipContent>
+					<TooltipContent>New session ({shortcutLabels.newSession})</TooltipContent>
 				</Tooltip>
 			</div>
 
@@ -76,7 +61,7 @@ export function Sidebar() {
 							</Button>
 						</div>
 						<ul>
-							{group.sessions.slice(0, 20).map((session) => (
+							{group.sessions.map((session) => (
 								<li key={session.sessionId}>
 									<button
 										type="button"
@@ -117,7 +102,7 @@ export function Sidebar() {
 			<NewSessionDialog
 				open={dialog.open}
 				initialPath={dialog.path}
-				onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+				onOpenChange={(open) => setDialog({ ...dialog, open })}
 			/>
 		</aside>
 	);

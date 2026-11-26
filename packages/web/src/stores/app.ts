@@ -24,7 +24,11 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { type ConnectionConfig, clearConnectionConfig } from "@/lib/connection";
 
+type NewSessionDialogState = { open: boolean; path?: string };
+
 interface AppState {
+	newSessionDialog: NewSessionDialogState;
+	setNewSessionDialog(dialog: NewSessionDialogState): void;
 	connection: ConnectionState | undefined;
 	environment: EnvironmentInfo | undefined;
 	sessions: SessionSummary[];
@@ -72,6 +76,8 @@ function errorMessage(error: unknown): string {
 }
 
 export const useApp = create<AppState>((set, get) => ({
+	newSessionDialog: { open: false },
+	setNewSessionDialog: (newSessionDialog) => set({ newSessionDialog }),
 	connection: undefined,
 	environment: undefined,
 	sessions: [],
@@ -140,7 +146,14 @@ export const useApp = create<AppState>((set, get) => ({
 		client?.close();
 		client = undefined;
 		mirror = undefined;
-		set({ connection: undefined, sessionStates: {}, activeSessionId: undefined, sessions: [] });
+		set({
+			connection: undefined,
+			environment: undefined,
+			newSessionDialog: { open: false },
+			sessionStates: {},
+			activeSessionId: undefined,
+			sessions: [],
+		});
 	},
 
 	async refreshSessions() {
@@ -228,9 +241,10 @@ export const useApp = create<AppState>((set, get) => ({
 
 	async editMessage(itemId, text) {
 		const sessionId = get().activeSessionId;
-		if (!client || !sessionId) return;
-		const clientMessageId = crypto.randomUUID();
 		try {
+			if (client?.connection.status !== "connected" || !sessionId)
+				throw new Error("Connect to the backend to send a message");
+			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.editMessage", { sessionId, itemId, text, clientMessageId });
 		} catch (error) {
 			toast.error(errorMessage(error));
@@ -246,9 +260,10 @@ export const useApp = create<AppState>((set, get) => ({
 
 	async sendPrompt(text, streamingBehavior, images) {
 		const sessionId = get().activeSessionId;
-		if (!client || !sessionId) return;
-		const clientMessageId = crypto.randomUUID();
 		try {
+			if (client?.connection.status !== "connected" || !sessionId)
+				throw new Error("Connect to the backend to send a message");
+			const clientMessageId = crypto.randomUUID();
 			await client.request("sessions.prompt", {
 				sessionId,
 				clientMessageId,
