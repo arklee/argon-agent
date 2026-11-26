@@ -9,3 +9,6 @@ out/
 *.log
 coverage/
 .vite/
+
+# Agent worktrees (Claude Code / Codex)
+.claude/worktrees/

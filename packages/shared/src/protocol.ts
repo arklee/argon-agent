@@ -260,6 +260,13 @@ export type GlobalEvent = { type: "sessions_changed" } | { type: "session_unload
 // Request/response methods
 // ---------------------------------------------------------------------------
 
+/** An image sent inline (base64). Kept out of SessionState; fetched on demand with sessions.getImages. */
+export interface ImageData {
+	mimeType: string;
+	/** Base64, without a data: prefix. */
+	data: string;
+}
+
 export interface DirEntry {
 	name: string;
 	path: string;
@@ -291,10 +298,22 @@ export interface Methods {
 			/** Client-generated id; resending the same id never runs the prompt twice. */
 			clientMessageId: string;
 			text: string;
+			/** pi resizes/normalizes them for the model. */
+			images?: ImageData[];
 			streamingBehavior?: "steer" | "followUp";
 		};
 		result: { disposition: "started" | "queued" | "handled" };
 	};
+	/** Images of a tool result (by toolCallId) or of a user message (by transcript item id). */
+	"sessions.getImages": {
+		params: { sessionId: string; toolCallId?: string; itemId?: string };
+		result: { images: ImageData[] };
+	};
+	/**
+	 * Store a file on the backend machine (browsers cannot pass paths) and return its backend path,
+	 * for referencing it in a prompt as @"path".
+	 */
+	"files.upload": { params: { name: string; data: string }; result: { path: string } };
 	/**
 	 * Re-send a user message with new text: the conversation branches off before that message (the old
 	 * branch stays in the session tree). The client gets a `reset` event with the new history, then the

@@ -7,6 +7,7 @@ import {
 	type AgentClient,
 	type ConnectionState,
 	type EnvironmentInfo,
+	type ImageData,
 	type InteractionResponse,
 	type McpAction,
 	type McpExposure,
@@ -46,7 +47,7 @@ interface AppState {
 	clearQueue(): Promise<string[]>;
 	editMessage(itemId: string, text: string): Promise<void>;
 	renameSession(name: string): Promise<void>;
-	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
+	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", images?: ImageData[]): Promise<void>;
 	abort(): Promise<void>;
 	respond(interactionId: string, response: InteractionResponse): Promise<void>;
 	setModel(model: ModelRef): Promise<void>;
@@ -243,12 +244,18 @@ export const useApp = create<AppState>((set, get) => ({
 		await client.request("sessions.rename", { sessionId, name }).catch((e) => toast.error(errorMessage(e)));
 	},
 
-	async sendPrompt(text, streamingBehavior) {
+	async sendPrompt(text, streamingBehavior, images) {
 		const sessionId = get().activeSessionId;
 		if (!client || !sessionId) return;
 		const clientMessageId = crypto.randomUUID();
 		try {
-			await client.request("sessions.prompt", { sessionId, clientMessageId, text, streamingBehavior });
+			await client.request("sessions.prompt", {
+				sessionId,
+				clientMessageId,
+				text,
+				streamingBehavior,
+				images: images?.length ? images : undefined,
+			});
 		} catch (error) {
 			toast.error(errorMessage(error));
 			throw error;

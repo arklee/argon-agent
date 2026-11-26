@@ -1,6 +1,7 @@
 import type { AssistantBlock, SessionState, TranscriptItem } from "@argon/shared";
 import { Brain, ChevronRight, Info, Layers, TerminalSquare } from "lucide-react";
 import { memo, useMemo, useState } from "react";
+import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
 import { ToolCallCard } from "@/components/ToolCallCard";
@@ -96,6 +97,7 @@ function Notice({ item }: { item: Extract<TranscriptItem, { kind: "notice" }> })
 
 function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: "user" }>; canEdit: boolean }) {
 	const editMessage = useApp((s) => s.editMessage);
+	const sessionId = useApp((s) => s.activeSessionId);
 	const [editing, setEditing] = useState(false);
 	if (editing) {
 		return (
@@ -113,10 +115,15 @@ function UserMessage({ item, canEdit }: { item: Extract<TranscriptItem, { kind: 
 	}
 	return (
 		<div className="group my-4 flex flex-col items-end">
-			<div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 whitespace-pre-wrap">
-				{item.text}
-				{item.imageCount > 0 && <span className="ml-2 text-xs text-muted-foreground">+{item.imageCount} image(s)</span>}
-			</div>
+			{item.imageCount > 0 && sessionId && (
+				<SessionImages
+					sessionId={sessionId}
+					itemId={item.id}
+					count={item.imageCount}
+					className="mb-1.5 max-w-[85%] justify-end"
+				/>
+			)}
+			{item.text && <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 whitespace-pre-wrap">{item.text}</div>}
 			<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 				<CopyButton text={item.text} />
 				<IconAction

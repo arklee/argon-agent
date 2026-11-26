@@ -2,8 +2,10 @@ import type { ToolCallState } from "@argon/shared";
 import { Ban, Check, ChevronRight, CircleDashed, Hand, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { DiffStat, DiffView } from "@/components/DiffView";
+import { SessionImages } from "@/components/Images";
 import { formatDuration, summarizeToolArgs } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/stores/app";
 
 function StatusIcon({ status }: { status: ToolCallState["status"] }) {
 	switch (status) {
@@ -34,6 +36,7 @@ export function ToolCallCard({
 	awaitingApproval?: boolean;
 }) {
 	const [openState, setOpen] = useState<boolean>();
+	const sessionId = useApp((s) => s.activeSessionId);
 	const status = tool?.status ?? "pending";
 	const diff = tool?.diff;
 	// Small diffs start expanded, like a code review; everything else starts collapsed.
@@ -89,8 +92,8 @@ export function ToolCallCard({
 							{tool.output}
 						</pre>
 					)}
-					{tool?.imageCount ? (
-						<p className="text-xs text-muted-foreground">{tool.imageCount} image(s) not shown</p>
+					{tool?.imageCount && sessionId && status !== "running" ? (
+						<SessionImages sessionId={sessionId} toolCallId={tool.toolCallId} count={tool.imageCount} />
 					) : null}
 				</div>
 			)}

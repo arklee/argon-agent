@@ -12,6 +12,7 @@ import {
 	type CompletionItem,
 	type ContextUsageInfo,
 	createEmptySessionState,
+	type ImageData,
 	type Interaction,
 	type InteractionResponse,
 	type McpAction,
@@ -186,6 +187,7 @@ export class ManagedSession {
 	prompt(params: {
 		clientMessageId: string;
 		text: string;
+		images?: ImageData[];
 		streamingBehavior?: "steer" | "followUp";
 	}): Promise<PromptDisposition> {
 		const existing = this.promptResults.get(params.clientMessageId);
@@ -197,6 +199,11 @@ export class ManagedSession {
 			this.session
 				.prompt(params.text, {
 					source: "rpc",
+					images: params.images?.map((image) => ({
+						type: "image" as const,
+						data: image.data,
+						mimeType: image.mimeType,
+					})),
 					streamingBehavior,
 					preflightResult: (disposition) => {
 						answered = true;
@@ -247,6 +254,30 @@ export class ManagedSession {
 		if (userEntries.some((entry) => entry.id === itemId)) return itemId;
 		const index = this.state.items.filter((item) => item.kind === "user").findIndex((item) => item.id === itemId);
 		return index === -1 ? undefined : userEntries[index]?.id;
+	}
+
+	getImages(ref: { toolCallId?: string; itemId?: string }): ImageData[] {
+		const branch = this.session.sessionManager.getBranch();
+		let content: unknown;
+		if (ref.toolCallId) {
+			const entry = branch.find(
+				(e) =>
+					e.type === "message" &&
+					(e.message as { role?: string; toolCallId?: string }).role === "toolResult" &&
+					(e.message as { toolCallId?: string }).toolCallId === ref.toolCallId,
+			);
+			content = entry?.type === "message" ? (entry.message as { content?: unknown }).content : undefined;
+		} else if (ref.itemId) {
+			const entryId = this.userEntryIdFor(ref.itemId);
+			const entry = entryId ? branch.find((e) => e.id === entryId) : undefined;
+			content = entry?.type === "message" ? (entry.message as { content?: unknown }).content : undefined;
+		}
+		if (!Array.isArray(content)) return [];
+		return content.flatMap((part: { type?: string; data?: unknown; mimeType?: unknown }) =>
+			part?.type === "image" && typeof part.data === "string" && typeof part.mimeType === "string"
+				? [{ mimeType: part.mimeType, data: part.data }]
+				: [],
+		);
 	}
 
 	clearQueue(): { steering: string[]; followUp: string[] } {

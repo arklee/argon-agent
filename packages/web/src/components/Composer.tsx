@@ -1,7 +1,8 @@
 import type { SessionState } from "@argon/shared";
-import { ArrowUp, Pencil, Square, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowUp, Paperclip, Pencil, Square, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AttachmentStrip, useAttachments } from "@/components/Attachments";
 import { hasMcpPanel } from "@/components/McpPanel";
 import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,19 @@ export function Composer({ session }: { session: SessionState }) {
 	const createSession = useApp((s) => s.createSession);
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const [cursor, setCursor] = useState(0);
+	const fileInput = useRef<HTMLInputElement>(null);
+	const [dragging, setDragging] = useState(false);
+	// Inserts at the caret (uploads add @path references there).
+	const insertText = useCallback((insert: string) => {
+		const el = ref.current;
+		setText((current) => {
+			const at = el ? el.selectionStart : current.length;
+			const before = current.slice(0, at);
+			const spacer = before && !/\s$/.test(before) ? " " : "";
+			return before + spacer + insert + current.slice(at);
+		});
+	}, []);
+	const attachments = useAttachments(insertText);
 	const { suggestions, dismiss, extensionNames } = useSlashCompletion(session.sessionId, text, cursor);
 	const [activeIndex, setActiveIndex] = useState(0);
 	/** Whether the user moved the highlight since the text last changed. */
@@ -45,7 +59,8 @@ export function Composer({ session }: { session: SessionState }) {
 
 	const submit = async (behavior?: "steer" | "followUp") => {
 		const value = text.trim();
-		if (!value || sending) return;
+		const images = attachments.images;
+		if ((!value && images.length === 0) || sending || attachments.uploading) return;
 		// The GUI has a real MCP manager; pi would only print a text status for a bare /mcp.
 		if (value === "/mcp" && hasMcpPanel(session.mcp)) {
 			setMcpPanelOpen(true);
@@ -68,8 +83,13 @@ export function Composer({ session }: { session: SessionState }) {
 		}
 		setSending(true);
 		try {
-			await sendPrompt(value, running ? (behavior ?? "followUp") : undefined);
+			await sendPrompt(
+				value,
+				running ? (behavior ?? "followUp") : undefined,
+				images.map(({ mimeType, data }) => ({ mimeType, data })),
+			);
 			setText("");
+			attachments.clear();
 		} catch {
 			// toast shown by the store; keep the text so nothing is lost
 		} finally {
@@ -116,14 +136,51 @@ export function Composer({ session }: { session: SessionState }) {
 					</Button>
 				</div>
 			)}
-			<div className="relative rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for files; the textarea and attach button are the accessible inputs */}
+			<div
+				className={cn(
+					"relative rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30",
+					dragging && "ring-2 ring-primary/40",
+				)}
+				onDragOver={(e) => {
+					if (!e.dataTransfer.types.includes("Files")) return;
+					e.preventDefault();
+					setDragging(true);
+				}}
+				onDragLeave={(e) => {
+					if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+				}}
+				onDrop={(e) => {
+					if (e.dataTransfer.files.length === 0) return;
+					e.preventDefault();
+					setDragging(false);
+					void attachments.addFiles([...e.dataTransfer.files]);
+				}}
+			>
+				<AttachmentStrip images={attachments.images} uploading={attachments.uploading} onRemove={attachments.remove} />
 				<SlashCompletionMenu
 					suggestions={suggestions}
 					activeIndex={activeIndex}
 					onHover={setActiveIndex}
 					onPick={pick}
 				/>
+				<input
+					ref={fileInput}
+					type="file"
+					multiple
+					hidden
+					onChange={(e) => {
+						void attachments.addFiles([...(e.target.files ?? [])]);
+						e.target.value = "";
+					}}
+				/>
 				<textarea
+					onPaste={(e) => {
+						const files = [...e.clipboardData.files];
+						if (files.length === 0) return;
+						e.preventDefault();
+						void attachments.addFiles(files);
+					}}
 					ref={ref}
 					value={text}
 					onChange={(e) => {
@@ -175,6 +232,15 @@ export function Composer({ session }: { session: SessionState }) {
 						{session.statusEntries.map((s) => s.text).join(" · ")}
 					</span>
 					<div className="flex items-center gap-1.5">
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="rounded-full text-muted-foreground"
+							title="Attach images or files"
+							onClick={() => fileInput.current?.click()}
+						>
+							<Paperclip />
+						</Button>
 						{running && (
 							<Button
 								variant="outline"
@@ -188,8 +254,8 @@ export function Composer({ session }: { session: SessionState }) {
 						)}
 						<Button
 							size="icon-sm"
-							className={cn("rounded-full", !text.trim() && "opacity-40")}
-							disabled={!text.trim() || sending}
+							className={cn("rounded-full", !text.trim() && attachments.images.length === 0 && "opacity-40")}
+							disabled={(!text.trim() && attachments.images.length === 0) || sending || attachments.uploading}
 							onClick={() => void submit()}
 							title="Send"
 						>
