@@ -85,6 +85,14 @@
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
 - [ ] 安全：renderer 开启 sandbox + contextIsolation，preload 只暴露最小接口
 
+## 沙箱（权限控制的主要手段）
+
+按命令文本做静态审批无法覆盖 bash 的各种写法（管道、子 shell、eval、脚本文件），安全边界交给操作系统。Codex CLI（Seatbelt / Landlock + seccomp，按沙箱模式和审批策略组合）和 Claude Code（沙箱化的 bash）都是这个思路；pi 的 security.md 也明确把隔离交给容器或沙箱。
+
+- [ ] 调研与方案：Seatbelt（macOS）、Landlock / bubblewrap（Linux）、Windows 方案、容器；文件系统（工作区可写、其余只读）和网络的限制粒度
+- [ ] 沙箱在 backend 所在机器上生效（远程 backend 同样适用），对所有执行命令的工具统一生效，包括 codemode 的嵌套调用和扩展工具
+- [ ] 审批改为只在越出沙箱边界时介入（例如需要写工作区外、需要网络），与权限模式合并设计
+
 ## 阶段 3：远程 agent
 
 协议已按远程设计（D4），本阶段只做传输、部署和多环境 UI。
@@ -104,7 +112,7 @@
 - [x] 1. 显示层：协议加 `ToolDisplay` 和 `source`；backend presenter（`backend/src/tool-display.ts`，pi 内置工具名和参数结构只在这里出现）；前端 `web/src/tools/` 按类型划分的渲染器，查找顺序为“来源 + 工具名”覆盖 → 工具名覆盖 → 类型 → 通用；审批卡片使用渲染器的预览
 - [ ] 2. 嵌套调用：`ToolCallState.parentToolCallId`，`translate` 保留嵌套事件，`script` 卡片显示子调用（含 diff）；修正 codemode 卡片的摘要（format.ts 仍写着旧名 `exec`）和脚本代码高亮
 - [ ] 3. 预设选择：全局默认 + 会话级切换（存会话文件，两轮之间生效）；预设如何作用到 pi 配置（`defaultTools`、`codemode.mode`）
-- [ ] 4. 审批策略按显示类型：迁移 `READ_ONLY_TOOLS` 和规则建议；嵌套调用的审批粒度作为预设选项
+- [ ] ~~4. 审批策略按显示类型~~：不做。权限控制交给沙箱（见下一节），审批维持现有的基本机制（只读工具放行、其余询问、本会话允许、简单的命令前缀规则），不再细化；codemode 的嵌套调用继续随父调用一起审批
 
 ## 阶段 4：对 pi 的深度定制（按需）
 
