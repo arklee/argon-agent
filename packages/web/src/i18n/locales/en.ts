@@ -414,9 +414,9 @@ export const en = {
 			auto: "Run without asking",
 			commandMatching:
 				"A command rule matches the command itself and the command followed by arguments. Commands that chain, pipe, redirect or substitute always ask.",
-			defaultMode: "Default mode",
+			defaultMode: "Default sandbox mode",
 			defaultModeDescription:
-				"In Ask mode, commands run in a sandbox and Argon asks only when something needs to leave it. Each session can still switch modes.",
+				"Saved for new sessions. Ask runs commands in a sandbox and asks when access outside it is needed. Run everything disables the sandbox.",
 			description: "When Argon asks before the agent runs a tool.",
 			everyCall: "Every call",
 			noHosts: "Nothing yet. Choose “Always allow” on a network request to add a host.",

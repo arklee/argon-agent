@@ -446,8 +446,10 @@ function GeneralDefaults() {
 	const updatePi = useSettings((s) => s.updatePi);
 	const updateArgon = useSettings((s) => s.updateArgon);
 	const presets = useApp((s) => s.toolPresets);
+	const sandbox = useApp((s) => s.environment?.sandbox);
+	const sandboxSupported = sandbox?.supported !== false;
 	if (!pi) return <Loading />;
-	// Backend-wide choices (tool preset, project trust) have no project-level setting.
+	// Backend-wide choices (tool preset, sandbox mode, project trust) have no project-level setting.
 	const global = project === undefined;
 	const queueModes = [
 		{ value: "one-at-a-time", label: t("settings.general.oneAtATime") },
@@ -483,13 +485,29 @@ function GeneralDefaults() {
 					<EnabledModels />
 				</ScopedRow>
 			</Group>
-			{global && presets.length > 0 && argon?.defaultToolPreset && (
+			{global && argon && (
 				<Group title={t("settings.general.tools")}>
 					<Row label={t("settings.general.toolPreset")} description={t("settings.general.toolPresetDescription")}>
 						<Choice
 							value={argon.defaultToolPreset}
 							options={presets.map((preset) => ({ value: preset.id, label: presetLabel(preset.id, presets, t) }))}
 							onChange={(defaultToolPreset) => void updateArgon({ defaultToolPreset })}
+						/>
+					</Row>
+					<Row
+						label={t("settings.permissions.defaultMode")}
+						description={
+							sandboxSupported ? t("settings.permissions.defaultModeDescription") : t("chat.sandboxUnavailable")
+						}
+					>
+						<Choice
+							ariaLabel={t("settings.permissions.defaultMode")}
+							value={argon.permissions.defaultMode}
+							options={[
+								{ value: "ask", label: t("chat.askChanges"), disabled: !sandboxSupported },
+								{ value: "auto", label: t("chat.runEverything") },
+							]}
+							onChange={(defaultMode) => void updateArgon({ permissions: { ...argon.permissions, defaultMode } })}
 						/>
 					</Row>
 				</Group>
@@ -628,23 +646,6 @@ function PermissionsSection() {
 		});
 	return (
 		<>
-			<Group>
-				<Row
-					label={t("settings.permissions.defaultMode")}
-					description={
-						sandboxSupported ? t("settings.permissions.defaultModeDescription") : t("chat.sandboxUnavailable")
-					}
-				>
-					<Choice
-						value={permissions.defaultMode}
-						options={[
-							{ value: "ask", label: t("settings.permissions.ask"), disabled: !sandboxSupported },
-							{ value: "auto", label: t("settings.permissions.auto") },
-						]}
-						onChange={(defaultMode) => void updateArgon({ permissions: { ...permissions, defaultMode } })}
-					/>
-				</Row>
-			</Group>
 			<Group title={t("settings.permissions.alwaysAllowed")}>
 				{permissions.rules.length === 0 ? (
 					<p className="py-4 text-sm text-muted-foreground">{t("settings.permissions.noRules")}</p>

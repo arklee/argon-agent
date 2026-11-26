@@ -413,8 +413,9 @@ export const zhCN = {
 			ask: "运行前询问",
 			auto: "无需询问",
 			commandMatching: "命令规则匹配命令本身及其带参数的形式。涉及命令串联、管道、重定向或命令替换时，始终需要审批。",
-			defaultMode: "默认权限模式",
-			defaultModeDescription: "询问模式下，命令在沙箱中运行，只有需要越出沙箱时才请求审批。仍可在各会话中切换模式。",
+			defaultMode: "默认沙箱模式",
+			defaultModeDescription:
+				"保存后用于新会话。“越出沙箱时询问”会在沙箱内运行命令，越界时请求审批；“允许所有工具”会关闭沙箱。",
 			description: "设置 Argon 何时在运行工具前请求审批。",
 			everyCall: "每次调用",
 			noHosts: "暂无主机。在网络访问请求中选择“始终允许”即可添加。",
