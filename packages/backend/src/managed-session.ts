@@ -247,6 +247,12 @@ export class ManagedSession {
 		return index === -1 ? undefined : userEntries[index]?.id;
 	}
 
+	clearQueue(): { steering: string[]; followUp: string[] } {
+		// pi emits queue_update, which reaches clients as queue_updated.
+		const { steering, followUp } = this.session.clearQueue();
+		return { steering: [...steering], followUp: [...followUp] };
+	}
+
 	async abort(): Promise<void> {
 		this.broker.cancelAll();
 		await this.session.abort();

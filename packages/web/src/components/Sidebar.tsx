@@ -40,7 +40,13 @@ export function Sidebar() {
 				<span className="text-sm font-semibold tracking-tight">Argon</span>
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<Button variant="ghost" size="icon-sm" onClick={() => setDialog({ open: true })} disabled={!environment}>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							aria-label="New session"
+							onClick={() => setDialog({ open: true })}
+							disabled={!environment}
+						>
 							<SquarePen />
 						</Button>
 					</TooltipTrigger>

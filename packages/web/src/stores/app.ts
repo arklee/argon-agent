@@ -42,6 +42,8 @@ interface AppState {
 	clearActiveSession(): void;
 	setMcpPanelOpen(open: boolean): void;
 	compact(customInstructions?: string): Promise<void>;
+	/** Clears the queue and returns the removed messages, oldest first. */
+	clearQueue(): Promise<string[]>;
 	editMessage(itemId: string, text: string): Promise<void>;
 	renameSession(name: string): Promise<void>;
 	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
@@ -209,6 +211,18 @@ export const useApp = create<AppState>((set, get) => ({
 		await client
 			.request("sessions.compact", { sessionId, customInstructions })
 			.catch((e) => toast.error(errorMessage(e)));
+	},
+
+	async clearQueue() {
+		const sessionId = get().activeSessionId;
+		if (!client || !sessionId) return [];
+		try {
+			const { steering, followUp } = await client.request("sessions.clearQueue", { sessionId });
+			return [...steering, ...followUp];
+		} catch (error) {
+			toast.error(errorMessage(error));
+			return [];
+		}
 	},
 
 	async editMessage(itemId, text) {

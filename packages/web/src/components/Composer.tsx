@@ -1,5 +1,5 @@
 import type { SessionState } from "@argon/shared";
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Pencil, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { hasMcpPanel } from "@/components/McpPanel";
@@ -14,6 +14,7 @@ export function Composer({ session }: { session: SessionState }) {
 	const [sending, setSending] = useState(false);
 	const sendPrompt = useApp((s) => s.sendPrompt);
 	const abort = useApp((s) => s.abort);
+	const clearQueue = useApp((s) => s.clearQueue);
 	const setMcpPanelOpen = useApp((s) => s.setMcpPanelOpen);
 	const compact = useApp((s) => s.compact);
 	const renameSession = useApp((s) => s.renameSession);
@@ -74,16 +75,39 @@ export function Composer({ session }: { session: SessionState }) {
 	return (
 		<div className="mx-auto w-full max-w-3xl px-6 pb-6">
 			{queued.length > 0 && (
-				<div className="mb-2 flex flex-wrap gap-1.5">
-					{queued.map((q, i) => (
-						<span
-							// biome-ignore lint/suspicious/noArrayIndexKey: queue entries have no ids
-							key={i}
-							className="max-w-full truncate rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
-						>
-							Queued: {q}
-						</span>
-					))}
+				<div className="mb-2 flex items-start gap-2 rounded-xl border bg-muted/40 px-3 py-2">
+					<div className="min-w-0 flex-1 space-y-0.5">
+						<div className="text-xs font-medium text-muted-foreground">
+							Queued · sent when the agent {session.queue.steering.length > 0 ? "can take it" : "finishes"}
+						</div>
+						{queued.map((q, i) => (
+							<div
+								// biome-ignore lint/suspicious/noArrayIndexKey: queue entries have no ids
+								key={i}
+								className="truncate text-sm"
+								title={q}
+							>
+								{q}
+							</div>
+						))}
+					</div>
+					<Button
+						variant="ghost"
+						size="xs"
+						title="Move queued messages back into the input"
+						onClick={async () => {
+							const restored = await clearQueue();
+							if (restored.length === 0) return;
+							setText((current) => [...restored, current.trim()].filter(Boolean).join("\n\n"));
+							ref.current?.focus();
+						}}
+					>
+						<Pencil />
+						Edit
+					</Button>
+					<Button variant="ghost" size="icon-xs" title="Discard queued messages" onClick={() => void clearQueue()}>
+						<X />
+					</Button>
 				</div>
 			)}
 			<div className="relative rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30">

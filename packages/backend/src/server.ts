@@ -176,6 +176,7 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		"sessions.editMessage": async (params) => ({
 			disposition: await registry.require(params.sessionId).editMessage(params),
 		}),
+		"sessions.clearQueue": async (params) => registry.require(params.sessionId).clearQueue(),
 		"sessions.compact": async (params) => {
 			registry.require(params.sessionId).compact(params.customInstructions);
 			return empty;

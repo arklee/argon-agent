@@ -28,7 +28,7 @@
 - [x] edit / write 工具展示 diff 视图：审批卡片里显示预览（backend 读原文件生成，`diff-preview.ts`），执行后用 edit 返回的 `details.diff`；小 diff 默认展开
 - [ ] write 的 diff 不会持久化（pi 的 write 结果没有 details），重新加载会话后只能看到参数。可以考虑在 `tool_result` 钩子里把预览写进 details
 - [x] 消息操作：复制；从某条用户消息开始编辑重发（`sessions.editMessage`，经 `navigateTree` 分支，旧分支保留）；重新生成最后一条回复
-- [ ] 排队消息的取消和编辑（对应 pi 的 `clear_queue`）
+- [x] 排队消息的取消和编辑（`sessions.clearQueue`；pi 只能整体清空，所以"编辑"是把全部排队消息撤回输入框）
 - [x] 上下文用量指示（占 context window 的百分比），提供手动压缩按钮（`sessions.compact`，后台执行；成功压缩的路径还没在真实长会话上验证）
 - [ ] 长会话的虚拟滚动（列表虚拟化）
 - [ ] 错误和自动重试的展示优化；被中止的回合给出明确提示

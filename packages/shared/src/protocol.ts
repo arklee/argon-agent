@@ -304,6 +304,8 @@ export interface Methods {
 		params: { sessionId: string; itemId: string; text: string; clientMessageId: string };
 		result: { disposition: "started" | "queued" | "handled" };
 	};
+	/** Remove every queued steering/follow-up message (pi has no per-message removal) and return them. */
+	"sessions.clearQueue": { params: { sessionId: string }; result: { steering: string[]; followUp: string[] } };
 	"sessions.abort": { params: { sessionId: string }; result: Record<string, never> };
 	"sessions.setModel": { params: { sessionId: string; model: ModelRef }; result: Record<string, never> };
 	"sessions.setThinkingLevel": {
