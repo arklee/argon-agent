@@ -121,6 +121,12 @@ export const zhCN = {
 		used: "已使用",
 		window: "上下文窗口",
 	},
+	desktop: {
+		tray: {
+			show: "显示 Argon",
+			quit: "退出 Argon",
+		},
+	},
 	diagnostics: {
 		errorCount_one: "{{count, number}} 个错误",
 		errorCount_other: "{{count, number}} 个错误",

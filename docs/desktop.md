@@ -21,9 +21,11 @@ main 生成每次启动独有的 token，backend 绑定 `127.0.0.1:0`，将系�
 
 生产页面来自 `argon://app`，这是唯一允许的 WebSocket Origin；开发模式只允许 electron-vite 的 renderer 地址。不允许 `null` Origin，也不放宽 Host 和 token 校验。renderer 开启 sandbox、contextIsolation，禁用 Node integration，没有 preload 或额外 IPC API。外部 HTTP(S) 链接交给系统浏览器，不允许页面导航到外部来源。
 
-后端崩溃最多重启三次，复用原端口和 token；web 通过既有离线提示和重连逻辑恢复。正在执行的任务不能恢复。退出时发消息等待 backend 关闭服务并 dispose 会话，十秒后强制终止兜底。应用退出还有同步 kill 兜底。关闭最后一个窗口即退出应用。
+后端崩溃最多重启三次，复用原端口和 token；web 通过既有离线提示和重连逻辑恢复。正在执行的任务不能恢复。退出时发消息等待 backend 关闭服务并 dispose 会话，十秒后强制终止兜底。应用退出还有同步 kill 兜底。macOS / Windows 关闭窗口时隐藏到托盘，renderer 和后端任务继续运行；托盘退出及 macOS Cmd+Q / Dock 退出仍会真正退出。Linux 关闭最后一个窗口即退出应用。
 
 ## 打包布局与验证
+
+desktop 只声明 `@argon/backend` 和 `@argon/shared` 运行时依赖；Vite 编译打包 `@argon/*`，外置所有其他裸导入（含 Node 内置模块和 Electron）。electron-builder 通过 workspace 收集 backend 的传递依赖，不再维护重复的第三方依赖清单。
 
 main 与 renderer 在 app.asar 内。backend 入口、动态 chunk 与 node_modules 显式解包到 app.asar.unpacked，utilityProcess 从真实路径启动。这样 pi 的 ESM 相对引用、图像和 Codemode worker、Photon / QuickJS WASM、jiti 及需要真实 cwd 的子进程保持原有布局。不能把 pi 整体打进一个 JS bundle；缩减解包范围需要重新跑打包冒烟。
 

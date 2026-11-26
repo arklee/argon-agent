@@ -225,7 +225,7 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 ## D14. 最小 Electron 壳的打包布局
 
-**决定**：electron-vite 构建 main、独立 backend 入口和复用的 web renderer，electron-builder 输出安装包。pi 与第三方运行时依赖不做 JS 合并，保留 npm 包布局。main / renderer 在 app.asar 中；backend 入口、动态 chunk 和 node_modules 显式 asarUnpack，utilityProcess 从 app.asar.unpacked 的真实路径启动。
+**决定**：electron-vite 构建 main、独立 backend 入口和复用的 web renderer，electron-builder 输出安装包。pi 与第三方运行时依赖不做 JS 合并，保留 npm 包布局。main / renderer 在 app.asar 中；backend 入口、动态 chunk 和 node_modules 显式 asarUnpack，utilityProcess 从 app.asar.unpacked 的真实路径启动。desktop 只声明 `@argon/*` 依赖：Vite 编译 `@argon/*` 的 TS 源码，其他裸导入一律外置；第三方运行时依赖由 electron-builder 经 workspace 从 backend 收集，不在 desktop 重复声明。
 
 **原因**：正式打包冒烟发现，以 asar 内部包路径作为子进程 cwd 会报 ENOTDIR；图像和 Codemode worker、Photon / QuickJS WASM、jiti 也依赖真实文件布局。先整体解包运行时依赖，避免开发模式正常但安装包丢文件或动态加载失败。缩减解包范围和安装包体积留到有完整打包回归后进行。
 

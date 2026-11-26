@@ -8,7 +8,10 @@ const path = (value: string) => fileURLToPath(new URL(value, import.meta.url));
 export default defineConfig({
 	main: {
 		build: {
+			externalizeDeps: false,
 			rollupOptions: {
+				// Compile workspace TS, but preserve every third-party package's runtime layout.
+				external: [/^(?!@argon\/|\.{1,2}(?:\/|$)|[A-Za-z]:[\\/])[^/\\\0]/],
 				input: { index: path("./src/main.ts"), backend: path("./src/backend.ts") },
 			},
 		},

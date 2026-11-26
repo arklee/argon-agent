@@ -81,7 +81,8 @@
 - [x] backend 基础生命周期：崩溃最多重启三次，复用原端口/token，由前端既有离线提示和 SessionMirror 重连；退出等待 dispose，十秒超时 kill，加应用退出同步兜底。冒烟验证 session_shutdown 和 MCP 清理
 - [ ] 桌面异常恢复验证：真实运行中 backend 崩溃、连续启动失败、退出超时；启动失败后的原生错误提示与重试入口
 - [x] 传输选型（D6）：本地 WebSocket，系统分配随机端口，main 注入 token；`argon://app` 独立 Origin，保留 Host/Origin/token 校验
-- [ ] 原生能力：文件夹选择、系统通知（任务完成、等待审批）、托盘、全局快捷键、在 Finder / 编辑器中打开
+- [x] 托盘：macOS / Windows 关闭窗口时隐藏，保留 renderer 和后端任务；提供显示 / 退出菜单（打包冒烟覆盖隐藏与恢复，实机验证待完成）
+- [ ] 原生能力：文件夹选择、系统通知（任务完成、等待审批）、全局快捷键、在 Finder / 编辑器中打开
 - [x] 窗口标题栏：macOS 隐藏系统标题栏，红绿灯融入侧栏顶行；Windows 使用原生 Window Controls Overlay，按钮融入应用右上角并跟随系统主题；应用顶栏可拖拽，交互控件排除拖拽，Windows 控件区留白
 - [ ] 窗口：多窗口；Windows 标题栏覆盖、DPI 缩放和系统贴靠行为实机验证
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
@@ -163,4 +164,4 @@
 - [ ] 桌面打包：Windows/Linux 尚未实机验证；当前全部运行时依赖解包，后续缩减体积时需保留 worker、WASM、动态扩展及子进程路径兼容性（D14）
 
 - [x] Windows 桌面基础适配：按平台/架构定位冒烟可执行文件，动态 ESM 导入使用 file URL；fd 补全支持 Windows PATH 与 .exe；Web dev runner 通过 Node 启动 npm JS 入口，避免直接 spawn npm.cmd；NSIS 按用户安装；补充 PowerShell 使用说明和 Windows 打包冒烟 CI
-- [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出和安装/卸载；Windows CI 尚未在本轮运行
+- [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出、安装/卸载、托盘点击切换及关机/注销时不阻塞（`session-end`）；Windows CI 尚未在本轮运行

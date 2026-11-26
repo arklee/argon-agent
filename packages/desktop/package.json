@@ -13,12 +13,8 @@
 		"typecheck": "tsc -p tsconfig.json"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "1.6.1",
-		"@earendil-works/pi-coding-agent": "1.6.1",
-		"@earendil-works/pi-tui": "1.6.1",
-		"magpie-pi": "^0.2.0",
-		"proper-lockfile": "^4.1.2",
-		"ws": "^8.18.0"
+		"@argon/backend": "*",
+		"@argon/shared": "*"
 	},
 	"devDependencies": {
 		"electron": "45.5.0",
@@ -33,6 +29,7 @@
 		},
 		"files": [
 			"out/**/*",
+			"resources/**/*",
 			"package.json"
 		],
 		"asar": true,

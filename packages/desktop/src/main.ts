@@ -1,7 +1,22 @@
 import { randomBytes } from "node:crypto";
 import { resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, nativeTheme, net, protocol, session, shell, utilityProcess } from "electron";
+import {
+	app,
+	BrowserWindow,
+	Menu,
+	nativeImage,
+	nativeTheme,
+	net,
+	protocol,
+	session,
+	shell,
+	Tray,
+	utilityProcess,
+} from "electron";
+
+import { en } from "../../web/src/i18n/locales/en.ts";
+import { zhCN } from "../../web/src/i18n/locales/zh-CN.ts";
 
 const directory = fileURLToPath(new URL(".", import.meta.url));
 const origin = "argon://app";
@@ -9,6 +24,8 @@ const rendererUrl = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefi
 const token = randomBytes(32).toString("base64url");
 let child: Electron.UtilityProcess | undefined;
 let window: BrowserWindow | undefined;
+let tray: Tray | undefined;
+let quitRequested = false;
 let quitting = false;
 let stopped = false;
 let backendUrl: string | undefined;
@@ -40,7 +57,7 @@ function external(url: string): void {
 /** Brings back the existing window; only creates and loads one when there is none (reloading would drop page state). */
 function focusWindow(): void {
 	if (!window || window.isDestroyed()) {
-		if (!quitting) void loadWindow().catch((error) => console.error(error));
+		if (!quitRequested) void loadWindow().catch((error) => console.error(error));
 		return;
 	}
 	if (window.isMinimized()) window.restore();
@@ -61,6 +78,17 @@ async function loadWindow(): Promise<void> {
 			minHeight: 540,
 			show: !process.env.ARGON_DESKTOP_SMOKE,
 			webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+		});
+		window.on("close", (event) => {
+			if (integratedChrome && !quitRequested) {
+				event.preventDefault();
+				window?.hide();
+			}
+		});
+		// Windows logoff/shutdown skips before-quit; without this the close handler above would block it.
+		window.on("session-end", () => {
+			quitRequested = true;
+			app.quit();
 		});
 		window.webContents.setWindowOpenHandler(({ url }) => {
 			external(url);
@@ -114,7 +142,7 @@ function startBackend(): void {
 		// Existing clients reconnect to the same address and recover via SessionMirror.
 		if (process.env.ARGON_DESKTOP_SMOKE) {
 			void import("./smoke.ts")
-				.then(({ smoke }) => smoke(backendUrl!, token, () => window))
+				.then(({ smoke }) => smoke(backendUrl!, token, () => window, focusWindow))
 				.then(
 					() => app.quit(),
 					(error) => {
@@ -143,6 +171,7 @@ function startBackend(): void {
 }
 
 app.on("before-quit", (event) => {
+	quitRequested = true;
 	if (stopped || !child) return;
 	event.preventDefault();
 	if (quitting) return;
@@ -155,13 +184,38 @@ app.on("before-quit", (event) => {
 	}, 10_000).unref();
 });
 app.on("quit", () => child?.kill());
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+	if (!integratedChrome) app.quit();
+});
 app.on("activate", () => focusWindow());
 
 void app
 	.whenReady()
 	.then(() => {
 		if (!primary) return;
+		if (integratedChrome) {
+			const resources = resolve(app.isPackaged ? app.getAppPath() : resolve(directory, "../.."), "resources");
+			const icon = nativeImage.createFromPath(
+				resolve(resources, process.platform === "darwin" ? "trayTemplate.png" : "tray.png"),
+			);
+			if (process.platform === "darwin") icon.setTemplateImage(true);
+			tray = new Tray(icon);
+			tray.setToolTip("Argon");
+			const labels = (app.getLocale().startsWith("zh") ? zhCN : en).desktop.tray;
+			tray.setContextMenu(
+				Menu.buildFromTemplate([
+					{ label: labels.show, click: focusWindow },
+					{ type: "separator" },
+					{ label: labels.quit, click: () => app.quit() },
+				]),
+			);
+			if (process.platform === "win32") {
+				tray.on("click", () => {
+					if (window && !window.isDestroyed() && window.isVisible() && window.isFocused()) window.hide();
+					else focusWindow();
+				});
+			}
+		}
 		session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
 		const rendererRoot = resolve(directory, "../renderer");
 		protocol.handle("argon", (request) => {

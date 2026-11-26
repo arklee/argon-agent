@@ -117,6 +117,12 @@ export const en = {
 		used: "Used",
 		window: "Context window",
 	},
+	desktop: {
+		tray: {
+			show: "Show Argon",
+			quit: "Quit Argon",
+		},
+	},
 	diagnostics: {
 		errorCount_one: "{{count, number}} error",
 		errorCount_other: "{{count, number}} errors",

@@ -5,7 +5,12 @@ import { WebSocketAgentClient } from "@argon/shared";
 import type { BrowserWindow } from "electron";
 
 /** Runs inside the packaged main process; uses the same public protocol as the renderer. */
-export async function smoke(url: string, token: string, getWindow: () => BrowserWindow | undefined): Promise<void> {
+export async function smoke(
+	url: string,
+	token: string,
+	getWindow: () => BrowserWindow | undefined,
+	focusWindow: () => void,
+): Promise<void> {
 	const client = new WebSocketAgentClient({ url, token, clientName: "desktop-smoke" });
 	try {
 		const deadline = Date.now() + 30_000;
@@ -30,6 +35,22 @@ export async function smoke(url: string, token: string, getWindow: () => Browser
 			"typeof process === 'undefined' && typeof require === 'undefined'",
 		);
 		assert(isolated, "Renderer has no Node access");
+		if (process.platform === "darwin" || process.platform === "win32") {
+			const window = getWindow()!;
+			focusWindow();
+			assert(window.isVisible(), "Window shown before close");
+			await window.webContents.executeJavaScript("globalThis.__argonTrayProbe = true");
+			window.close();
+			await delay(200);
+			assert(!window.isDestroyed(), "Close keeps the window alive");
+			assert(!window.isVisible(), "Close hides the window");
+			assert((await client.request("environment.info", {})).piVersion, "Backend survives hidden window");
+			focusWindow();
+			assert.equal(getWindow(), window, "Focus reuses the window");
+			assert(window.isVisible(), "Focus shows the hidden window");
+			assert(await window.webContents.executeJavaScript("globalThis.__argonTrayProbe"), "Renderer was not reloaded");
+			console.error("DESKTOP_TRAY_OK: close hides, backend responds, focus restores without reload");
+		}
 		if (process.env.ARGON_DESKTOP_SCREENSHOT) {
 			await delay(500);
 			await writeFile(process.env.ARGON_DESKTOP_SCREENSHOT, (await getWindow()!.webContents.capturePage()).toPNG());
