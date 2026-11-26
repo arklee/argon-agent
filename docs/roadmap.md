@@ -24,7 +24,7 @@
 - [ ] 图片和附件：支持粘贴和拖拽，以内容上传给后端（不能依赖本地路径），写入 `prompt.images`；工具结果里的图片也要能显示
 - [x] 斜杠命令：后端提供命令列表（扩展命令、prompt 模板、技能）和参数补全（`sessions.commands` / `sessions.completeCommand`），输入框里做补全；`/mcp` 直接打开 MCP 面板
 - [x] pi TUI 的内置命令在 SDK 的 `prompt()` 里不会被处理：`/compact`、`/name`、`/new` 由 Argon 原生实现，其余在输入框里拦截并提示（`web/src/lib/builtin-commands.ts`，名单对应 pi 1.6.1）
-- [ ] `@文件` 补全：后端提供按项目搜索文件的 API
+- [x] `@文件` 补全：`sessions.completeFile` 直接复用 pi-tui 的 `CombinedAutocompleteProvider`（fd 搜索、引号、目录续补与 pi 编辑器一致）
 - [x] edit / write 工具展示 diff 视图：审批卡片里显示预览（backend 读原文件生成，`diff-preview.ts`），执行后用 edit 返回的 `details.diff`；小 diff 默认展开
 - [ ] write 的 diff 不会持久化（pi 的 write 结果没有 details），重新加载会话后只能看到参数。可以考虑在 `tool_result` 钩子里把预览写进 details
 - [x] 消息操作：复制；从某条用户消息开始编辑重发（`sessions.editMessage`，经 `navigateTree` 分支，旧分支保留）；重新生成最后一条回复

@@ -38,6 +38,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { createBuiltinExtensions } from "./builtin-extensions.ts";
 import { previewDiff, resultDiff } from "./diff-preview.ts";
+import { completeFile, type FileCompletion } from "./file-completion.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
 import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.ts";
@@ -77,6 +78,7 @@ export class ManagedSession {
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
 		private readonly mcp: McpBridge,
+		private readonly agentDir: string,
 		permissionMode: PermissionMode,
 	) {
 		const session = runtime.session;
@@ -135,7 +137,7 @@ export class ManagedSession {
 			agentDir: deps.agentDir,
 			sessionManager,
 		});
-		const managed = new ManagedSession(runtime, mcp, deps.defaultPermissionMode);
+		const managed = new ManagedSession(runtime, mcp, deps.agentDir, deps.defaultPermissionMode);
 		self = managed;
 		await managed.bind();
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
@@ -335,6 +337,13 @@ export class ManagedSession {
 			log.warn(`argument completion for /${name} failed`, error);
 			return [];
 		}
+	}
+
+	completeFile(textBeforeCursor: string): Promise<FileCompletion | undefined> {
+		// Bounded: a slow fd on a huge tree must not hold the request.
+		return completeFile(textBeforeCursor, this.state.cwd, this.agentDir, AbortSignal.timeout(5000)).catch(
+			() => undefined,
+		);
 	}
 
 	/** Returns an error message, or undefined on success. */

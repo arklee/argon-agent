@@ -20,7 +20,8 @@ export function Composer({ session }: { session: SessionState }) {
 	const renameSession = useApp((s) => s.renameSession);
 	const createSession = useApp((s) => s.createSession);
 	const ref = useRef<HTMLTextAreaElement>(null);
-	const { suggestions, dismiss, extensionNames } = useSlashCompletion(session.sessionId, text);
+	const [cursor, setCursor] = useState(0);
+	const { suggestions, dismiss, extensionNames } = useSlashCompletion(session.sessionId, text, cursor);
 	const [activeIndex, setActiveIndex] = useState(0);
 	/** Whether the user moved the highlight since the text last changed. */
 	const [navigated, setNavigated] = useState(false);
@@ -31,8 +32,13 @@ export function Composer({ session }: { session: SessionState }) {
 	}, [suggestions.length, text]);
 
 	const pick = (suggestion: Suggestion) => {
+		const caret = suggestion.cursor ?? suggestion.apply.length;
 		setText(suggestion.apply);
-		ref.current?.focus();
+		setCursor(caret);
+		requestAnimationFrame(() => {
+			ref.current?.focus();
+			ref.current?.setSelectionRange(caret, caret);
+		});
 	};
 	const running = session.status === "running";
 	const queued = [...session.queue.steering, ...session.queue.followUp];
@@ -120,7 +126,11 @@ export function Composer({ session }: { session: SessionState }) {
 				<textarea
 					ref={ref}
 					value={text}
-					onChange={(e) => setText(e.target.value)}
+					onChange={(e) => {
+						setText(e.target.value);
+						setCursor(e.target.selectionStart);
+					}}
+					onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
 					onKeyDown={(e) => {
 						// Never act while an IME composition is active (Chinese/Japanese input).
 						if (e.nativeEvent.isComposing) return;
@@ -143,7 +153,7 @@ export function Composer({ session }: { session: SessionState }) {
 							const enterAccepts =
 								current !== undefined &&
 								current.apply.trimEnd() !== text.trimEnd() &&
-								(current.kind === "command" || navigated);
+								(current.kind !== "argument" || navigated);
 							if (current && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && enterAccepts))) {
 								e.preventDefault();
 								pick(current);

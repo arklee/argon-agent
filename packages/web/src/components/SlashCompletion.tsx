@@ -9,9 +9,16 @@ export interface Suggestion {
 	label: string;
 	description?: string;
 	badge?: string;
-	kind: "command" | "argument";
+	kind: "command" | "argument" | "file";
 	/** Full composer text after accepting. */
 	apply: string;
+	/** Caret position after accepting (default: end of text). */
+	cursor?: number;
+}
+
+/** An `@` reference ending at the caret: `@path` or `@"path with spaces`, starting a word. */
+function atReferenceBefore(textBeforeCursor: string): boolean {
+	return /(?:^|[\s(["'])@(?:"[^"]*|[^\s"]*)$/.test(textBeforeCursor);
 }
 
 /** `/name rest` → { name, args } when the text is a slash command; args undefined while typing the name. */
@@ -44,7 +51,7 @@ function rankCommands(commands: SlashCommand[], query: string): SlashCommand[] {
  * from the backend for commands that offer them. Commands are fetched when a `/` is typed, so newly
  * loaded extensions show up without a refresh.
  */
-export function useSlashCompletion(sessionId: string, text: string) {
+export function useSlashCompletion(sessionId: string, text: string, cursor: number = text.length) {
 	const [extensionCommands, setCommands] = useState<SlashCommand[]>([]);
 	const extensionNames = useMemo(
 		() => new Set(extensionCommands.filter((c) => c.source === "extension").map((c) => c.name)),
@@ -66,6 +73,24 @@ export function useSlashCompletion(sessionId: string, text: string) {
 	);
 	const [argItems, setArgItems] = useState<{ forText: string; items: CompletionItem[] }>();
 	const [dismissedFor, setDismissedFor] = useState<string>();
+	const [fileResult, setFileResult] = useState<{
+		forKey: string;
+		prefix: string;
+		items: (CompletionItem & { isDirectory: boolean })[];
+	}>();
+	const textBeforeCursor = text.slice(0, cursor);
+	const fileKey = `${cursor}:${text}`;
+	const wantsFiles = atReferenceBefore(textBeforeCursor);
+	useEffect(() => {
+		if (!wantsFiles) return;
+		const timer = setTimeout(() => {
+			getClient()
+				.request("sessions.completeFile", { sessionId, textBeforeCursor })
+				.then((result) => setFileResult(result ? { forKey: fileKey, ...result } : undefined))
+				.catch(() => setFileResult(undefined));
+		}, 100);
+		return () => clearTimeout(timer);
+	}, [wantsFiles, sessionId, textBeforeCursor, fileKey]);
 	const parsed = parseCommand(text);
 	const typingCommand = parsed !== undefined;
 	const loadedFor = useRef<string | undefined>(undefined);
@@ -98,6 +123,23 @@ export function useSlashCompletion(sessionId: string, text: string) {
 	}, [wantsArgs, command, parsed?.args, sessionId, text]);
 
 	const suggestions = useMemo<Suggestion[]>(() => {
+		if (wantsFiles) {
+			if (fileResult?.forKey !== fileKey) return [];
+			const start = cursor - fileResult.prefix.length;
+			return fileResult.items.map((item) => {
+				// Like pi's editor: a space after files, none after directories so completion can continue.
+				const inserted = item.value + (item.isDirectory ? "" : " ");
+				const caret = start + (item.isDirectory && item.value.endsWith('"') ? item.value.length - 1 : inserted.length);
+				return {
+					key: item.value,
+					label: item.label,
+					description: item.description,
+					kind: "file" as const,
+					apply: text.slice(0, start) + inserted + text.slice(cursor),
+					cursor: caret,
+				};
+			});
+		}
 		if (!parsed) return [];
 		if (parsed.args === undefined) {
 			return rankCommands(commands, parsed.name)
@@ -119,10 +161,10 @@ export function useSlashCompletion(sessionId: string, text: string) {
 			kind: "argument" as const,
 			apply: `/${command.name} ${item.value}`,
 		}));
-	}, [parsed, commands, command, argItems, text]);
+	}, [parsed, commands, command, argItems, text, wantsFiles, fileResult, fileKey, cursor]);
 
-	const open = suggestions.length > 0 && dismissedFor !== text;
-	return { suggestions: open ? suggestions : [], dismiss: () => setDismissedFor(text), extensionNames };
+	const open = suggestions.length > 0 && dismissedFor !== fileKey;
+	return { suggestions: open ? suggestions : [], dismiss: () => setDismissedFor(fileKey), extensionNames };
 }
 
 export function SlashCompletionMenu({

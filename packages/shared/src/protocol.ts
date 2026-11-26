@@ -329,6 +329,14 @@ export interface Methods {
 		params: { sessionId: string; name: string; argumentPrefix: string };
 		result: { items: CompletionItem[] };
 	};
+	/**
+	 * `@file` completion for the text before the cursor (pi's editor semantics). `prefix` is the
+	 * `@...` text the chosen value replaces; files get a trailing space, directories do not.
+	 */
+	"sessions.completeFile": {
+		params: { sessionId: string; textBeforeCursor: string };
+		result: { prefix: string; items: (CompletionItem & { isDirectory: boolean })[] } | null;
+	};
 	"sessions.unload": { params: { sessionId: string }; result: Record<string, never> };
 	"interactions.respond": {
 		params: { sessionId: string; interactionId: string; response: InteractionResponse };

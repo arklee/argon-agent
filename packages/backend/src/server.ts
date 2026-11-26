@@ -185,6 +185,8 @@ function createHandlers(registry: SessionRegistry, config: BackendConfig): Handl
 		"sessions.completeCommand": async (params) => ({
 			items: await registry.require(params.sessionId).completeCommand(params.name, params.argumentPrefix),
 		}),
+		"sessions.completeFile": async (params) =>
+			(await registry.require(params.sessionId).completeFile(params.textBeforeCursor)) ?? null,
 		"sessions.unload": async (params) => {
 			await registry.unload(params.sessionId);
 			return empty;
