@@ -13,6 +13,12 @@ let quitting = false;
 let stopped = false;
 let backendUrl: string | undefined;
 let restarts = 0;
+// Electron keys the lock on userData; the smoke run uses its own so it can run beside a real instance.
+if (process.env.ARGON_DESKTOP_SMOKE) app.setPath("userData", resolve(process.env.ARGON_DESKTOP_SMOKE, "electron"));
+// A second instance would start a second backend on the same ARGON_HOME (concurrent package installs, auth writes).
+const primary = app.requestSingleInstanceLock();
+if (!primary) app.quit();
+app.on("second-instance", () => focusWindow());
 const integratedChrome = process.platform === "darwin" || process.platform === "win32";
 const overlayColors = () => ({
 	color: nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff",
@@ -29,6 +35,17 @@ protocol.registerSchemesAsPrivileged([
 
 function external(url: string): void {
 	if (["https:", "http:"].includes(new URL(url).protocol)) void shell.openExternal(url);
+}
+
+/** Brings back the existing window; only creates and loads one when there is none (reloading would drop page state). */
+function focusWindow(): void {
+	if (!window || window.isDestroyed()) {
+		if (!quitting) void loadWindow().catch((error) => console.error(error));
+		return;
+	}
+	if (window.isMinimized()) window.restore();
+	window.show();
+	window.focus();
 }
 
 async function loadWindow(): Promise<void> {
@@ -139,13 +156,12 @@ app.on("before-quit", (event) => {
 });
 app.on("quit", () => child?.kill());
 app.on("window-all-closed", () => app.quit());
-app.on("activate", () => {
-	if (!quitting) void loadWindow();
-});
+app.on("activate", () => focusWindow());
 
 void app
 	.whenReady()
 	.then(() => {
+		if (!primary) return;
 		session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
 		const rendererRoot = resolve(directory, "../renderer");
 		protocol.handle("argon", (request) => {
