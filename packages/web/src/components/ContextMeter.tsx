@@ -35,7 +35,7 @@ function Ring({ percent, className }: { percent: number; className?: string }) {
 	);
 }
 
-/** Header indicator of how full the context window is, with a manual compaction action. */
+/** Composer-toolbar indicator of how full the context window is, with a manual compaction action. */
 export function ContextMeter({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
 	const compact = useApp((s) => s.compact);
@@ -56,13 +56,24 @@ export function ContextMeter({ session }: { session: SessionState }) {
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="sm" className={cn("tabular-nums", tone)} title={t("context.usage")}>
+				<Button
+					variant="ghost"
+					size="sm"
+					className={cn("h-7 px-1.5 text-[0.8rem] font-normal tabular-nums", tone)}
+					title={`${t("context.usage")}: ${percent === null ? "—" : formatPercent(percent)}`}
+				>
 					{session.compacting ? <Loader2 className="animate-spin" /> : <Ring percent={percent ?? 0} />}
-					{session.compacting ? t("context.compacting") : percent === null ? "—" : formatPercent(percent)}
+					{/* Quiet until it matters: the percentage shows once the window is filling up. */}
+					{session.compacting
+						? t("context.compacting")
+						: percent !== null && percent >= 60 && <span>{formatPercent(percent)}</span>}
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuLabel>{t("context.window")}</DropdownMenuLabel>
+				<DropdownMenuLabel className="flex justify-between">
+					<span>{t("context.window")}</span>
+					{percent !== null && <span className="tabular-nums">{formatPercent(percent)}</span>}
+				</DropdownMenuLabel>
 				<div className="space-y-1 px-2 pb-2 text-xs text-muted-foreground">
 					<div className="flex justify-between">
 						<span>{t("context.used")}</span>

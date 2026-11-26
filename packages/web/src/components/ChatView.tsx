@@ -1,114 +1,16 @@
 import type { SessionState } from "@argon/shared";
-import { ShieldCheck, ShieldQuestion } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Composer } from "@/components/Composer";
-import { ContextMeter } from "@/components/ContextMeter";
 import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
-import { ModelCombobox } from "@/components/ModelCombobox";
 import { ProjectTrustBanner, ProjectTrustIndicator } from "@/components/ProjectTrust";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
-import { ToolPresetPicker } from "@/components/ToolPresetPicker";
 import { Transcript } from "@/components/Transcript";
-import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuLabel,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectLabel,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { displayPath, sessionTitle, thinkingLevelLabel } from "@/lib/format";
+import { displayPath, sessionTitle } from "@/lib/format";
 import { useApp } from "@/stores/app";
 import { findToolCallBlock } from "@/tools";
-
-function ModelPicker({ session }: { session: SessionState }) {
-	const setModel = useApp((s) => s.setModel);
-	const setThinkingLevel = useApp((s) => s.setThinkingLevel);
-	return (
-		<ModelCombobox
-			value={session.model}
-			cwd={session.cwd}
-			onChange={(model, thinkingLevel) =>
-				void setModel(model).then(() => (thinkingLevel ? setThinkingLevel(thinkingLevel) : undefined))
-			}
-			className="max-w-56"
-		/>
-	);
-}
-
-function ThinkingPicker({ session }: { session: SessionState }) {
-	const { t } = useTranslation();
-	const setThinkingLevel = useApp((s) => s.setThinkingLevel);
-	if (session.availableThinkingLevels.length <= 1) return null;
-	return (
-		<Select value={session.thinkingLevel} onValueChange={(v) => void setThinkingLevel(v)}>
-			<SelectTrigger size="sm" className="border-none bg-transparent shadow-none hover:bg-muted">
-				<SelectValue />
-			</SelectTrigger>
-			<SelectContent position="popper" align="end">
-				<SelectGroup>
-					<SelectLabel>{t("chat.thinking")}</SelectLabel>
-					{session.availableThinkingLevels.map((level) => (
-						<SelectItem key={level} value={level}>
-							{thinkingLevelLabel(level, t)}
-						</SelectItem>
-					))}
-				</SelectGroup>
-			</SelectContent>
-		</Select>
-	);
-}
-
-function PermissionPicker({ session }: { session: SessionState }) {
-	const { t } = useTranslation();
-	const setPermissionMode = useApp((s) => s.setPermissionMode);
-	const ask = session.permissionMode === "ask";
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" size="sm" className="text-muted-foreground">
-					{ask ? <ShieldQuestion /> : <ShieldCheck className="text-amber-600 dark:text-amber-400" />}
-					{ask ? t("chat.ask") : t("chat.auto")}
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuLabel>{t("chat.permissionMode")}</DropdownMenuLabel>
-				<DropdownMenuSeparator />
-				<DropdownMenuRadioGroup
-					value={session.permissionMode}
-					onValueChange={(v) => void setPermissionMode(v as SessionState["permissionMode"])}
-				>
-					<DropdownMenuRadioItem value="ask">
-						<div>
-							<div>{t("chat.askChanges")}</div>
-							<div className="text-xs text-muted-foreground">{t("chat.allowReadOnly")}</div>
-						</div>
-					</DropdownMenuRadioItem>
-					<DropdownMenuRadioItem value="auto">
-						<div>
-							<div>{t("chat.runEverything")}</div>
-							<div className="text-xs text-muted-foreground">{t("chat.noApprovals")}</div>
-						</div>
-					</DropdownMenuRadioItem>
-				</DropdownMenuRadioGroup>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
 
 export function ChatView({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
@@ -141,12 +43,7 @@ export function ChatView({ session }: { session: SessionState }) {
 				</span>
 				<DiagnosticsPanel session={session} />
 				<ProjectTrustIndicator session={session} />
-				<ContextMeter session={session} />
 				<McpPanel mcp={session.mcp} />
-				<ToolPresetPicker session={session} />
-				<PermissionPicker session={session} />
-				<ThinkingPicker session={session} />
-				<ModelPicker session={session} />
 				{summary && <SessionMenu header session={summary} onRename={() => setRenaming(session.sessionId)} />}
 			</header>
 			<ProjectTrustBanner session={session} />

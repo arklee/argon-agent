@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AttachmentStrip, useAttachments } from "@/components/Attachments";
+import { ContextMeter } from "@/components/ContextMeter";
 import { ExtensionWidgets } from "@/components/ExtensionWidgets";
 import { hasMcpPanel } from "@/components/McpPanel";
+import { ModelPicker, PermissionPicker, ThinkingPicker } from "@/components/SessionControls";
 import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
+import { ToolPresetPicker } from "@/components/ToolPresetPicker";
 import { Button } from "@/components/ui/button";
 import { matchBuiltin } from "@/lib/builtin-commands";
 import { cn } from "@/lib/utils";
@@ -243,11 +246,8 @@ export function Composer({ session }: { session: SessionState }) {
 					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-(length:--chat-font-size) outline-none placeholder:text-muted-foreground"
 					autoFocus
 				/>
-				<div className="flex items-center justify-between px-3 pb-2.5">
-					<span className="truncate text-xs text-muted-foreground">
-						{session.statusEntries.map((s) => s.text).join(" · ")}
-					</span>
-					<div className="flex items-center gap-1.5">
+				<div className="@container/toolbar flex items-center gap-2 px-2 pb-2">
+					<div className="flex shrink-0 items-center gap-0.5">
 						<Button
 							variant="ghost"
 							size="icon-sm"
@@ -257,6 +257,16 @@ export function Composer({ session }: { session: SessionState }) {
 						>
 							<Paperclip />
 						</Button>
+						<PermissionPicker session={session} />
+						<ToolPresetPicker session={session} />
+					</div>
+					{/* Only the model name gives way when space runs out. */}
+					<div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">
+						<ContextMeter session={session} />
+						<ModelPicker session={session} />
+						<ThinkingPicker session={session} />
+					</div>
+					<div className="flex shrink-0 items-center gap-1.5">
 						{running && (
 							<Button
 								variant="outline"
@@ -282,6 +292,11 @@ export function Composer({ session }: { session: SessionState }) {
 					</div>
 				</div>
 			</div>
+			{session.statusEntries.length > 0 && (
+				<div className="mt-1.5 truncate px-3 text-xs text-muted-foreground">
+					{session.statusEntries.map((s) => s.text).join(" · ")}
+				</div>
+			)}
 			<ExtensionWidgets widgets={session.widgets} placement="belowEditor" className="mt-2" />
 		</div>
 	);

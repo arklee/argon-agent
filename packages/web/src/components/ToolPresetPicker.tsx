@@ -1,6 +1,7 @@
 import type { SessionState, ToolPresetId, ToolPresetInfo } from "@argon/shared";
 import { Blocks, Clock } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toolbarButton } from "@/components/SessionControls";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -41,7 +42,7 @@ export function presetDescription(preset: ToolPresetInfo, t: typeof translate): 
 	}
 }
 
-/** Header picker for the session's tool preset (decisions D13). Hidden when the backend has none. */
+/** Composer-toolbar picker for the session's tool preset (decisions D13). Hidden when the backend has none. */
 export function ToolPresetPicker({ session }: { session: SessionState }) {
 	const { t } = useTranslation();
 	const presets = useApp((s) => s.toolPresets);
@@ -54,14 +55,14 @@ export function ToolPresetPicker({ session }: { session: SessionState }) {
 				<Button
 					variant="ghost"
 					size="sm"
-					className="text-muted-foreground"
-					title={pending ? t("presets.pending") : t("presets.title")}
+					className={toolbarButton}
+					title={`${t("presets.title")}: ${presetLabel(session.toolPreset, presets, t)}${pending ? ` (${t("presets.pending")})` : ""}`}
 				>
 					{pending ? <Clock className="text-amber-600 dark:text-amber-400" /> : <Blocks />}
-					{presetLabel(session.toolPreset, presets, t)}
+					<span className="@max-md/toolbar:hidden">{presetLabel(session.toolPreset, presets, t)}</span>
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-72">
+			<DropdownMenuContent align="start" className="w-72">
 				<DropdownMenuLabel>{t("presets.title")}</DropdownMenuLabel>
 				<DropdownMenuSeparator />
 				<DropdownMenuRadioGroup value={session.toolPreset} onValueChange={(v) => void setToolPreset(v)}>
