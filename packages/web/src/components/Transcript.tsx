@@ -70,7 +70,10 @@ function AssistantBlocks({
 						return (
 							<ToolCallCard
 								key={block.toolCallId}
+								toolCallId={block.toolCallId}
 								name={block.name}
+								display={block.display}
+								source={block.source}
 								args={block.args}
 								argsText={block.argsText}
 								tool={tools[block.toolCallId]}

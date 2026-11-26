@@ -1,12 +1,11 @@
-import type { ToolCallState } from "@argon/shared";
+import type { ToolCallState, ToolDisplay } from "@argon/shared";
 import { Ban, Check, ChevronRight, CircleDashed, Hand, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DiffStat, DiffView } from "@/components/DiffView";
-import { SessionImages } from "@/components/Images";
-import { formatDuration, summarizeToolArgs } from "@/lib/format";
+import { DiffStat } from "@/components/DiffView";
+import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/stores/app";
+import { displayFor, rendererFor, type ToolView } from "@/tools";
 
 function StatusIcon({ status }: { status: ToolCallState["status"] }) {
 	switch (status) {
@@ -24,27 +23,41 @@ function StatusIcon({ status }: { status: ToolCallState["status"] }) {
 }
 
 export function ToolCallCard({
+	toolCallId,
 	name,
 	args,
 	argsText,
+	display,
+	source,
 	tool,
 	awaitingApproval,
 }: {
+	toolCallId: string;
 	name: string;
 	args: unknown;
 	argsText?: string;
+	display?: ToolDisplay;
+	source?: string;
 	tool: ToolCallState | undefined;
 	awaitingApproval?: boolean;
 }) {
 	const { t } = useTranslation();
 	const [openState, setOpen] = useState<boolean>();
-	const sessionId = useApp((s) => s.activeSessionId);
 	const status = tool?.status ?? "pending";
 	const diff = tool?.diff;
 	// Small diffs start expanded, like a code review; everything else starts collapsed.
 	const open = openState ?? (diff !== undefined && diff.split("\n").length <= 40 && status !== "blocked");
 	const effectiveArgs = tool?.args ?? args;
-	const summary = summarizeToolArgs(name, effectiveArgs) || (argsText ? argsText.slice(0, 120) : "");
+	const view: ToolView = {
+		toolCallId,
+		name,
+		source,
+		display: displayFor(name, effectiveArgs, display, argsText),
+		args: effectiveArgs,
+		tool,
+	};
+	const renderer = rendererFor(view);
+	const summary = renderer.summary?.(view) ?? view.display.summary ?? "";
 	const hasDetails = Boolean(tool?.output) || effectiveArgs !== undefined;
 
 	return (
@@ -59,7 +72,7 @@ export function ToolCallCard({
 				) : (
 					<StatusIcon status={status} />
 				)}
-				<span className="font-medium">{name}</span>
+				<span className="font-medium">{view.display.title || name}</span>
 				<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
 				{diff && <DiffStat diff={diff} />}
 				{awaitingApproval && (
@@ -74,29 +87,7 @@ export function ToolCallCard({
 			</button>
 			{open && (
 				<div className="space-y-2 border-t bg-muted/30 px-3 py-2">
-					{diff ? (
-						<DiffView
-							diff={diff}
-							className={cn("max-h-96", status !== "done" && status !== "running" && "opacity-60")}
-						/>
-					) : (
-						<pre className="max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap break-all text-muted-foreground">
-							{JSON.stringify(effectiveArgs, null, 2)}
-						</pre>
-					)}
-					{tool?.output && (!diff || status !== "done") && (
-						<pre
-							className={cn(
-								"max-h-80 overflow-auto rounded-md bg-background p-2 font-mono text-xs whitespace-pre-wrap break-all",
-								(status === "error" || status === "blocked") && "text-destructive",
-							)}
-						>
-							{tool.output}
-						</pre>
-					)}
-					{tool?.imageCount && sessionId && status !== "running" ? (
-						<SessionImages sessionId={sessionId} toolCallId={tool.toolCallId} count={tool.imageCount} />
-					) : null}
+					<renderer.Body view={view} />
 				</div>
 			)}
 		</div>

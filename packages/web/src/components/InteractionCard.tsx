@@ -1,18 +1,20 @@
-import type { Interaction, InteractionResponse, PermissionRule } from "@argon/shared";
+import type { AssistantBlock, Interaction, InteractionResponse, PermissionRule } from "@argon/shared";
 import { ExternalLink, ShieldQuestion } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { DiffView } from "@/components/DiffView";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { summarizeToolArgs } from "@/lib/format";
+import { displayFor, rendererFor, type ToolView } from "@/tools";
 
 /** A pending request from the agent (tool approval or an extension dialog). Owned by the backend. */
 export function InteractionCard({
 	interaction,
+	toolCall,
 	onRespond,
 }: {
 	interaction: Interaction;
+	/** For tool approvals: the call's transcript block, which carries its display. */
+	toolCall?: Extract<AssistantBlock, { type: "toolCall" }>;
 	onRespond: (response: InteractionResponse) => void;
 }) {
 	const { t } = useTranslation();
@@ -63,19 +65,32 @@ export function InteractionCard({
 
 	switch (interaction.kind) {
 		case "tool_approval": {
-			const summary = summarizeToolArgs(interaction.toolName, interaction.args);
-			if (interaction.diff) {
-				return frame(
-					t("approval.questionWithSummary", { tool: interaction.toolName, summary }),
-					<DiffView diff={interaction.diff} className="max-h-80" />,
-					approvalActions(interaction.toolName, interaction.suggestedRule),
-				);
-			}
+			const view: ToolView = {
+				toolCallId: interaction.toolCallId,
+				name: interaction.toolName,
+				source: toolCall?.source,
+				display: displayFor(interaction.toolName, interaction.args, toolCall?.display),
+				args: interaction.args,
+			};
+			const renderer = rendererFor(view);
+			const summary = renderer.summary?.(view) ?? view.display.summary ?? "";
+			// The path belongs in the question for file changes; other previews show the call themselves.
+			const title =
+				view.display.kind === "file_change" && summary
+					? t("approval.questionWithSummary", { tool: interaction.toolName, summary })
+					: t("approval.question", { tool: interaction.toolName });
+			const Preview = renderer.Preview;
 			return frame(
-				t("approval.question", { tool: interaction.toolName }),
-				<pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap break-all">
-					{summary || JSON.stringify(interaction.args, null, 2)}
-				</pre>,
+				title,
+				<div className="max-h-80 overflow-auto rounded-md bg-muted p-2">
+					{Preview ? (
+						<Preview view={view} diff={interaction.diff} />
+					) : (
+						<pre className="font-mono text-xs whitespace-pre-wrap break-all">
+							{summary || JSON.stringify(interaction.args, null, 2)}
+						</pre>
+					)}
+				</div>,
 				approvalActions(interaction.toolName, interaction.suggestedRule),
 			);
 		}

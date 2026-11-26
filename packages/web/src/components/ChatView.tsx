@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { displayPath, sessionTitle, thinkingLevelLabel } from "@/lib/format";
 import { useApp } from "@/stores/app";
+import { findToolCallBlock } from "@/tools";
 
 function ModelPicker({ session }: { session: SessionState }) {
 	const setModel = useApp((s) => s.setModel);
@@ -153,6 +154,11 @@ export function ChatView({ session }: { session: SessionState }) {
 						<InteractionCard
 							key={interaction.id}
 							interaction={interaction}
+							toolCall={
+								interaction.kind === "tool_approval"
+									? findToolCallBlock(session.items, interaction.toolCallId)
+									: undefined
+							}
 							onRespond={(response) => void respond(interaction.id, response)}
 						/>
 					))}

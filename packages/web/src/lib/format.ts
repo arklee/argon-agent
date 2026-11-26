@@ -77,32 +77,3 @@ export function thinkingLevelLabel(level: string, translate: typeof t): string {
 	const key = thinkingKeys.get(level);
 	return key ? translate(key) : level;
 }
-
-/** One-line description of a tool call for the collapsed card. */
-export function summarizeToolArgs(name: string, args: unknown): string {
-	const a = (args ?? {}) as Record<string, unknown>;
-	const str = (v: unknown) => (typeof v === "string" ? v : undefined);
-	switch (name) {
-		case "bash":
-		case "powershell":
-			return str(a.command) ?? "";
-		case "read":
-		case "write":
-		case "edit":
-			return str(a.path) ?? str(a.file_path) ?? "";
-		case "grep":
-		case "find": {
-			const pattern = str(a.pattern);
-			const path = str(a.path);
-			return pattern && path ? t("tools.patternInPath", { pattern, path }) : pattern || path || "";
-		}
-		case "ls":
-			return str(a.path) ?? ".";
-		case "exec":
-			return (str(a.code) ?? "").split("\n")[0] ?? "";
-		default: {
-			const json = JSON.stringify(args);
-			return json && json !== "{}" ? json.slice(0, 120) : "";
-		}
-	}
-}
