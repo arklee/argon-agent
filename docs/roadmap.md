@@ -49,7 +49,7 @@
 
 ### pi 能力接入
 
-- [ ] SDK 会话加载内置扩展：`createMcpExtension()`、`createCodemodeExtension()`、`createToolSearchExtension()`。CLI 默认会加载这些，SDK 不会。然后补上 `session.bindExtensions` 的时序
+- [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
 - [ ] MCP 状态面板：连接状态、工具列表、错误信息
 - [ ] 项目信任（project trust）流程：首次打开项目时询问，确认后才加载项目内的扩展和设置
 - [ ] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误
@@ -106,4 +106,7 @@
 - [ ] 任一工具事件都会让所有消息组件重新渲染（`tools` 引用变化），长会话时需要优化
 - [ ] 后端重启会中断正在运行的任务（目前符合预期）。远程 daemon 阶段需要考虑任务能否恢复
 - [ ] "本会话总是允许"只保存在内存中，会话卸载后就丢失
+- [ ] pi 没有导出 `builtin:llama.cpp`，Argon 暂未加载（CLI 会加载）
+- [ ] MCP 的 OAuth 登录默认在 backend 所在机器上打开浏览器，远程时不对；`/mcp` 管理界面依赖 TUI `custom()`，GUI 里用不了。需要通过 `createMcpExtension({ openUrl })` 把登录链接转给前端，再配合 MCP 状态面板
+- [ ] 扩展调用 `ctx.shutdown()`（`bindExtensions` 的 `shutdownHandler`）还没接
 - [ ] 后端没启动或连接断开时，只在侧边栏底部显示一个黄点，没有明显的离线提示；断线期间点击发送会一直等到请求超时

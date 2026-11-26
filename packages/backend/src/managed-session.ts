@@ -31,6 +31,7 @@ import {
 	type ModelRuntime,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { createBuiltinExtensions } from "./builtin-extensions.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
 import {
@@ -105,7 +106,8 @@ export class ManagedSession {
 				cwd,
 				agentDir,
 				modelRuntime: deps.modelRuntime,
-				resourceLoaderOptions: { extensionFactories: [permissionExtension] },
+				// The permission gate goes first so its tool_call handler runs before any other extension's.
+				resourceLoaderOptions: { extensionFactories: [permissionExtension, ...createBuiltinExtensions()] },
 			});
 			return {
 				...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
@@ -121,13 +123,11 @@ export class ManagedSession {
 			agentDir: deps.agentDir,
 			sessionManager,
 		});
-		for (const diagnostic of runtime.takeUnreportedDiagnostics()) {
-			log.warn(`[pi] ${diagnostic.type}: ${diagnostic.message}`);
-		}
-
 		const managed = new ManagedSession(runtime, deps.defaultPermissionMode);
 		self = managed;
 		await managed.bind();
+		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
+		managed.reportDiagnostics();
 		return managed;
 	}
 
@@ -275,6 +275,7 @@ export class ManagedSession {
 				switchSession: async () => ({ cancelled: true }),
 				reload: async () => {
 					await session.reload();
+					this.reportDiagnostics();
 				},
 			},
 			onError: (error) => {
@@ -286,6 +287,12 @@ export class ManagedSession {
 				});
 			},
 		});
+	}
+
+	private reportDiagnostics(): void {
+		for (const diagnostic of this.runtime.takeUnreportedDiagnostics()) {
+			log.warn(`[pi] ${diagnostic.type}: ${diagnostic.message}`);
+		}
 	}
 
 	/** Rebuild the full state from the session tree (on load). */
