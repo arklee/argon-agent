@@ -26,6 +26,8 @@ const port = process.env.ARGON_PORT ?? "7878";
 const webPort = "5173";
 const env = { ...process.env, ARGON_TOKEN: token, ARGON_PORT: port, FORCE_COLOR: "1" };
 
+let exiting = false;
+
 const children = [
 	spawn("npm", ["run", "dev", "-w", "@argon/backend"], { env, stdio: "inherit" }),
 	spawn("npm", ["run", "dev", "-w", "@argon/web"], {
@@ -34,11 +36,55 @@ const children = [
 	}),
 ];
 
-setTimeout(() => {
-	console.log(`\n  Argon: open http://localhost:${webPort}/#token=${token}\n`);
-}, 1500);
+// Vite listens on 127.0.0.1 only; "localhost" may resolve to ::1 first and be refused.
+const url = `http://127.0.0.1:${webPort}/#token=${token}`;
+const noOpen =
+	process.argv.includes("--no-open") ||
+	/^(1|true)$/i.test(process.env.ARGON_NO_OPEN ?? "") ||
+	process.env.BROWSER?.toLowerCase() === "none";
 
-let exiting = false;
+/** Open a URL in the user's browser. On WSL that is the Windows browser. Best effort. */
+function openBrowser(target) {
+	let command;
+	let args;
+	let cwd;
+	// $BROWSER (as in CRA and others) picks a browser other than the system default; on WSL it can be a
+	// Windows executable, e.g. "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe".
+	if (process.env.BROWSER) [command, args] = [process.env.BROWSER, [target]];
+	else if (process.platform === "darwin") [command, args] = ["open", [target]];
+	else if (process.platform === "win32") [command, args] = ["cmd", ["/c", "start", '""', target]];
+	else if (isWsl()) [command, args, cwd] = ["cmd.exe", ["/c", "start", '""', target], "/mnt/c"];
+	else [command, args] = ["xdg-open", [target]];
+	const child = spawn(command, args, { cwd, stdio: "ignore", detached: true });
+	child.on("error", () => console.log("  (Could not open a browser; use the link above.)"));
+	child.unref();
+}
+
+function isWsl() {
+	try {
+		return /microsoft/i.test(readFileSync("/proc/version", "utf8"));
+	} catch {
+		return false;
+	}
+}
+
+async function waitForWeb(timeoutMs = 30_000) {
+	const deadline = Date.now() + timeoutMs;
+	while (!exiting && Date.now() < deadline) {
+		try {
+			if ((await fetch(`http://127.0.0.1:${webPort}/`)).ok) return true;
+		} catch {}
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	return false;
+}
+
+void waitForWeb().then((ready) => {
+	if (exiting) return;
+	console.log(`\n  Argon: ${url}\n`);
+	if (ready && !noOpen) openBrowser(url);
+});
+
 const stop = (code = 0) => {
 	if (exiting) return;
 	exiting = true;

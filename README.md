@@ -17,7 +17,7 @@ npm install
 npm run dev
 ```
 
-打开终端里打印的 `http://localhost:5173/#token=...` 链接。
+启动后会自动在浏览器里打开 `http://127.0.0.1:5173/#token=...`（链接也会打印在终端里）。不想自动打开：`npm run dev -- --no-open` 或 `ARGON_NO_OPEN=1`。默认用系统默认浏览器，可用 `BROWSER` 指定（WSL 下可以是 Windows 程序路径，如 `BROWSER="/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"`）。
 
 ## 文档
 
