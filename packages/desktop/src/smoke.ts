@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocketAgentClient } from "@argon/shared";
-import type { BrowserWindow } from "electron";
+import { type BrowserWindow, nativeTheme } from "electron";
 
 /** Runs inside the packaged main process; uses the same public protocol as the renderer. */
 export async function smoke(
@@ -35,6 +35,10 @@ export async function smoke(
 			"typeof process === 'undefined' && typeof require === 'undefined'",
 		);
 		assert(isolated, "Renderer has no Node access");
+		await getWindow()!.webContents.executeJavaScript("window.argonDesktop.setTheme('dark')");
+		await delay(100);
+		assert.equal(nativeTheme.themeSource, "dark", "Renderer theme reaches native chrome");
+		await getWindow()!.webContents.executeJavaScript("window.argonDesktop.setTheme('system')");
 		if (process.platform === "darwin" || process.platform === "win32") {
 			const window = getWindow()!;
 			focusWindow();

@@ -19,7 +19,7 @@ ARGON_SMOKE_MODEL=openai-codex/gpt-6-luna npm run smoke:desktop
 
 main 生成每次启动独有的 token，backend 绑定 `127.0.0.1:0`，将系统分配的端口通过父子进程消息回报 main。main 将连接信息放入页面 fragment，web 既有逻辑会将其移入 sessionStorage 并清除地址栏中的值。连接与会话恢复仍全部经过 AgentClient / SessionMirror。
 
-生产页面来自 `argon://app`，这是唯一允许的 WebSocket Origin；开发模式只允许 electron-vite 的 renderer 地址。不允许 `null` Origin，也不放宽 Host 和 token 校验。renderer 开启 sandbox、contextIsolation，禁用 Node integration，没有 preload 或额外 IPC API。外部 HTTP(S) 链接交给系统浏览器，不允许页面导航到外部来源。
+生产页面来自 `argon://app`，这是唯一允许的 WebSocket Origin；开发模式只允许 electron-vite 的 renderer 地址。不允许 `null` Origin，也不放宽 Host 和 token 校验。renderer 开启 sandbox、contextIsolation，禁用 Node integration。preload 只暴露 `window.argonDesktop.setTheme(theme)`，用于让原生界面（Windows 标题栏按钮、macOS 菜单）跟随 web 的外观设置：main 只接受来自本窗口主 frame 的 `system` / `light` / `dark`，并设置 `nativeTheme.themeSource`。不提供其他原生能力；新增桥接前先确认它只是展示提示，否则应走 backend 协议。外部 HTTP(S) 链接交给系统浏览器，不允许页面导航到外部来源。
 
 后端崩溃最多重启三次，复用原端口和 token；web 通过既有离线提示和重连逻辑恢复。正在执行的任务不能恢复。退出时发消息等待 backend 关闭服务并 dispose 会话，十秒后强制终止兜底。应用退出还有同步 kill 兜底。macOS / Windows 关闭窗口时隐藏到托盘，renderer 和后端任务继续运行；托盘退出及 macOS Cmd+Q / Dock 退出仍会真正退出。Linux 关闭最后一个窗口即退出应用。
 

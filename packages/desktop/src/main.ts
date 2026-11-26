@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
 	app,
 	BrowserWindow,
+	ipcMain,
 	Menu,
 	nativeImage,
 	nativeTheme,
@@ -45,6 +46,11 @@ const overlayColors = () => ({
 nativeTheme.on("updated", () => {
 	if (process.platform === "win32" && window && !window.isDestroyed()) window.setTitleBarOverlay(overlayColors());
 });
+// The web theme setting drives native chrome (Windows title bar overlay, macOS menus); only our own page may set it.
+ipcMain.on("argon:set-theme", (event, theme: unknown) => {
+	if (!window || window.isDestroyed() || event.senderFrame !== window.webContents.mainFrame) return;
+	if (theme === "system" || theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
+});
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "argon", privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -77,7 +83,12 @@ async function loadWindow(): Promise<void> {
 			minWidth: 760,
 			minHeight: 540,
 			show: !process.env.ARGON_DESKTOP_SMOKE,
-			webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+			webPreferences: {
+				sandbox: true,
+				contextIsolation: true,
+				nodeIntegration: false,
+				preload: resolve(directory, "../preload/index.cjs"),
+			},
 		});
 		window.on("close", (event) => {
 			if (integratedChrome && !quitRequested) {

@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
 import { basename, displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
 import { clampTextSize, getTextSize, MAX_TEXT_SIZE, MIN_TEXT_SIZE, setTextSize } from "@/lib/text-size";
+import { setThemePreference, type ThemePreference, useThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { type SettingsSection, useSettings } from "@/stores/settings";
@@ -392,6 +393,7 @@ function ProjectScopeNote() {
 function GeneralSection() {
 	const { t } = useTranslation();
 	const [preference, setPreference] = useState(getLanguagePreference);
+	const theme = useThemePreference();
 	const scope = useSettings((s) => s.scope);
 	return (
 		<>
@@ -413,6 +415,18 @@ function GeneralSection() {
 								setPreference(value);
 								void setLanguagePreference(value);
 							}}
+						/>
+					</Row>
+					<Row label={t("settings.general.theme")}>
+						<Choice<ThemePreference>
+							ariaLabel={t("settings.general.theme")}
+							value={theme}
+							options={[
+								{ value: "system", label: t("settings.general.themeSystem") },
+								{ value: "light", label: t("settings.general.themeLight") },
+								{ value: "dark", label: t("settings.general.themeDark") },
+							]}
+							onChange={setThemePreference}
 						/>
 					</Row>
 					<Row label={t("settings.general.textSize")} description={t("settings.general.textSizeDescription")}>

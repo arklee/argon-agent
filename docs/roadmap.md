@@ -161,6 +161,7 @@
 - [ ] 两个 backend 共用同一个 `ARGON_HOME` 时（例如 `npm run dev` 和 `npm run smoke` 同时跑），启动时会并发安装 settings 里的 pi 包，npm 报 `ENOTEMPTY`。可考虑给包安装加锁，或冒烟默认用独立的 `ARGON_HOME`
 - [ ] 已卸载且不是当前查看的会话被删除后，前端 mirror 里仍保留它的旧状态，直到刷新页面（不影响显示，只占内存）
 
+- [x] 外观设置（浅色/深色/跟随系统）只在 web 端生效，Windows 标题栏按钮底色仍跟随系统：desktop 加了只暴露 `argonDesktop.setTheme` 的 preload，main 设置 `nativeTheme.themeSource`，标题栏覆盖随 `updated` 事件重绘；桌面冒烟验证该通道
 - [ ] 桌面打包：Windows/Linux 尚未实机验证；当前全部运行时依赖解包，后续缩减体积时需保留 worker、WASM、动态扩展及子进程路径兼容性（D14）
 
 - [x] Windows 桌面基础适配：按平台/架构定位冒烟可执行文件，动态 ESM 导入使用 file URL；fd 补全支持 Windows PATH 与 .exe；Web dev runner 通过 Node 启动 npm JS 入口，避免直接 spawn npm.cmd；NSIS 按用户安装；补充 PowerShell 使用说明和 Windows 打包冒烟 CI

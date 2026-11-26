@@ -16,6 +16,15 @@ export default defineConfig({
 			},
 		},
 	},
+	preload: {
+		build: {
+			// Sandboxed preloads must be CommonJS.
+			rollupOptions: {
+				input: { index: path("./src/preload.ts") },
+				output: { format: "cjs", entryFileNames: "[name].cjs" },
+			},
+		},
+	},
 	renderer: {
 		root: path("../web"),
 		plugins: [react(), tailwindcss()],

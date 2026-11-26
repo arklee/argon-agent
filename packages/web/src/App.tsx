@@ -12,16 +12,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Welcome } from "@/components/Welcome";
 import { type ConnectionConfig, readConnectionConfig, saveConnectionConfig } from "@/lib/connection";
 import { shortcutLabels, useGlobalShortcuts } from "@/lib/shortcuts";
-import { useSystemTheme } from "@/lib/theme";
+import { useResolvedTheme } from "@/lib/theme";
 import { useActiveSession, useApp } from "@/stores/app";
 
 export function App() {
-	useSystemTheme();
+	const theme = useResolvedTheme();
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div className="window-drag-strip" aria-hidden="true" />
 			<Shell />
-			<Toaster position="top-center" />
+			<Toaster position="top-center" theme={theme} />
 		</TooltipProvider>
 	);
 }
