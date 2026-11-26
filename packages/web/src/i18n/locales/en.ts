@@ -379,6 +379,8 @@ export const en = {
 			steering: "Steering messages",
 			steeringDescription: "Messages sent while the agent works, delivered between steps.",
 			systemLanguage: "System",
+			textSize: "Text size",
+			textSizeDescription: "Conversation text (messages, tool calls, composer), 9–32 px. Saved in this browser.",
 			title: "General",
 			trustNew: "Trust new projects",
 			trustNewDescription: "Whether a project's own extensions and settings load.",

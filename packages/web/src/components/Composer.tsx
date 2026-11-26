@@ -240,7 +240,7 @@ export function Composer({ session }: { session: SessionState }) {
 					}}
 					rows={1}
 					placeholder={running ? t("composer.queueFollowUp") : t("composer.placeholder")}
-					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] outline-none placeholder:text-muted-foreground"
+					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-(length:--chat-font-size) outline-none placeholder:text-muted-foreground"
 					autoFocus
 				/>
 				<div className="flex items-center justify-between px-3 pb-2.5">

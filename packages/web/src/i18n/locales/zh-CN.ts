@@ -381,6 +381,8 @@ export const zhCN = {
 			steering: "引导消息",
 			steeringDescription: "Agent 运行时发送的消息，会在步骤之间送达。",
 			systemLanguage: "系统默认",
+			textSize: "文字大小",
+			textSizeDescription: "对话文字（消息、工具调用、输入框）的字号，9–32 px。保存在当前浏览器。",
 			title: "通用",
 			trustNew: "信任新项目",
 			trustNewDescription: "是否加载项目自身的扩展和设置。",

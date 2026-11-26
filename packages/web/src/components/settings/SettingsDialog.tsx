@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
 import { basename, displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
+import { clampTextSize, getTextSize, MAX_TEXT_SIZE, MIN_TEXT_SIZE, setTextSize } from "@/lib/text-size";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { type SettingsSection, useSettings } from "@/stores/settings";
@@ -278,6 +279,50 @@ function EnabledModels() {
 	);
 }
 
+/** Conversation text size in px: typed directly, applied on Enter or blur, clamped to the supported range. */
+function TextSizeInput() {
+	const { t } = useTranslation();
+	const [size, setSize] = useState(getTextSize);
+	const [draft, setDraft] = useState(String(size));
+	const commit = () => {
+		const typed = Number(draft);
+		// Empty or non-numeric input restores the current size.
+		const next = draft.trim() === "" || !Number.isFinite(typed) ? size : clampTextSize(typed);
+		setDraft(String(next));
+		if (next === size) return;
+		setSize(next);
+		setTextSize(next);
+	};
+	return (
+		<div className="flex items-center gap-1.5">
+			<Input
+				type="number"
+				inputMode="numeric"
+				min={MIN_TEXT_SIZE}
+				max={MAX_TEXT_SIZE}
+				step={1}
+				value={draft}
+				aria-label={t("settings.general.textSize")}
+				onChange={(e) => {
+					setDraft(e.target.value);
+					// Valid sizes apply while typing or using the arrows; out-of-range input is clamped on commit.
+					const value = Number(e.target.value);
+					if (e.target.value !== "" && value === clampTextSize(value)) {
+						setSize(value);
+						setTextSize(value);
+					}
+				}}
+				onBlur={commit}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
+				}}
+				className="h-8 w-20 text-right tabular-nums"
+			/>
+			<span className="text-sm text-muted-foreground">px</span>
+		</div>
+	);
+}
+
 function ScopeSwitch() {
 	const { t } = useTranslation();
 	const cwd = useSettings((s) => s.cwd);
@@ -369,6 +414,9 @@ function GeneralSection() {
 								void setLanguagePreference(value);
 							}}
 						/>
+					</Row>
+					<Row label={t("settings.general.textSize")} description={t("settings.general.textSizeDescription")}>
+						<TextSizeInput />
 					</Row>
 				</Group>
 			)}

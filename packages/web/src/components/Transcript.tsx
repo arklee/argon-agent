@@ -260,7 +260,8 @@ const Item = memo(
 								{t("chat.stopped")}
 							</span>
 						)}
-						{!item.streaming && (
+						{/* Steps that only call tools have nothing to copy: no action row, so tool runs stay compact. */}
+						{!item.streaming && (assistantText(item.blocks).trim() !== "" || (regenerate && !failed)) && (
 							<div className="mt-1 flex gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 								<CopyButton text={assistantText(item.blocks)} />
 								{regenerate && !failed && (
@@ -372,7 +373,7 @@ export function Transcript({ session }: { session: SessionState }) {
 			}}
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
 			tabIndex={0}
-			className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
+			className="argon-chat min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
 		>
 			<Virtualizer
 				cache={cache}
@@ -397,13 +398,16 @@ export function Transcript({ session }: { session: SessionState }) {
 						for (const block of item.blocks) if (block.type === "toolCall") add(block.toolCallId);
 					}
 					// Adjacent message margins used to collapse. Include the shared gap in one measured row.
-					const smallGap = item?.kind === "notice" && (index === 0 || session.items[index - 1]?.kind === "notice");
+					const previous = session.items[index - 1];
+					const smallGap = item?.kind === "notice" && (index === 0 || previous?.kind === "notice");
+					// Steps of one turn (tool calls, then the answer) read as one block.
+					const sameTurn = item?.kind === "assistant" && previous?.kind === "assistant";
 					return (
 						<div
 							key={item ? `item-${item.id}` : "status"}
 							className={cn(
 								"mx-auto flow-root w-full max-w-3xl px-6",
-								smallGap ? "pt-3" : "pt-4",
+								sameTurn ? "pt-0.5" : smallGap ? "pt-3" : "pt-4",
 								index === 0 && (smallGap ? "pt-9" : "pt-10"),
 								index === count - 1 && (item?.kind === "notice" ? "pb-9" : "pb-10"),
 							)}

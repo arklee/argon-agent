@@ -88,11 +88,17 @@ export function ToolCallCard({
 	const hasDetails = Boolean(tool?.output) || effectiveArgs !== undefined || children.length > 0;
 
 	return (
-		<div className={cn("overflow-hidden rounded-lg border text-sm", nested ? "bg-background" : "my-2 bg-card")}>
+		<div
+			className={cn(
+				"overflow-hidden rounded-lg border",
+				// Relative to the conversation text size; nested cards keep their parent's size.
+				nested ? "bg-background text-[1em]" : "my-1.5 bg-card text-[0.9em]",
+			)}
+		>
 			<button
 				type="button"
 				onClick={() => hasDetails && setOpen(!open)}
-				className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
+				className="flex w-full items-center gap-2 px-3 py-1.5 text-left leading-normal hover:bg-muted/50"
 			>
 				{awaitingApproval ? (
 					<Hand className="size-3.5 text-amber-600 dark:text-amber-400" />
@@ -100,18 +106,20 @@ export function ToolCallCard({
 					<StatusIcon status={status} />
 				)}
 				<span className="font-medium">{view.display.title || name}</span>
-				<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
+				<span className="min-w-0 flex-1 truncate font-mono text-[0.85em] text-muted-foreground">{summary}</span>
 				{children.length > 0 && (
-					<span className="shrink-0 text-xs text-muted-foreground">
+					<span className="shrink-0 text-[0.85em] text-muted-foreground">
 						{t("tools.nestedCount", { count: children.length })}
 					</span>
 				)}
 				{diff && <DiffStat diff={diff} />}
 				{awaitingApproval && (
-					<span className="shrink-0 text-xs text-amber-600 dark:text-amber-400">{t("tools.waitingApproval")}</span>
+					<span className="shrink-0 text-[0.85em] text-amber-600 dark:text-amber-400">
+						{t("tools.waitingApproval")}
+					</span>
 				)}
 				{tool?.durationMs !== undefined && (
-					<span className="shrink-0 text-xs text-muted-foreground">{formatDuration(tool.durationMs)}</span>
+					<span className="shrink-0 text-[0.85em] text-muted-foreground">{formatDuration(tool.durationMs)}</span>
 				)}
 				<ChevronRight
 					className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")}
