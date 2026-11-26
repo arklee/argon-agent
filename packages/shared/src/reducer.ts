@@ -18,6 +18,7 @@ export function createEmptySessionState(init: { sessionId: string; cwd: string; 
 		thinkingLevel: "off",
 		availableThinkingLevels: [],
 		permissionMode: "ask",
+		toolPreset: "classic",
 		diagnostics: [],
 		items: [],
 		tools: {},
@@ -228,6 +229,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 			return { ...state, thinkingLevel: event.level };
 		case "permission_mode_changed":
 			return { ...state, permissionMode: event.mode };
+		case "tool_preset_changed":
+			return { ...state, toolPreset: event.preset, toolPresetPending: event.pending || undefined };
 		case "project_trust_changed":
 			return { ...state, projectTrust: event.trust };
 		case "diagnostics_changed":

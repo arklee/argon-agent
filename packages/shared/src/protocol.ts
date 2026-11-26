@@ -273,6 +273,22 @@ export interface PermissionRule {
 /** Argon's own settings, per backend environment ($ARGON_HOME/settings.json). */
 export interface ArgonSettings {
 	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
+	/** Tool preset for new sessions (decisions D13). */
+	defaultToolPreset: ToolPresetId;
+}
+
+/**
+ * A tool preset (decisions D13): which tools the model gets and how they are presented. Ids are open
+ * strings so the backend can add presets; frontends label known ids and fall back to `label`.
+ * Built-in ids: "classic" (separate tools), "codemode" (codemode alongside them), "codemode_only".
+ */
+export type ToolPresetId = string;
+
+export interface ToolPresetInfo {
+	id: ToolPresetId;
+	/** English fallback label. */
+	label: string;
+	description: string;
 }
 
 export interface StatusEntry {
@@ -311,6 +327,10 @@ export interface SessionState {
 	thinkingLevel: ThinkingLevel;
 	availableThinkingLevels: ThinkingLevel[];
 	permissionMode: PermissionMode;
+	/** The session's tool preset. */
+	toolPreset: ToolPresetId;
+	/** True while a newly chosen preset waits for the current turn to finish. */
+	toolPresetPending?: boolean;
 	projectTrust?: ProjectTrustInfo;
 	diagnostics: SessionDiagnostic[];
 	items: TranscriptItem[];
@@ -389,6 +409,7 @@ export type SessionEvent =
 	| { type: "model_changed"; model?: ModelRef }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| { type: "permission_mode_changed"; mode: PermissionMode }
+	| { type: "tool_preset_changed"; preset: ToolPresetId; pending: boolean }
 	| { type: "project_trust_changed"; trust: ProjectTrustInfo }
 	| { type: "diagnostics_changed"; diagnostics: SessionDiagnostic[] }
 	| { type: "interaction_requested"; interaction: Interaction }
@@ -500,6 +521,9 @@ export interface Methods {
 		params: { sessionId: string; mode: PermissionMode };
 		result: Record<string, never>;
 	};
+	/** Takes effect at the next turn boundary; changing tools resets the prompt cache once. */
+	"sessions.setToolPreset": { params: { sessionId: string; preset: ToolPresetId }; result: Record<string, never> };
+	"toolPresets.list": { params: Record<string, never>; result: { presets: ToolPresetInfo[] } };
 	"sessions.rename": { params: { sessionId: string; name: string }; result: Record<string, never> };
 	/** `exposure` is required for the "exposure" action. Resolves when the action finished or started in the background. */
 	"sessions.mcpAction": {
