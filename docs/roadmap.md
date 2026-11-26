@@ -38,7 +38,7 @@
 
 ### 会话管理
 
-- [x] 会话重命名、删除或归档，以及搜索（支持内联重命名、删除文件及侧栏搜索；归档尚未实现。）
+- [x] 会话重命名、删除或归档，以及搜索（支持内联重命名、删除文件及侧栏搜索。归档用 `sessions.setArchived`，记在 `$ARGON_HOME/session-prefs.json`，pi 没有归档概念；侧栏底部“已归档”进入单独视图，可取消归档）
 - [x] 会话树：分叉（fork）、在分支间导航（`navigateTree`）、克隆（用户消息可分叉并带入草稿，可切换同级分支或复制当前分支。）
 - [x] 支持扩展发起的 `newSession` / `fork` / `switchSession`（当前会话收到扩展请求后自动打开目标会话。）
 - [x] 自动生成会话标题（首轮结束后由后端生成标题。）
@@ -48,7 +48,7 @@
 ### 设置与账号
 
 - [x] 设置页：侧栏齿轮或 ⌘/Ctrl+, 打开，分 General / Providers / Permissions / Plugins / Resources。pi settings 只编辑全局一级的常用子集；资源列表（全局 + 当前项目）只读
-- [ ] 设置页：项目级 settings 编辑；`enabledModels`（模型循环范围）还没有界面
+- [x] 设置页：项目级 settings 编辑（通用页顶部切换“所有项目 / 当前项目”，`settings.updateProject` 在 pi 的文件锁下改写 `<cwd>/.argon/settings.json`，可逐项恢复为全局值；项目未信任时提示设置不生效）；`enabledModels` 编辑器（勾选模型或填写匹配模式），模型选择器优先列出已启用的模型（`models.list { cwd }` 返回 `scoped`），模式里的思考级别（如 `:high`）选模型时一并应用
 - [x] Provider 与登录：`auth.*` 协议，登录流程由 backend 持有（`AuthFlows`），任何客户端可应答；设置页里加/换/删 API key、OAuth 登录登出，模型选择器里有“Manage providers…”入口；magpie 社区插件的安装/移除（需二次确认）
 - [ ] 用真实浏览器 OAuth（auth_url 回调、device code）完整走一遍登录；目前只验证了 select 提示和取消
 - [x] 权限设置持久化：默认权限模式、"总是允许"的规则（`$ARGON_HOME/settings.json`；bash 规则按命令前缀，含管道/重定向等的命令永远询问），审批卡片上可直接添加，设置页里可删除
@@ -62,13 +62,13 @@
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
 - [x] 项目信任（project trust）流程：信任未决的项目先按不信任加载，对话区顶部横幅询问（信任 / 信任上级目录 / 仅本次 / 不信任），顶栏盾牌图标可随时更改；`projects.setTrust` 会重新加载受影响的会话（运行中的等本轮结束）。见 decisions D11
 - [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误：`SessionState.diagnostics`，顶栏警告图标显示数量，弹层列出来源、信息和路径
-- [ ] 更丰富地渲染扩展 widget（目前只显示纯文本）
+- [x] 更丰富地渲染扩展 widget：`SessionState.widgets` 记录 key、行和位置（输入框上方或下方），组件型 widget 由 backend 以 100 列无头渲染成文本（剥离 ANSI，`requestRender` 时重绘）；`setWorkingMessage` 替换“正在处理”提示
 
 ### 质量
 
 - [x] backend 测试：用 fake session 测 `translate.ts` 和 `managed-session.ts` 的事件转换
 - [x] `SessionMirror` 测试：缺口、重复事件、重连、后端重启
-- [x] 带真实会话的端到端冒烟脚本：`npm run smoke`（自带 backend，用 gpt-6-luna；覆盖发消息、幂等、bash 审批、sinceSeq 重连、重新打开后设置恢复）
+- [x] 带真实会话的端到端冒烟脚本：`npm run smoke`（自带 backend，默认 openai/gpt-6-luna，可用 `ARGON_SMOKE_MODEL=provider/id` 换模型；覆盖发消息、幂等、bash 审批、sinceSeq 重连、重新打开后设置恢复）。注意：冒烟读取 `ARGON_HOME` 的全部配置，装了改变工具集的包（如 pi-codex-conversion）时 bash 审批一步会失败，可另建只含 `agent/auth.json` 和 `environment.json` 的 `ARGON_HOME` 来跑
 - [x] CI：typecheck、test、lint
 - [x] i18n（中文 / 英文）：内置简体中文和英文，可在通用设置中即时切换。
 
@@ -134,24 +134,26 @@
 
 ## 技术债与已知问题
 
-- [ ] 其他客户端（或 API）卸载会话时，正在查看该会话的标签页会退回首页（`session_unloaded` 的处理方式），应改为保留视图并在需要时重新打开
-- [ ] 被拒绝的工具调用在历史回放中显示为 error，而不是 blocked（blocked 状态没有持久化）
-- [ ] 某些机器上 `os.hostname()` 返回 IP，环境名应改用 `scutil --get ComputerName` 等更友好的值
-- [ ] 每次 `sessions.list` 都全量扫描 `~/.argon/agent/sessions`，会话多了以后需要加索引或缓存
-- [ ] 上传清理无法扫描 pi 会话目录之外的未加载会话（例如项目自定义的 `sessionDir`），这些会话引用的上传文件可能被当作无引用文件清理
-- [ ] 还没写入文件的新会话，在列表里的 createdAt 用的是当前时间
+- [x] 其他客户端（或 API）卸载会话时，正在查看该会话的标签页会退回首页：`SessionMirror` 现在保留已保存会话的状态并标为已卸载，任何操作前先 `reopen`（经 `sessions.open`，强制采用新快照）；会话文件已被删除时才退回首页
+- [x] 被拒绝的工具调用在历史回放中显示为 error：拒绝时追加 `argon.tool_blocked` 自定义条目，`projectHistory` 回放为 blocked
+- [x] 某些机器上 `os.hostname()` 返回 IP：环境名改用 `scutil --get ComputerName`（macOS）/ `hostnamectl --pretty`（Linux），否则去掉 `.local` 的主机名
+- [x] 每次 `sessions.list` 都全量解析会话文件：`SessionIndex` 缓存 pi 的列表，以会话目录的指纹（路径、大小、mtime）判断是否失效，只做 stat 不再逐个解析
+- [x] 上传清理无法扫描 pi 会话目录之外的未加载会话：现在也扫描已知项目的 `sessionDir`，以及 Argon 打开过的目录外会话文件（记在 `session-prefs.json`）
+- [x] 还没写入文件的新会话，在列表里的 createdAt 用的是当前时间：改用会话头的时间戳
 - [x] 任一工具事件都会让所有消息组件重新渲染：按消息比较其工具调用引用，只更新关联行。
 - [ ] 后端重启会中断正在运行的任务（目前符合预期）。远程 daemon 阶段需要考虑任务能否恢复
-- [ ] "本会话总是允许"只保存在内存中，会话卸载后就丢失
-- [ ] 虚拟滚动：第一次跳到未测量的区域（拖滚动条到顶、按 Home）会因估算高度停在离目标还有一段的位置，测量后才准确；可考虑缓存各行高度
+- [x] "本会话总是允许"只保存在内存中：现在写成 `argon.session_allow` 自定义条目，重新打开会话后恢复
+- [ ] 虚拟滚动：第一次跳到未测量的区域（拖滚动条到顶、按 Home）会因估算高度停在离目标还有一段的位置。已缓解：按会话缓存各行实测高度（最多 20 个会话，切回时恢复），Home / End 改用 `scrollToIndex`。首次打开长会话时拖滚动条仍可能不准，未在真实长会话上验证
 - [ ] 虚拟滚动：曾观察到一次流式输出时上滚后被拉回约 470px，之后 3 次复现未再出现，需要继续留意
-- [ ] 扩展 `newSession({ withSession })` 回调里发出的通知会丢失：它发在新会话上，而客户端此时还没订阅新会话（通知不进快照）
-- [ ] pi 没有导出 `builtin:llama.cpp`，Argon 暂未加载（CLI 会加载）
-- [ ] 扩展调用 `ctx.shutdown()`（`bindExtensions` 的 `shutdownHandler`）还没接
+- [x] 扩展 `newSession({ withSession })` 回调里发出的通知会丢失：没有客户端订阅时发出的通知暂存（最多 20 条、60 秒内），随第一个客户端拿到的快照（`SessionSnapshot.notifications`）补发一次
+- [x] pi 没有导出 `builtin:llama.cpp`：按文件路径从已安装的 pi 包动态导入（`exports` 只限制裸模块名），失败时记警告并跳过。升级 pi 时要确认路径仍然存在
+- [x] 扩展调用 `ctx.shutdown()`：CLI 会退出进程，Argon 只卸载该会话（等本轮结束），其他会话不受影响
 - [x] 编辑重发后，侧栏标题仍取会话文件里的第一条用户消息（pi `SessionInfo.firstMessage`），而不是当前分支的（已加载会话取当前分支的首条消息，并优先显示自动生成的标题。）
 - [x] 后端没启动或连接断开时，只在侧边栏底部显示一个黄点，没有明显的离线提示；断线期间点击发送会一直等到请求超时（主区域显示重连倒计时，离线时禁止发送并保留草稿。）
 
-- [ ] 项目信任跳过了 pi 的 `project_trust` 扩展事件（用户级扩展无法代为决定）；"仅本次"的信任决定只在内存中，backend 重启后失效
-- [ ] 诊断只能看不能清除；扩展运行时错误会一直累积到 100 条上限
+- [x] 项目信任跳过了 pi 的 `project_trust` 扩展事件：现在按 pi 的顺序先问用户级扩展（`remember` 时保存），GUI 显示由哪个扩展决定（decisions D11）。"仅本次"的决定仍只在内存中，backend 重启后失效，这与 pi 的 session-only 语义一致，作为设计保留
+- [x] 诊断只能看不能清除：问题面板可清除扩展和模型问题（`sessions.clearDiagnostics`，加载问题保留到修复为止）；同样的错误合并计数，不再刷满 100 条上限
 
 - [x] Argon 全局配置、凭据、会话和项目配置目录与 pi CLI 隔离（D10）
+- [ ] 两个 backend 共用同一个 `ARGON_HOME` 时（例如 `npm run dev` 和 `npm run smoke` 同时跑），启动时会并发安装 settings 里的 pi 包，npm 报 `ENOTEMPTY`。可考虑给包安装加锁，或冒烟默认用独立的 `ARGON_HOME`
+- [ ] 已卸载且不是当前查看的会话被删除后，前端 mirror 里仍保留它的旧状态，直到刷新页面（不影响显示，只占内存）

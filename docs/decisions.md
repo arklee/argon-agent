@@ -195,6 +195,8 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 **决定**：Argon 在加载项目资源时自行判断信任状态，会话加载不等待用户回答。信任状态未决时，先按不信任模式加载会话，由 GUI 的横幅询问用户。Argon 跳过 pi 的 `project_trust` 扩展事件，信任决定通过 `projects.setTrust` 提交。
 
+**2026-11-26 修订**：不再跳过 `project_trust` 事件。pi 在加载项目资源前会先加载用户级扩展，并通过 `resolveProjectTrust({ extensionsResult })` 交给宿主；Argon 用这些扩展按 pi 的顺序判断：本会话的“仅本次”选择 → 第一个回答 yes/no 的 `project_trust` 处理器（`remember: true` 时写入信任记录） → 已保存的决定 → 默认值。处理器拿到的是无 UI 的上下文（`hasUI: false`），因为会话加载仍然不等待用户回答。GUI 在信任菜单里显示是哪个扩展做的决定（`ProjectTrustInfo.decidedBy`）。“仅本次”的决定仍只在内存里，与 pi 的 session-only 语义一致。
+
 ## D12. 前端 i18n
 
 **决定**：使用 i18next 和 react-i18next，同步加载内置的英文和简体中文词条。语言偏好保存在客户端的 localStorage 中，同一个后端可同时服务使用不同界面语言的客户端。后端、pi 和扩展提供的原始文本暂不翻译。
