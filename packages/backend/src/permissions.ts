@@ -18,20 +18,25 @@ export interface ToolCallCheck {
 export type ToolCallDecision = { allow: true } | { allow: false; reason: string };
 
 export interface PermissionHost {
+	previewNestedCall?(check: ToolCallCheck): Promise<void>;
 	checkToolCall(check: ToolCallCheck): Promise<ToolCallDecision>;
 }
 
 export function createPermissionExtension(host: PermissionHost): InlineExtension {
 	const factory: ExtensionFactory = (pi) => {
 		pi.on("tool_call", async (event, ctx) => {
-			// Nested calls (e.g. from codemode) were approved with their parent.
-			if ((event as { parentToolCallId?: string }).parentToolCallId) return undefined;
-			const decision = await host.checkToolCall({
+			const check = {
 				toolCallId: event.toolCallId,
 				toolName: event.toolName,
 				input: event.input,
 				signal: ctx.signal,
-			});
+			};
+			// Nested calls were approved with their parent.
+			if (event.parentToolCallId) {
+				await host.previewNestedCall?.(check);
+				return;
+			}
+			const decision = await host.checkToolCall(check);
 			if (decision.allow) return undefined;
 			return { block: true, reason: decision.reason };
 		});

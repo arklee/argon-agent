@@ -3,9 +3,9 @@
  * else that leaves the backend, so a pi upgrade stays contained here and in the session adapter.
  */
 
-import type { AssistantBlock, TranscriptItem, UsageInfo } from "@argon/shared";
+import type { AssistantBlock, SessionEvent, TranscriptItem, UsageInfo } from "@argon/shared";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { resultDiff } from "./diff-preview.ts";
+import { capDiff, resultDiff } from "./diff-preview.ts";
 import { describeToolCall } from "./tool-display.ts";
 
 // pi's AgentMessage is a wide union (with declaration-merged custom roles). We read it
@@ -141,6 +141,7 @@ export function toolResultOutput(result: AnyMessage): { output: string; imageCou
 }
 
 export interface HistoryProjection {
+	nestedToolEvents: Extract<SessionEvent, { type: "tool_started" | "tool_ended" }>[];
 	items: TranscriptItem[];
 	toolResults: Array<{
 		toolCallId: string;
@@ -157,6 +158,7 @@ export interface HistoryProjection {
  * (including entries before a compaction), not the model's possibly compacted context.
  */
 export function projectHistory(entries: SessionEntry[], resolveToolSource?: ToolSourceResolver): HistoryProjection {
+	const nestedToolEvents: HistoryProjection["nestedToolEvents"] = [];
 	const items: TranscriptItem[] = [];
 	const toolResults: HistoryProjection["toolResults"] = [];
 	for (const entry of entries) {
@@ -164,7 +166,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 		const timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
 		switch (entry.type) {
 			case "message": {
-				const message = entry.message as AnyMessage;
+				const message = entry.message;
 				if (message.role === "toolResult") {
 					const { output, imageCount } = toolResultOutput(message);
 					toolResults.push({
@@ -175,6 +177,33 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 						durationMs: message.durationMs,
 						diff: resultDiff(message),
 					});
+					for (const record of message.nestedCalls?.calls ?? []) {
+						const diff = (message.details as { argonNestedDiffs?: Record<string, unknown> } | undefined)
+							?.argonNestedDiffs?.[record.id];
+						nestedToolEvents.push(
+							{
+								type: "tool_started",
+								toolCallId: record.id,
+								parentToolCallId: message.toolCallId,
+								name: record.name,
+								args: record.arguments,
+								display: describeToolCall(record.name, record.arguments),
+								source: resolveToolSource?.(record.name),
+							},
+							{
+								type: "tool_ended",
+								toolCallId: record.id,
+								isError: record.status !== "ok",
+								imageCount: 0,
+								output:
+									record.status === "unfinished"
+										? "Unfinished: still running when the calling tool finished"
+										: (record.error ?? ""),
+								durationMs: record.durationMs,
+								diff: typeof diff === "string" ? capDiff(diff) : undefined,
+							},
+						);
+					}
 					break;
 				}
 				const item = messageToItem(message, entry.id, false, resolveToolSource);
@@ -211,5 +240,5 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 				break;
 		}
 	}
-	return { items, toolResults };
+	return { items, toolResults, nestedToolEvents };
 }

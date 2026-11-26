@@ -35,6 +35,8 @@ async function readExisting(path: string): Promise<string | undefined> {
 export function capDiff(diff: string): string {
 	const lines = diff.split("\n");
 	if (lines.length <= MAX_DIFF_LINES) return diff;
+	// A preview may pass through both result persistence and history projection.
+	if (lines.length === MAX_DIFF_LINES + 1 && /^… [0-9]+ more lines$/.test(lines[MAX_DIFF_LINES]!)) return diff;
 	return [...lines.slice(0, MAX_DIFF_LINES), `… ${lines.length - MAX_DIFF_LINES} more lines`].join("\n");
 }
 

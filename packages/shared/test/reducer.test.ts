@@ -153,3 +153,16 @@ describe("applySessionEvent", () => {
 		expect(replaced.tools.t1?.diff).toBe("+1 actual");
 	});
 });
+
+it("retains the parent, display and source when a nested tool ends", () => {
+	const metadata = {
+		parentToolCallId: "p",
+		display: { kind: "generic", title: "custom" } as const,
+		source: "npm:tools",
+	};
+	const state = run([
+		{ type: "tool_started", toolCallId: "p/1", name: "custom", args: {}, ...metadata },
+		{ type: "tool_ended", toolCallId: "p/1", isError: false, output: "ok", imageCount: 0 },
+	]);
+	expect(state.tools["p/1"]).toMatchObject({ ...metadata, status: "done" });
+});

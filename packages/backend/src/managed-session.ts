@@ -50,6 +50,7 @@ import { completeFile, type FileCompletion } from "./file-completion.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
 import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.ts";
+import { createNestedDiffExtension } from "./nested-diffs.ts";
 import {
 	createPermissionExtension,
 	READ_ONLY_TOOLS,
@@ -58,6 +59,7 @@ import {
 } from "./permissions.ts";
 import type { ResolvedProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
+import { describeToolCall } from "./tool-display.ts";
 import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
 import { createWriteDiffExtension } from "./write-diff.ts";
@@ -159,11 +161,22 @@ export class ManagedSession {
 		// The permission extension is created before the ManagedSession exists; it calls through this ref.
 		let self: ManagedSession | undefined;
 		const permissionExtension = createPermissionExtension({
+			previewNestedCall: async (check) => {
+				await self?.previewNestedCall(check);
+			},
 			checkToolCall: (check) =>
 				self ? self.checkToolCall(check) : Promise.resolve({ allow: false, reason: "Session not ready" }),
 		});
 		const writeDiffExtension = createWriteDiffExtension({
 			takeWriteDiff: (toolCallId) => self?.takeWriteDiff(toolCallId),
+		});
+		const nestedDiffExtension = createNestedDiffExtension({
+			getNestedDiffs: (id) =>
+				Object.fromEntries(
+					Object.values(self?.state.tools ?? {})
+						.filter((tool) => tool.parentToolCallId === id && typeof tool.diff === "string")
+						.map((tool) => [tool.toolCallId, tool.diff!]),
+				),
 		});
 		const mcp = createMcpBridge();
 		let projectTrust: ResolvedProjectTrust | undefined;
@@ -189,7 +202,13 @@ export class ManagedSession {
 				},
 				// The permission gate goes first so its tool_call handler runs before any other extension's.
 				resourceLoaderOptions: {
-					extensionFactories: [permissionExtension, writeDiffExtension, ...createBuiltinExtensions(), mcp.extension],
+					extensionFactories: [
+						permissionExtension,
+						writeDiffExtension,
+						nestedDiffExtension,
+						...createBuiltinExtensions(),
+						mcp.extension,
+					],
 				},
 			});
 			return {
@@ -915,6 +934,7 @@ export class ManagedSession {
 		for (const result of history.toolResults) {
 			state = applySessionEvent(state, { type: "tool_ended", ...result });
 		}
+		for (const event of history.nestedToolEvents) state = applySessionEvent(state, event);
 		this.state = { ...state, contextUsage: this.readContextUsage(), userBranches: this.computeUserBranches() };
 	}
 
@@ -969,10 +989,29 @@ export class ManagedSession {
 		return diff;
 	}
 
-	private async checkToolCall(check: ToolCallCheck): Promise<ToolCallDecision> {
+	private async previewToolCall(check: ToolCallCheck) {
 		// Preview file changes first, in every mode: the tool card shows them while the tool runs.
 		const diff = await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined);
 		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff });
+		return diff;
+	}
+
+	private async previewNestedCall(check: ToolCallCheck) {
+		const diff = await this.previewToolCall(check);
+		if (check.toolName === "write" && diff) this.rememberWriteDiff(check.toolCallId, diff);
+	}
+
+	private rememberWriteDiff(toolCallId: string, diff: string) {
+		this.writeDiffs.set(toolCallId, diff);
+		// Results that never arrive (aborted runs) must not accumulate.
+		if (this.writeDiffs.size > MAX_PENDING_WRITE_DIFFS) {
+			const oldest = this.writeDiffs.keys().next().value;
+			if (oldest !== undefined) this.writeDiffs.delete(oldest);
+		}
+	}
+
+	private async checkToolCall(check: ToolCallCheck): Promise<ToolCallDecision> {
+		const diff = await this.previewToolCall(check);
 		const decision = await this.decideToolCall(check, diff);
 		if (decision.allow && check.toolName === "write" && diff) {
 			// The file may have changed while the approval was pending: diff again right before the write.
@@ -980,12 +1019,7 @@ export class ManagedSession {
 				? ((await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined)) ?? diff)
 				: diff;
 			if (latest !== diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff: latest });
-			this.writeDiffs.set(check.toolCallId, latest);
-			// Results that never arrive (aborted runs) must not accumulate.
-			if (this.writeDiffs.size > MAX_PENDING_WRITE_DIFFS) {
-				const oldest = this.writeDiffs.keys().next().value;
-				if (oldest !== undefined) this.writeDiffs.delete(oldest);
-			}
+			this.rememberWriteDiff(check.toolCallId, latest);
 		}
 		return decision.allow ? { allow: true } : { allow: false, reason: decision.reason };
 	}
@@ -1121,17 +1155,26 @@ export class ManagedSession {
 				return;
 			}
 			case "tool_execution_start":
-				if (event.parentToolCallId) return;
-				this.emit({ type: "tool_started", toolCallId: event.toolCallId, name: event.toolName, args: event.args });
+				this.emit({
+					type: "tool_started",
+					toolCallId: event.toolCallId,
+					name: event.toolName,
+					args: event.args,
+					...(event.parentToolCallId
+						? {
+								parentToolCallId: event.parentToolCallId,
+								display: describeToolCall(event.toolName, event.args),
+								source: this.toolSourceResolver()(event.toolName),
+							}
+						: {}),
+				});
 				return;
 			case "tool_execution_update": {
-				if (event.parentToolCallId) return;
 				const { output } = toolResultOutput(event.partialResult);
 				this.emit({ type: "tool_updated", toolCallId: event.toolCallId, output });
 				return;
 			}
 			case "tool_execution_end": {
-				if (event.parentToolCallId) return;
 				const { output, imageCount } = toolResultOutput(event.result);
 				this.emit({
 					type: "tool_ended",

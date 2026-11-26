@@ -346,8 +346,10 @@ describe("ManagedSession event translation", () => {
 		});
 	});
 
-	it("translates top-level tool events and ignores nested tool events", async () => {
-		const { managed, emit, events } = await loadSession();
+	it("translates top-level tool events and nested tool events without disturbing the run", async () => {
+		const { managed, emit, events } = await loadSession({ toolSources: { edit: "builtin" } });
+		emit({ type: "agent_start" });
+		events.length = 0;
 		const args = { path: "note.txt" };
 		const partialResult = { content: [{ type: "text", text: "Editing" }] };
 		const result = {
@@ -363,13 +365,37 @@ describe("ManagedSession event translation", () => {
 			{ type: "tool_execution_end", toolCallId: "t1", toolName: "edit", isError: false, durationMs: 23, result },
 		] satisfies AgentSessionEvent[];
 		for (const event of toolEvents) {
-			emit({ ...event, toolCallId: "nested", parentToolCallId: "t1" });
+			emit({ ...event, toolCallId: "t1/1", parentToolCallId: "t1" });
 			emit(event);
 		}
 
 		expect(events.map(({ event }) => event)).toEqual([
+			{
+				type: "tool_started",
+				toolCallId: "t1/1",
+				parentToolCallId: "t1",
+				name: "edit",
+				args,
+				source: "builtin",
+				display: {
+					kind: "file_change",
+					title: "edit",
+					summary: "note.txt",
+					files: [{ path: "note.txt", op: "update" }],
+				},
+			},
 			{ type: "tool_started", toolCallId: "t1", name: "edit", args },
+			{ type: "tool_updated", toolCallId: "t1/1", output: "Editing" },
 			{ type: "tool_updated", toolCallId: "t1", output: "Editing" },
+			{
+				type: "tool_ended",
+				toolCallId: "t1/1",
+				isError: false,
+				output: "Edited",
+				imageCount: 1,
+				durationMs: 23,
+				diff: "+1 updated",
+			},
 			{
 				type: "tool_ended",
 				toolCallId: "t1",
@@ -380,6 +406,8 @@ describe("ManagedSession event translation", () => {
 				diff: "+1 updated",
 			},
 		] satisfies SessionEvent[]);
-		expect(Object.keys(managed.snapshot().state.tools)).toEqual(["t1"]);
+		expect(Object.keys(managed.snapshot().state.tools)).toEqual(["t1/1", "t1"]);
+		expect(managed.snapshot().state.status).toBe("running");
+		expect(managed.snapshot().state.items).toEqual([]);
 	});
 });
