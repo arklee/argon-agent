@@ -23,7 +23,7 @@
 
 - [x] 图片和附件：粘贴、拖拽、附件按钮。图片随 `prompt.images` 发送（pi 负责缩放）；其他文件经 `files.upload` 存到 backend 的 `$ARGON_HOME/uploads`，以 `@"路径"` 引用。用户消息和工具结果里的图片按需经 `sessions.getImages` 加载，不进 `SessionState`
 - [x] 编辑重发和"重新生成"会丢掉原消息里的图片（新分支从原消息的父节点分出，图片随原消息离开模型上下文）：`editMessage` 先取出原消息的图片再随新文字重发；`npm run smoke` 的 "Edit keeps images" 覆盖
-- [ ] `$ARGON_HOME/uploads` 没有清理策略。建议：删除会话时清理不再被任何会话引用的文件，再加较长的过期兜底（fork/clone 会共享引用，不能按单个会话直接删）
+- [x] `$ARGON_HOME/uploads` 清理：删除会话时清理不再被任何会话引用的上传目录；每天扫描一次，清理超过 24 小时且未被引用的上传目录。仍被引用的文件不会因时间过久而删除
 - [x] 斜杠命令：后端提供命令列表（扩展命令、prompt 模板、技能）和参数补全（`sessions.commands` / `sessions.completeCommand`），输入框里做补全；`/mcp` 直接打开 MCP 面板
 - [x] pi TUI 的内置命令在 SDK 的 `prompt()` 里不会被处理：`/compact`、`/name`、`/new` 由 Argon 原生实现，其余在输入框里拦截并提示（`web/src/lib/builtin-commands.ts`，名单对应 pi 1.6.1）
 - [x] `@文件` 补全：`sessions.completeFile` 直接复用 pi-tui 的 `CombinedAutocompleteProvider`（fd 搜索、引号、目录续补与 pi 编辑器一致）
@@ -111,6 +111,7 @@
 - [ ] 被拒绝的工具调用在历史回放中显示为 error，而不是 blocked（blocked 状态没有持久化）
 - [ ] 某些机器上 `os.hostname()` 返回 IP，环境名应改用 `scutil --get ComputerName` 等更友好的值
 - [ ] 每次 `sessions.list` 都全量扫描 `~/.argon/agent/sessions`，会话多了以后需要加索引或缓存
+- [ ] 上传清理无法扫描 pi 会话目录之外的未加载会话（例如项目自定义的 `sessionDir`），这些会话引用的上传文件可能被当作无引用文件清理
 - [ ] 还没写入文件的新会话，在列表里的 createdAt 用的是当前时间
 - [x] 任一工具事件都会让所有消息组件重新渲染：按消息比较其工具调用引用，只更新关联行。
 - [ ] 后端重启会中断正在运行的任务（目前符合预期）。远程 daemon 阶段需要考虑任务能否恢复

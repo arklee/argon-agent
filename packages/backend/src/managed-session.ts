@@ -414,6 +414,10 @@ export class ManagedSession {
 		return index === -1 ? undefined : userEntries[index]?.id;
 	}
 
+	uploadReferenceText(): string {
+		return JSON.stringify(this.session.sessionManager.getEntries());
+	}
+
 	getImages(ref: { toolCallId?: string; itemId?: string }): ImageData[] {
 		const branch = this.session.sessionManager.getBranch();
 		let content: unknown;

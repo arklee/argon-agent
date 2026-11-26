@@ -17,6 +17,7 @@ import type {
 } from "@argon/shared";
 import {
 	type DefaultProjectTrust,
+	getAgentDir,
 	ModelRuntime,
 	ProjectTrustStore,
 	SessionManager,
@@ -27,6 +28,7 @@ import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
 import { canonicalProjectPath, projectTrustParent, resolveProjectTrust } from "./project-trust.ts";
 import { type ArgonSettingsStore, readPiSettings, writePiSettings } from "./settings.ts";
+import { listSessionFiles, UploadsGc } from "./uploads-gc.ts";
 
 export interface RegistryOptions {
 	agentDir: string;
@@ -37,11 +39,13 @@ export interface RegistryOptions {
 
 export class SessionRegistry {
 	private readonly sessions = new Map<string, ManagedSession>();
+	private readonly unloading = new Set<ManagedSession>();
 	/** In-flight opens keyed by session path, so concurrent opens share one load. */
 	private readonly opening = new Map<string, Promise<ManagedSession>>();
 	private readonly globalListeners = new Set<(event: GlobalEvent) => void>();
 	private readonly projectTrustStore: ProjectTrustStore;
 	private readonly sessionTrustDecisions = new Map<string, boolean>();
+	private readonly uploadsGc: UploadsGc;
 	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
@@ -52,6 +56,22 @@ export class SessionRegistry {
 		readonly modelRuntime: ModelRuntime,
 	) {
 		this.projectTrustStore = new ProjectTrustStore(options.agentDir);
+		const sessions = this.sessions;
+		const unloading = this.unloading;
+		this.uploadsGc = new UploadsGc({
+			uploadsRoot: join(options.argonHome, "uploads"),
+			listSessionFiles: async () => {
+				// Match pi's getSessionsDir(), which is internal to the SDK.
+				const listed = await SessionManager.listAll();
+				const files = await listSessionFiles(join(getAgentDir(), "sessions"));
+				return [...files, ...listed.map((info) => info.path)];
+			},
+			*memoryReferences() {
+				for (const session of sessions.values()) yield session.uploadReferenceText();
+				for (const session of unloading) yield session.uploadReferenceText();
+			},
+		});
+		this.uploadsGc.start();
 		// Before any session loads: a magpie-pi extension from the user's pi packages must stay
 		// inactive in this process (magpie runs once, backend-wide; see magpie-host.ts).
 		process.env.MAGPIE_PI_EMBEDDED = "1";
@@ -129,7 +149,13 @@ export class SessionRegistry {
 		const session = this.sessions.get(sessionId);
 		if (!session) return;
 		this.sessions.delete(sessionId);
-		await session.dispose();
+		this.unloading.add(session);
+		try {
+			await session.dispose();
+		} finally {
+			this.unloading.delete(session);
+			this.uploadsGc.sessionUnloaded();
+		}
 		this.broadcast({ type: "session_unloaded", sessionId });
 	}
 
@@ -150,7 +176,9 @@ export class SessionRegistry {
 				await this.unload(session.sessionId);
 			}
 		}
+		const uploadKeys = await this.uploadsGc.readDeletedSession(sessionPath);
 		await unlink(sessionPath);
+		void this.uploadsGc.cleanDeletedSession(uploadKeys);
 		this.broadcast({ type: "sessions_changed" });
 	}
 
@@ -301,6 +329,7 @@ export class SessionRegistry {
 	}
 
 	async dispose(): Promise<void> {
+		await this.uploadsGc.dispose();
 		const sessions = [...this.sessions.values()];
 		this.sessions.clear();
 		await Promise.allSettled(sessions.map((s) => s.dispose()));
