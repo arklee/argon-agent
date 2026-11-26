@@ -1,6 +1,7 @@
 import type { Interaction, InteractionResponse } from "@argon/shared";
 import { ExternalLink, ShieldQuestion } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { DiffView } from "@/components/DiffView";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { summarizeToolArgs } from "@/lib/format";
@@ -26,25 +27,36 @@ export function InteractionCard({
 		</div>
 	);
 
+	const approvalActions = (toolName: string) => (
+		<>
+			<Button variant="ghost" size="sm" onClick={() => onRespond({ decision: "deny" })}>
+				Deny
+			</Button>
+			<Button variant="outline" size="sm" onClick={() => onRespond({ decision: "allow_session" })}>
+				Always allow {toolName} in this session
+			</Button>
+			<Button size="sm" onClick={() => onRespond({ decision: "allow" })} autoFocus>
+				Allow
+			</Button>
+		</>
+	);
+
 	switch (interaction.kind) {
 		case "tool_approval": {
 			const summary = summarizeToolArgs(interaction.toolName, interaction.args);
+			if (interaction.diff) {
+				return frame(
+					`Allow ${interaction.toolName} ${summary}?`,
+					<DiffView diff={interaction.diff} className="max-h-80" />,
+					approvalActions(interaction.toolName),
+				);
+			}
 			return frame(
 				`Allow ${interaction.toolName}?`,
 				<pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap break-all">
 					{summary || JSON.stringify(interaction.args, null, 2)}
 				</pre>,
-				<>
-					<Button variant="ghost" size="sm" onClick={() => onRespond({ decision: "deny" })}>
-						Deny
-					</Button>
-					<Button variant="outline" size="sm" onClick={() => onRespond({ decision: "allow_session" })}>
-						Always allow {interaction.toolName} in this session
-					</Button>
-					<Button size="sm" onClick={() => onRespond({ decision: "allow" })} autoFocus>
-						Allow
-					</Button>
-				</>,
+				approvalActions(interaction.toolName),
 			);
 		}
 		case "confirm":

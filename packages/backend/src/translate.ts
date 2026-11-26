@@ -5,6 +5,7 @@
 
 import type { AssistantBlock, TranscriptItem, UsageInfo } from "@argon/shared";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
+import { resultDiff } from "./diff-preview.ts";
 
 // pi's AgentMessage is a wide union (with declaration-merged custom roles). We read it
 // structurally so this file does not depend on pi-agent-core's module augmentation.
@@ -120,7 +121,14 @@ export function toolResultOutput(result: AnyMessage): { output: string; imageCou
 
 export interface HistoryProjection {
 	items: TranscriptItem[];
-	toolResults: Array<{ toolCallId: string; isError: boolean; output: string; imageCount: number; durationMs?: number }>;
+	toolResults: Array<{
+		toolCallId: string;
+		isError: boolean;
+		output: string;
+		imageCount: number;
+		durationMs?: number;
+		diff?: string;
+	}>;
 }
 
 /**
@@ -143,6 +151,7 @@ export function projectHistory(entries: SessionEntry[]): HistoryProjection {
 						output,
 						imageCount,
 						durationMs: message.durationMs,
+						diff: resultDiff(message),
 					});
 					break;
 				}

@@ -166,7 +166,21 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 						output: event.output,
 						imageCount: event.imageCount,
 						durationMs: event.durationMs,
+						diff: event.diff ?? prev?.diff,
 					},
+				},
+			};
+		}
+		case "tool_diff": {
+			// May arrive before tool_started (previews are computed in the tool_call hook).
+			const prev = state.tools[event.toolCallId];
+			return {
+				...state,
+				tools: {
+					...state.tools,
+					[event.toolCallId]: prev
+						? { ...prev, diff: event.diff }
+						: { toolCallId: event.toolCallId, name: "", args: undefined, status: "pending", diff: event.diff },
 				},
 			};
 		}
@@ -182,6 +196,7 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 						args: prev?.args,
 						status: "blocked",
 						output: event.reason,
+						diff: prev?.diff,
 					},
 				},
 			};

@@ -82,6 +82,8 @@ export type Interaction =
 			toolCallId: string;
 			toolName: string;
 			args: unknown;
+			/** Preview of the file change, for edit/write (see ToolCallState.diff). */
+			diff?: string;
 	  });
 
 export type InteractionResponse =
@@ -222,7 +224,10 @@ export type SessionEvent =
 			output: string;
 			imageCount: number;
 			durationMs?: number;
+			/** The actual change, when the tool reports one; otherwise an earlier preview stays. */
+			diff?: string;
 	  }
+	| { type: "tool_diff"; toolCallId: string; diff: string }
 	| { type: "tool_blocked"; toolCallId: string; reason: string }
 	| { type: "queue_updated"; steering: string[]; followUp: string[] }
 	| { type: "compaction_started" }

@@ -29,6 +29,11 @@ export interface ToolCallState {
 	/** Number of images in the result (images are not sent inline yet). */
 	imageCount?: number;
 	durationMs?: number;
+	/**
+	 * For file-changing tools: pi's display diff (lines start with "+", "-" or " ", then a line number).
+	 * A preview before the tool runs, replaced by the actual change when it has finished.
+	 */
+	diff?: string;
 }
 
 export type TranscriptItem =

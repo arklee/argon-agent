@@ -37,6 +37,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { createBuiltinExtensions } from "./builtin-extensions.ts";
+import { previewDiff, resultDiff } from "./diff-preview.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
 import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.ts";
@@ -470,10 +471,13 @@ export class ManagedSession {
 	}
 
 	private async checkToolCall(check: ToolCallCheck): Promise<ToolCallDecision> {
+		// Preview file changes first, in every mode: the tool card shows them while the tool runs.
+		const diff = await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined);
+		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff });
 		if (this.state.permissionMode === "auto") return { allow: true };
 		if (READ_ONLY_TOOLS.has(check.toolName) || this.sessionAllowedTools.has(check.toolName)) return { allow: true };
 		const response = await this.broker.request(
-			{ kind: "tool_approval", toolCallId: check.toolCallId, toolName: check.toolName, args: check.input },
+			{ kind: "tool_approval", toolCallId: check.toolCallId, toolName: check.toolName, args: check.input, diff },
 			{ signal: check.signal, fallback: { decision: "deny", reason: "Cancelled" } },
 		);
 		const decision = "decision" in response ? response.decision : "deny";
@@ -594,6 +598,7 @@ export class ManagedSession {
 					output,
 					imageCount,
 					durationMs: event.durationMs,
+					diff: resultDiff(event.result),
 				});
 				return;
 			}

@@ -86,7 +86,9 @@ describe("applySessionEvent", () => {
 	});
 
 	it("stores context usage and MCP status without touching other state", () => {
-		const before = run([{ type: "item_added", item: { kind: "user", id: "u1", text: "hi", imageCount: 0, timestamp: 0 } }]);
+		const before = run([
+			{ type: "item_added", item: { kind: "user", id: "u1", text: "hi", imageCount: 0, timestamp: 0 } },
+		]);
 		const mcp = { configErrors: [], overridden: [], servers: [] };
 		const after = run(
 			[
@@ -99,5 +101,20 @@ describe("applySessionEvent", () => {
 		expect(after.mcp).toBe(mcp);
 		expect(after.items).toBe(before.items);
 		expect(run([{ type: "context_usage_changed" }], after).contextUsage).toBeUndefined();
+	});
+
+	it("keeps a diff preview that arrives before tool_started, and lets the result replace it", () => {
+		const running = run([
+			{ type: "tool_diff", toolCallId: "t1", diff: "+1 preview" },
+			{ type: "tool_started", toolCallId: "t1", name: "edit", args: { path: "a" } },
+		]);
+		expect(running.tools.t1).toMatchObject({ name: "edit", status: "running", diff: "+1 preview" });
+		const kept = run([{ type: "tool_ended", toolCallId: "t1", isError: false, output: "ok", imageCount: 0 }], running);
+		expect(kept.tools.t1?.diff).toBe("+1 preview");
+		const replaced = run(
+			[{ type: "tool_ended", toolCallId: "t1", isError: false, output: "ok", imageCount: 0, diff: "+1 actual" }],
+			running,
+		);
+		expect(replaced.tools.t1?.diff).toBe("+1 actual");
 	});
 });
