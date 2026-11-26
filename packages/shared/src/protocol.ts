@@ -7,7 +7,7 @@
  * - Paths are opaque strings that belong to the backend's environment; clients never do IO with them.
  */
 
-import type { ToolCallState, TranscriptItem, UsageInfo } from "./transcript.ts";
+import type { ToolCallState, ToolDisplay, TranscriptItem, UsageInfo } from "./transcript.ts";
 
 export const PROTOCOL_VERSION = 1;
 
@@ -357,7 +357,16 @@ export type SessionEvent =
 			/** Present on the first delta of a tool call block. */
 			toolCall?: { toolCallId: string; name: string };
 	  }
-	| { type: "tool_started"; toolCallId: string; name: string; args: unknown }
+	| {
+			type: "tool_started";
+			toolCallId: string;
+			name: string;
+			args: unknown;
+			/** Nested calls only (see ToolCallState.parentToolCallId). */
+			parentToolCallId?: string;
+			display?: ToolDisplay;
+			source?: string;
+	  }
 	| { type: "tool_updated"; toolCallId: string; output: string }
 	| {
 			type: "tool_ended";

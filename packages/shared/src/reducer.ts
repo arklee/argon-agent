@@ -143,6 +143,9 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 						name: event.name,
 						args: event.args,
 						status: "running",
+						...(event.parentToolCallId === undefined ? {} : { parentToolCallId: event.parentToolCallId }),
+						...(event.display === undefined ? {} : { display: event.display }),
+						...(event.source === undefined ? {} : { source: event.source }),
 					},
 				},
 			};
@@ -160,6 +163,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				tools: {
 					...state.tools,
 					[event.toolCallId]: {
+						// Keep fields set earlier (parent, display, source).
+						...prev,
 						toolCallId: event.toolCallId,
 						name: prev?.name ?? "",
 						args: prev?.args,

@@ -72,6 +72,13 @@ export interface ToolCallState {
 	 * A preview before the tool runs, replaced by the actual change when it has finished.
 	 */
 	diff?: string;
+	/**
+	 * Set for calls another tool made (e.g. a codemode script); ids look like `<parent id>/<n>`. Such
+	 * calls have no transcript block, so they carry their own display and source.
+	 */
+	parentToolCallId?: string;
+	display?: ToolDisplay;
+	source?: string;
 }
 
 export type TranscriptItem =
