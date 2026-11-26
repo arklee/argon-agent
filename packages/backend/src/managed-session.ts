@@ -887,10 +887,16 @@ export class ManagedSession {
 		this.emit({ type: "diagnostics_changed", diagnostics: next });
 	}
 
+	// Read the current registry at translation time so extension registration and reloads are reflected.
+	private toolSourceResolver(): (name: string) => string | undefined {
+		const sources = new Map(this.session.getAllTools().map(({ name, sourceInfo }) => [name, sourceInfo.source]));
+		return (name) => sources.get(name);
+	}
+
 	/** Rebuild the full state from the session tree (on load). */
 	private resetFromSession(): void {
 		const session = this.session;
-		const history = projectHistory(session.sessionManager.getBranch());
+		const history = projectHistory(session.sessionManager.getBranch(), this.toolSourceResolver());
 		const next: SessionState = {
 			...this.state,
 			sessionId: session.sessionId,
@@ -1104,7 +1110,8 @@ export class ManagedSession {
 				if (message.role === "toolResult") return;
 				const id = message.role === "assistant" ? this.currentAssistantItemId : this.lastItemIdOfRole(message.role);
 				if (!id) return;
-				const item = messageToItem(message, id, false);
+				const resolveToolSource = message.role === "assistant" ? this.toolSourceResolver() : undefined;
+				const item = messageToItem(message, id, false, resolveToolSource);
 				if (item) this.emit({ type: "item_replaced", item });
 				if (message.role === "user") this.emitBranches();
 				if (message.role === "assistant") {

@@ -6,6 +6,7 @@
 import type { AssistantBlock, TranscriptItem, UsageInfo } from "@argon/shared";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { resultDiff } from "./diff-preview.ts";
+import { describeToolCall } from "./tool-display.ts";
 
 // pi's AgentMessage is a wide union (with declaration-merged custom roles). We read it
 // structurally so this file does not depend on pi-agent-core's module augmentation.
@@ -38,14 +39,29 @@ export function toUsage(usage: AnyMessage): UsageInfo | undefined {
 	};
 }
 
-export function toAssistantBlocks(content: AnyMessage[]): AssistantBlock[] {
+type ToolSourceResolver = (name: string) => string | undefined;
+
+export function toAssistantBlocks(
+	content: AnyMessage[],
+	streaming = false,
+	resolveToolSource?: ToolSourceResolver,
+): AssistantBlock[] {
 	const blocks: AssistantBlock[] = [];
 	for (const part of content ?? []) {
 		if (part.type === "text") blocks.push({ type: "text", text: part.text ?? "" });
 		else if (part.type === "thinking")
 			blocks.push({ type: "thinking", text: part.thinking ?? "", redacted: part.redacted || undefined });
-		else if (part.type === "toolCall")
-			blocks.push({ type: "toolCall", toolCallId: part.id, name: part.name, args: part.arguments ?? {} });
+		else if (part.type === "toolCall") {
+			const name: string = part.name;
+			const args: unknown = part.arguments ?? {};
+			const block: AssistantBlock = { type: "toolCall", toolCallId: part.id, name, args };
+			if (!streaming) {
+				block.display = describeToolCall(name, args);
+				const source = resolveToolSource?.(name);
+				if (source !== undefined) block.source = source;
+			}
+			blocks.push(block);
+		}
 	}
 	return blocks;
 }
@@ -54,7 +70,12 @@ export function toAssistantBlocks(content: AnyMessage[]): AssistantBlock[] {
  * Convert one pi message into a transcript item. Tool results return `undefined`: they are folded
  * into tool state (see `toolResultOutput`), not shown as standalone items.
  */
-export function messageToItem(message: AnyMessage, id: string, streaming = false): TranscriptItem | undefined {
+export function messageToItem(
+	message: AnyMessage,
+	id: string,
+	streaming = false,
+	resolveToolSource?: ToolSourceResolver,
+): TranscriptItem | undefined {
 	const timestamp = typeof message.timestamp === "number" ? message.timestamp : Date.now();
 	switch (message.role) {
 		case "user": {
@@ -65,7 +86,7 @@ export function messageToItem(message: AnyMessage, id: string, streaming = false
 			return {
 				kind: "assistant",
 				id,
-				blocks: toAssistantBlocks(message.content),
+				blocks: toAssistantBlocks(message.content, streaming, resolveToolSource),
 				provider: message.provider,
 				model: message.model,
 				stopReason: message.stopReason,
@@ -135,7 +156,7 @@ export interface HistoryProjection {
  * Build the UI history from the active branch of the session tree. This is the full branch
  * (including entries before a compaction), not the model's possibly compacted context.
  */
-export function projectHistory(entries: SessionEntry[]): HistoryProjection {
+export function projectHistory(entries: SessionEntry[], resolveToolSource?: ToolSourceResolver): HistoryProjection {
 	const items: TranscriptItem[] = [];
 	const toolResults: HistoryProjection["toolResults"] = [];
 	for (const entry of entries) {
@@ -156,7 +177,7 @@ export function projectHistory(entries: SessionEntry[]): HistoryProjection {
 					});
 					break;
 				}
-				const item = messageToItem(message, entry.id);
+				const item = messageToItem(message, entry.id, false, resolveToolSource);
 				if (item) items.push(item);
 				break;
 			}

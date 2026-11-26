@@ -24,9 +24,15 @@ afterEach(() => vi.restoreAllMocks());
 const cwd = "/project";
 
 async function loadSession(
-	options: { modelFallbackMessage?: string; diagnostics?: AgentSessionRuntimeDiagnostic[] } = {},
+	options: {
+		modelFallbackMessage?: string;
+		diagnostics?: AgentSessionRuntimeDiagnostic[];
+		setup?: (sessionManager: SessionManager) => void;
+		toolSources?: Record<string, string>;
+	} = {},
 ) {
 	const sessionManager = SessionManager.inMemory(cwd);
+	options.setup?.(sessionManager);
 	vi.spyOn(SessionManager, "create").mockReturnValue(sessionManager);
 	const listeners = new Set<(event: AgentSessionEvent) => void>();
 	const emit = (event: AgentSessionEvent) => {
@@ -60,6 +66,8 @@ async function loadSession(
 				getCommandDiagnostics: () => [],
 				getShortcutDiagnostics: () => [],
 			},
+			getAllTools: () =>
+				Object.entries(options.toolSources ?? {}).map(([name, source]) => ({ name, sourceInfo: { source } })),
 			getAvailableThinkingLevels: () => ["off"],
 			getContextUsage: () => undefined,
 		},
@@ -275,6 +283,67 @@ describe("ManagedSession event translation", () => {
 			{ type: "item_replaced", item: { id: itemId, streaming: false, blocks: [finalBlock] } },
 		]);
 		expect(managed.snapshot().state.items).toMatchObject([{ id: itemId, streaming: false, blocks: [finalBlock] }]);
+	});
+
+	it("describes history and completed live tool calls using the current tool sources", async () => {
+		const block = { type: "toolCall", id: "history", name: "read", arguments: { path: "note.txt" } } as const;
+		const message = {
+			role: "assistant",
+			api: "openai-responses",
+			provider: "openai",
+			model: "test-model",
+			timestamp: 42,
+			content: [block],
+			stopReason: "toolUse",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+		} satisfies Extract<AgentSessionEvent, { type: "message_end" }>["message"];
+		const toolSources: Record<string, string> = { read: "builtin" };
+		const { managed, emit, events, bindings } = await loadSession({
+			setup: (sessionManager) => sessionManager.appendMessage(message),
+			toolSources,
+		});
+		const display = { kind: "file_read", title: "read", path: "note.txt", summary: "note.txt" };
+		const expected = { type: "toolCall", name: "read", args: block.arguments, display };
+		expect(managed.snapshot().state.items).toMatchObject([
+			{ blocks: [{ ...expected, toolCallId: "history", source: "builtin" }] },
+		]);
+
+		toolSources.read = "npm:test-extension";
+		await bindings.commandContextActions?.reload();
+		const live = { ...message, content: [{ ...block, id: "live" }] };
+		emit({ type: "message_start", message: { ...live, content: [] } });
+		emit({
+			type: "message_update",
+			message: live,
+			assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: live },
+		});
+		const streaming = managed.snapshot().state.items.at(-1);
+		expect(streaming).toMatchObject({ streaming: true, blocks: [{ type: "toolCall", toolCallId: "live" }] });
+		expect(streaming?.kind === "assistant" && streaming.blocks[0]).not.toHaveProperty("display");
+		expect(streaming?.kind === "assistant" && streaming.blocks[0]).not.toHaveProperty("source");
+
+		emit({ type: "message_end", message: live });
+		expect(events.at(-1)?.event).toMatchObject({
+			type: "item_replaced",
+			item: { blocks: [{ ...expected, toolCallId: "live", source: "npm:test-extension" }] },
+		});
+
+		delete toolSources.read;
+		const removed = { ...live, content: [{ ...block, id: "removed" }] };
+		emit({ type: "message_start", message: { ...removed, content: [] } });
+		emit({ type: "message_end", message: removed });
+		const item = managed.snapshot().state.items.at(-1);
+		expect(item?.kind === "assistant" && item.blocks[0]).toStrictEqual({
+			...expected,
+			toolCallId: "removed",
+		});
 	});
 
 	it("translates top-level tool events and ignores nested tool events", async () => {
