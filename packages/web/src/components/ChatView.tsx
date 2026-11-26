@@ -23,11 +23,15 @@ import {
 	SelectGroup,
 	SelectItem,
 	SelectLabel,
+	SelectSeparator,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
 import { displayPath, sessionTitle } from "@/lib/format";
 import { useApp } from "@/stores/app";
+import { openSettings } from "@/stores/settings";
+
+const MANAGE = "__argon_manage_providers__";
 
 function ModelPicker({ session }: { session: SessionState }) {
 	const models = useApp((s) => s.models);
@@ -42,6 +46,7 @@ function ModelPicker({ session }: { session: SessionState }) {
 		<Select
 			value={value}
 			onValueChange={(v) => {
+				if (v === MANAGE) return openSettings("accounts");
 				const [provider, ...rest] = v.split("/");
 				if (provider) void setModel({ provider, id: rest.join("/") });
 			}}
@@ -60,6 +65,10 @@ function ModelPicker({ session }: { session: SessionState }) {
 						))}
 					</SelectGroup>
 				))}
+				{models.length > 0 && <SelectSeparator />}
+				<SelectItem value={MANAGE} className="text-muted-foreground">
+					{models.length > 0 ? "Manage providers…" : "Connect a provider…"}
+				</SelectItem>
 			</SelectContent>
 		</Select>
 	);

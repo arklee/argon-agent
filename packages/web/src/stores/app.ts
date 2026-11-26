@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 import { type ConnectionConfig, clearConnectionConfig } from "@/lib/connection";
+import { useSettings } from "@/stores/settings";
 
 type NewSessionDialogState = { open: boolean; path?: string };
 
@@ -144,6 +145,8 @@ export const useApp = create<AppState>((set, get) => ({
 				show(event.message);
 			}),
 			c.onGlobalEvent((event) => {
+				useSettings.getState().onGlobalEvent(event);
+				if (event.type === "providers_changed") void get().refreshModels();
 				if (event.type === "projects_changed") void get().refreshProjects();
 				if (event.type === "session_requested" && get().activeSessionId === event.fromSessionId)
 					void activatePath(event.sessionPath, undefined, event.fromSessionId).catch((e) =>
@@ -186,6 +189,7 @@ export const useApp = create<AppState>((set, get) => ({
 		disposers = [];
 		mirror?.dispose();
 		client?.close();
+		useSettings.getState().reset();
 		client = undefined;
 		mirror = undefined;
 		set({

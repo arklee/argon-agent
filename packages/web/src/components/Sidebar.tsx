@@ -1,5 +1,5 @@
 import type { SessionSummary } from "@argon/shared";
-import { Ellipsis, FolderOpen, Pin, Plus, Server, SquarePen } from "lucide-react";
+import { Ellipsis, FolderOpen, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
 import { useMemo, useState } from "react";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
 import { SessionMenu, SessionNameInput } from "@/components/SessionMenu";
@@ -17,6 +17,7 @@ import { groupByProject, visibleProjects } from "@/lib/session-order";
 import { shortcutLabels } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
+import { openSettings } from "@/stores/settings";
 
 function SessionRow({ session }: { session: SessionSummary }) {
 	const [menu, setMenu] = useState(false);
@@ -184,6 +185,16 @@ export function Sidebar() {
 					)}
 					title={connection?.status}
 				/>
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					aria-label="Settings"
+					title={`Settings (${shortcutLabels.settings})`}
+					disabled={!environment}
+					onClick={() => openSettings()}
+				>
+					<Settings />
+				</Button>
 			</div>
 
 			<NewSessionDialog

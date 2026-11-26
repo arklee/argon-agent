@@ -45,9 +45,11 @@
 
 ### 设置与账号
 
-- [ ] 设置页：查看和编辑 pi settings（全局 / 项目两级）
-- [ ] Provider 与登录：API key 管理，OAuth / 订阅登录（`ModelRuntime.login` 需要一套交互协议）
-- [ ] 权限设置持久化：默认权限模式、"总是允许"的规则（按工具或命令模式）
+- [x] 设置页：侧栏齿轮或 ⌘/Ctrl+, 打开，分 General / Providers / Permissions / Plugins / Resources。pi settings 只编辑全局一级的常用子集；资源列表（全局 + 当前项目）只读
+- [ ] 设置页：项目级 settings 编辑；`enabledModels`（模型循环范围）还没有界面
+- [x] Provider 与登录：`auth.*` 协议，登录流程由 backend 持有（`AuthFlows`），任何客户端可应答；设置页里加/换/删 API key、OAuth 登录登出，模型选择器里有“Manage providers…”入口；magpie 社区插件的安装/移除（需二次确认）
+- [ ] 用真实浏览器 OAuth（auth_url 回调、device code）完整走一遍登录；目前只验证了 select 提示和取消
+- [x] 权限设置持久化：默认权限模式、"总是允许"的规则（`$ARGON_HOME/settings.json`；bash 规则按命令前缀，含管道/重定向等的命令永远询问），审批卡片上可直接添加，设置页里可删除
 - [ ] 每个会话的模型、思考级别、权限模式，重新打开会话时恢复
 
 ### pi 能力接入

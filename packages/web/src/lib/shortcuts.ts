@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { groupByProject, visibleProjects } from "@/lib/session-order";
 import { useApp } from "@/stores/app";
+import { openSettings } from "@/stores/settings";
 
 const platform =
 	(navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.platform;
@@ -9,6 +10,7 @@ export const shortcutLabels = {
 	newSession: mac ? "⌘⇧O" : "Ctrl+Shift+O",
 	switchSession: mac ? "⌘⌥↑ / ↓" : "Ctrl+Alt+↑ / ↓",
 	focus: mac ? "⌘⇧L" : "Ctrl+Shift+L",
+	settings: mac ? "⌘," : "Ctrl+,",
 };
 
 export function useGlobalShortcuts() {
@@ -27,7 +29,10 @@ export function useGlobalShortcuts() {
 				target instanceof HTMLElement && (target.matches("input,textarea,select") || target.isContentEditable);
 			const mod = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 			const state = useApp.getState();
-			if (mod && event.shiftKey && !event.altKey) {
+			if (mod && !event.shiftKey && !event.altKey && event.key === "," && state.environment) {
+				event.preventDefault();
+				openSettings();
+			} else if (mod && event.shiftKey && !event.altKey) {
 				if (event.key.toLowerCase() === "o" && state.environment) {
 					event.preventDefault();
 					state.setNewSessionDialog({ open: true });

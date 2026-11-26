@@ -3,6 +3,7 @@ import { ChatView } from "@/components/ChatView";
 import { ConnectScreen } from "@/components/ConnectScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Sidebar } from "@/components/Sidebar";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -60,6 +61,7 @@ function Shell() {
 	return (
 		<div className="flex h-full">
 			<KeyboardShortcuts />
+			<SettingsDialog />
 			<Sidebar />
 			<main className="flex min-w-0 flex-1 flex-col">
 				{(connection?.status === "disconnected" || (connection?.status === "connecting" && connection.attempt > 0)) && (
@@ -86,6 +88,7 @@ function KeyboardShortcuts() {
 						["Previous / next session", shortcutLabels.switchSession],
 						["Stop from composer", "Esc"],
 						["Focus composer", shortcutLabels.focus],
+						["Settings", shortcutLabels.settings],
 						["Type in composer", "Any printable character"],
 						["Keyboard shortcuts", "?"],
 					].map(([label, keys]) => (

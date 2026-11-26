@@ -1,4 +1,4 @@
-import type { Interaction, InteractionResponse } from "@argon/shared";
+import type { Interaction, InteractionResponse, PermissionRule } from "@argon/shared";
 import { ExternalLink, ShieldQuestion } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { DiffView } from "@/components/DiffView";
@@ -27,13 +27,25 @@ export function InteractionCard({
 		</div>
 	);
 
-	const approvalActions = (toolName: string) => (
+	const approvalActions = (toolName: string, rule: PermissionRule | undefined) => (
 		<>
 			<Button variant="ghost" size="sm" onClick={() => onRespond({ decision: "deny" })}>
 				Deny
 			</Button>
+			<div className="flex-1" />
+			{rule && (
+				<Button
+					variant="ghost"
+					size="sm"
+					title="Saved to Permissions settings; applies to every session on this backend"
+					onClick={() => onRespond({ decision: "allow_always", rule })}
+				>
+					Always allow{" "}
+					{rule.command !== undefined ? <code className="font-mono text-xs">{rule.command}</code> : rule.tool}
+				</Button>
+			)}
 			<Button variant="outline" size="sm" onClick={() => onRespond({ decision: "allow_session" })}>
-				Always allow {toolName} in this session
+				Allow {toolName} for this session
 			</Button>
 			<Button size="sm" onClick={() => onRespond({ decision: "allow" })} autoFocus>
 				Allow
@@ -48,7 +60,7 @@ export function InteractionCard({
 				return frame(
 					`Allow ${interaction.toolName} ${summary}?`,
 					<DiffView diff={interaction.diff} className="max-h-80" />,
-					approvalActions(interaction.toolName),
+					approvalActions(interaction.toolName, interaction.suggestedRule),
 				);
 			}
 			return frame(
@@ -56,7 +68,7 @@ export function InteractionCard({
 				<pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap break-all">
 					{summary || JSON.stringify(interaction.args, null, 2)}
 				</pre>,
-				approvalActions(interaction.toolName),
+				approvalActions(interaction.toolName, interaction.suggestedRule),
 			);
 		}
 		case "confirm":
