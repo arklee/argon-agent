@@ -394,6 +394,13 @@ async function main() {
 				),
 				`Reopened transcript is missing ${MARKER}`,
 			);
+			const withImage = state.items.findLast((item) => item.kind === "user" && item.imageCount > 0);
+			assert(withImage, "Reopened transcript lost the image attachment");
+			const { images } = await client().request("sessions.getImages", {
+				sessionId: state.sessionId,
+				itemId: withImage.id,
+			});
+			assert.equal(images.length, 1, "Reopened session could not load the image");
 		});
 
 		await check("Cleanup", async () => {
