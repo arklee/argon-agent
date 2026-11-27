@@ -34,7 +34,12 @@ export class AgentClientError extends Error {
 
 export interface AgentClient {
 	readonly connection: ConnectionState;
-	request<M extends MethodName>(method: M, params: MethodParams<M>): Promise<MethodResult<M>>;
+	/** `timeoutMs` overrides the client's default request timeout for this call. */
+	request<M extends MethodName>(
+		method: M,
+		params: MethodParams<M>,
+		options?: { timeoutMs?: number },
+	): Promise<MethodResult<M>>;
 	onSessionEvent(listener: (envelope: SessionEventEnvelope) => void): () => void;
 	onGlobalEvent(listener: (event: GlobalEvent) => void): () => void;
 	/** Fires on every connection change. A transition to "connected" after a drop means: resync. */
@@ -80,14 +85,21 @@ export class WebSocketAgentClient implements AgentClient {
 		return this.state;
 	}
 
-	request<M extends MethodName>(method: M, params: MethodParams<M>): Promise<MethodResult<M>> {
+	request<M extends MethodName>(
+		method: M,
+		params: MethodParams<M>,
+		options?: { timeoutMs?: number },
+	): Promise<MethodResult<M>> {
 		return new Promise((resolve, reject) => {
 			const send = () => {
 				const id = `r${this.nextRequestId++}`;
-				const timer = setTimeout(() => {
-					this.pending.delete(id);
-					reject(new AgentClientError({ code: "timeout", message: `Request ${method} timed out` }));
-				}, this.options.requestTimeoutMs ?? 60_000);
+				const timer = setTimeout(
+					() => {
+						this.pending.delete(id);
+						reject(new AgentClientError({ code: "timeout", message: `Request ${method} timed out` }));
+					},
+					options?.timeoutMs ?? this.options.requestTimeoutMs ?? 60_000,
+				);
 				this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
 				this.sendFrame({ kind: "request", id, method, params });
 			};

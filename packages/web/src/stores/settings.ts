@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { getClient, useApp } from "@/stores/app";
 
+const PLUGIN_CHANGE_TIMEOUT_MS = 10 * 60_000;
+
 export type SettingsSection = "general" | "accounts" | "permissions" | "plugins" | "resources";
 
 interface SettingsData {
@@ -241,7 +243,12 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	},
 	async changePlugin(action, spec) {
 		try {
-			const { message } = await getClient().request("plugins.change", { action, spec, confirmed: true });
+			// The first install downloads Bun (~25–40 MB) before `bun add` and a host restart.
+			const { message } = await getClient().request(
+				"plugins.change",
+				{ action, spec, confirmed: true },
+				{ timeoutMs: PLUGIN_CHANGE_TIMEOUT_MS },
+			);
 			toast.success(
 				message ||
 					(action === "install" ? t("notifications.installed", { spec }) : t("notifications.removed", { spec })),
