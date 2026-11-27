@@ -276,6 +276,7 @@ export function writeProjectSettings(
 
 const DEFAULT_ARGON: ArgonSettings = {
 	defaultToolPreset: "classic",
+	gptApplyPatch: true,
 	permissions: { defaultMode: "ask", rules: [] },
 	sandbox: { allowedDomains: [] },
 };
@@ -323,6 +324,7 @@ export class ArgonSettingsStore {
 			const permissions = (data.permissions ?? {}) as Partial<ArgonSettings["permissions"]>;
 			this.current = {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
+				gptApplyPatch: typeof data.gptApplyPatch === "boolean" ? data.gptApplyPatch : true,
 				sandbox: {
 					allowedDomains: validateAllowedDomains(data.sandbox?.allowedDomains) ? data.sandbox.allowedDomains : [],
 				},
@@ -350,6 +352,8 @@ export class ArgonSettingsStore {
 	}
 
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
+		if (patch.gptApplyPatch !== undefined && typeof patch.gptApplyPatch !== "boolean")
+			throw new Error("Invalid gptApplyPatch");
 		if (patch.permissions?.defaultMode === "ask" && !this.support.supported) throw new Error(this.support.reason);
 		if (patch.sandbox && !validateAllowedDomains(patch.sandbox.allowedDomains))
 			throw new Error("Invalid sandbox allowedDomains");

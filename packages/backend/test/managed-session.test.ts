@@ -32,6 +32,7 @@ async function loadSession(
 		diagnostics?: AgentSessionRuntimeDiagnostic[];
 		setup?: (sessionManager: SessionManager) => void;
 		activeTools?: string[];
+		modelId?: string;
 		defaultPreset?: string;
 		sandboxSupported?: boolean;
 		toolSources?: Record<string, string>;
@@ -60,6 +61,7 @@ async function loadSession(
 		services: { settingsManager },
 		session: {
 			sessionId: sessionManager.getSessionId(),
+			model: options.modelId ? { id: options.modelId } : undefined,
 			getActiveToolNames: () => activeTools,
 			setActiveToolsByName,
 			sessionManager,
@@ -561,7 +563,7 @@ describe("ManagedSession event translation", () => {
 				output: "Edited",
 				imageCount: 1,
 				durationMs: 23,
-				diff: "+1 updated",
+				diffs: [{ path: "note.txt", diff: "+1 updated" }],
 			},
 			{
 				type: "tool_ended",
@@ -570,7 +572,7 @@ describe("ManagedSession event translation", () => {
 				output: "Edited",
 				imageCount: 1,
 				durationMs: 23,
-				diff: "+1 updated",
+				diffs: [{ path: "note.txt", diff: "+1 updated" }],
 			},
 		] satisfies SessionEvent[]);
 		expect(Object.keys(managed.snapshot().state.tools)).toEqual(["t1/1", "t1"]);
@@ -677,6 +679,23 @@ describe("sandbox permission boundary", () => {
 		}
 	});
 
+	it("checks all patch paths including move destinations and asks on invalid syntax", async () => {
+		const { managed } = await loadSession();
+		const input = (body: string) => ({ input: `*** Begin Patch\n${body}\n*** End Patch` });
+		await expect(check(managed, input("*** Add File: a\n+one\n*** Add File: b\n+two"), "apply_patch")).resolves.toEqual(
+			{ allow: true },
+		);
+		for (const args of [
+			input("*** Add File: a\n+one\n*** Add File: /outside/b\n+two"),
+			input("*** Update File: a\n*** Move to: /outside/b\n@@\n-old\n+new"),
+			{ input: "invalid" },
+		]) {
+			const pending = check(managed, args, "apply_patch");
+			await answer(managed, "deny");
+			await expect(pending).resolves.toMatchObject({ allow: false });
+		}
+	});
+
 	it("auto mode bypasses approvals even for unsandboxed requests", async () => {
 		const { managed } = await loadSession();
 		managed.setPermissionMode("auto");
@@ -695,4 +714,39 @@ it("loads stored ask as auto on unsupported platforms and rejects switching back
 	});
 	expect(managed.snapshot().state.permissionMode).toBe("auto");
 	expect(() => managed.setPermissionMode("ask")).toThrow("not available");
+});
+
+it("reconciles model/settings changes only when idle and remembers disabled edits", async () => {
+	const { managed, emit, settings, setActiveToolsByName } = await loadSession({
+		activeTools: ["read", "edit"],
+		modelId: "gpt-6-astra",
+		toolSources: { read: "builtin", edit: "builtin", write: "builtin", apply_patch: "builtin" },
+	});
+	expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "apply_patch"]);
+	emit({ type: "agent_start" });
+	vi.spyOn(settings, "get").mockReturnValue({ ...settings.get(), gptApplyPatch: false });
+	setActiveToolsByName.mockClear();
+	managed.refreshToolSet();
+	expect(setActiveToolsByName).not.toHaveBeenCalled();
+	emit({ type: "agent_settled", aborted: false });
+	expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "edit"]);
+});
+
+it("defers model-driven switching until agent_settled", async () => {
+	const { managed, session, emit, setActiveToolsByName } = await loadSession({
+		activeTools: ["read", "edit", "write"],
+		modelId: "claude-opus",
+		toolSources: { read: "builtin", edit: "builtin", write: "builtin", apply_patch: "builtin" },
+	});
+	session.setModel = async (model: unknown) => {
+		session.model = model;
+	};
+	const runtime = { getModel: (_provider: string, id: string) => ({ id }) } as unknown as ModelRuntime;
+	emit({ type: "agent_start" });
+	await managed.setModel({ provider: "openai", id: "gpt-6-astra" }, runtime);
+	expect(setActiveToolsByName).not.toHaveBeenCalled();
+	emit({ type: "agent_settled", aborted: false });
+	expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "apply_patch"]);
+	await managed.setModel({ provider: "anthropic", id: "claude-opus" }, runtime);
+	expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "edit", "write"]);
 });

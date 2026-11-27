@@ -1,3 +1,4 @@
+import type { FileDiff } from "@argon/shared";
 import type { ExtensionAPI, InlineExtension } from "@earendil-works/pi-coding-agent";
 import { expect, it, vi } from "vitest";
 import { capDiff } from "../src/diff-preview.ts";
@@ -27,7 +28,7 @@ it("previews nested calls under the parent's approval", async () => {
 
 it("persists capped child diffs only on eligible parent results", () => {
 	const diff = "line\n".repeat(5000);
-	const getNestedDiffs = vi.fn((): Record<string, string> => ({ "p/1": diff }));
+	const getNestedDiffs = vi.fn((): Record<string, FileDiff[]> => ({ "p/1": [{ path: "a", diff }] }));
 	const result = load(createNestedDiffExtension({ getNestedDiffs }), "tool_result");
 	for (const details of [null, [], "text", 1, new Date()])
 		expect(result({ toolCallId: "p", details }, {})).toBeUndefined();
@@ -35,10 +36,12 @@ it("persists capped child diffs only on eligible parent results", () => {
 	expect(getNestedDiffs).not.toHaveBeenCalled();
 	for (const details of [undefined, { other: true }])
 		expect(result({ toolCallId: "p", details }, {})).toEqual({
-			details: { ...details, argonNestedDiffs: { "p/1": capDiff(diff) } },
+			details: { ...details, argonNestedDiffs: { "p/1": [{ path: "a", diff: capDiff(diff) }] } },
 		});
-	getNestedDiffs.mockReturnValue({ "p/1": capDiff(diff) });
-	expect(result({ toolCallId: "p" }, {})).toEqual({ details: { argonNestedDiffs: { "p/1": capDiff(diff) } } });
+	getNestedDiffs.mockReturnValue({ "p/1": [{ path: "a", diff: capDiff(diff) }] });
+	expect(result({ toolCallId: "p" }, {})).toEqual({
+		details: { argonNestedDiffs: { "p/1": [{ path: "a", diff: capDiff(diff) }] } },
+	});
 	expect(getNestedDiffs).toHaveBeenCalledWith("p");
 	getNestedDiffs.mockReturnValue({});
 	expect(result({ toolCallId: "other" }, {})).toBeUndefined();

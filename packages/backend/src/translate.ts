@@ -3,9 +3,9 @@
  * else that leaves the backend, so a pi upgrade stays contained here and in the session adapter.
  */
 
-import type { AssistantBlock, SessionEvent, TranscriptItem, UsageInfo } from "@argon/shared";
+import type { AssistantBlock, FileDiff, SessionEvent, TranscriptItem, UsageInfo } from "@argon/shared";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { capDiff, resultDiff } from "./diff-preview.ts";
+import { resultDiff } from "./diff-preview.ts";
 import { describeToolCall } from "./tool-display.ts";
 
 // pi's AgentMessage is a wide union (with declaration-merged custom roles). We read it
@@ -151,7 +151,7 @@ export interface HistoryProjection {
 		output: string;
 		imageCount: number;
 		durationMs?: number;
-		diff?: string;
+		diffs?: FileDiff[];
 	}>;
 }
 
@@ -164,6 +164,11 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 	const items: TranscriptItem[] = [];
 	const toolResults: HistoryProjection["toolResults"] = [];
 	const blockedTools = new Map<string, string>();
+	const callArgs = new Map<string, unknown>();
+	for (const entry of entries) {
+		if (entry.type === "message" && entry.message.role === "assistant")
+			for (const block of entry.message.content) if (block.type === "toolCall") callArgs.set(block.id, block.arguments);
+	}
 	for (const entry of entries) {
 		const parsed = Date.parse(entry.timestamp);
 		const timestamp = Number.isNaN(parsed) ? Date.now() : parsed;
@@ -178,7 +183,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 						output,
 						imageCount,
 						durationMs: message.durationMs,
-						diff: resultDiff(message),
+						diffs: resultDiff(message, callArgs.get(message.toolCallId)),
 					});
 					for (const record of message.nestedCalls?.calls ?? []) {
 						const diff = (message.details as { argonNestedDiffs?: Record<string, unknown> } | undefined)
@@ -203,7 +208,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 										? "Unfinished: still running when the calling tool finished"
 										: (record.error ?? ""),
 								durationMs: record.durationMs,
-								diff: typeof diff === "string" ? capDiff(diff) : undefined,
+								diffs: resultDiff({ details: typeof diff === "string" ? { diff } : { diffs: diff } }, record.arguments),
 							},
 						);
 					}

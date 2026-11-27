@@ -11,6 +11,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import type { FileDiff } from "@argon/shared";
 import { generateDiffString } from "@earendil-works/pi-coding-agent";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -58,7 +59,7 @@ function editList(args: EditArgs): { oldText: string; newText: string }[] {
 }
 
 /** Display diff of what an `edit` or `write` call would change, or undefined for other tools. */
-export async function previewDiff(toolName: string, input: unknown, cwd: string): Promise<string | undefined> {
+async function previewSingleDiff(toolName: string, input: unknown, cwd: string): Promise<string | undefined> {
 	const args = (input ?? {}) as EditArgs & { content?: unknown };
 	if (typeof args.path !== "string") return undefined;
 	const path = resolvePath(args.path, cwd);
@@ -94,8 +95,23 @@ export async function previewDiff(toolName: string, input: unknown, cwd: string)
 	return undefined;
 }
 
-/** The diff an edit tool result carries in `details.diff`, if any. */
-export function resultDiff(result: unknown): string | undefined {
-	const details = (result as { details?: { diff?: unknown } } | undefined)?.details;
-	return typeof details?.diff === "string" && details.diff ? capDiff(details.diff) : undefined;
+/** Per-file preview using the exact path named by the call. */
+export async function previewDiff(toolName: string, input: unknown, cwd: string): Promise<FileDiff[] | undefined> {
+	const diff = await previewSingleDiff(toolName, input, cwd);
+	const path = (input as { path?: string } | undefined)?.path ?? "";
+	return diff === undefined ? undefined : [{ path, diff }];
+}
+
+/** Reads current per-file details and legacy single-file session results. */
+export function resultDiff(result: unknown, args?: unknown): FileDiff[] | undefined {
+	const details = (result as { details?: { diff?: unknown; diffs?: unknown } } | undefined)?.details;
+	if (Array.isArray(details?.diffs)) {
+		return details.diffs
+			.filter((entry): entry is FileDiff => entry && typeof entry.path === "string" && typeof entry.diff === "string")
+			.map(({ path, diff }) => ({ path, diff: capDiff(diff) }));
+	}
+	const path = (args as { path?: unknown } | undefined)?.path;
+	return typeof details?.diff === "string" && details.diff
+		? [{ path: typeof path === "string" ? path : "", diff: capDiff(details.diff) }]
+		: undefined;
 }

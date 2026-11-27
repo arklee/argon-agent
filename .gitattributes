@@ -1,2 +1,4 @@
 # Biome requires LF; keep Windows checkouts (CI included) from converting to CRLF.
 * text=auto eol=lf
+# Patch fixtures test exact bytes (CRLF, BOM); never convert them.
+packages/backend/test/fixtures/** -text

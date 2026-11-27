@@ -305,3 +305,22 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 - 权限模式等写进仓库 `.argon/`：仓库能放宽自己的权限，否决。
 - 对话里的开关直接改 mcp.json（现状）：一个对话的选择影响所有对话。
 - 扩展补丁导出 `loadMcpConfig`：按文件 URL 引入即可，不必扩大补丁。
+
+## D17. GPT 用 apply_patch 修改文件
+
+**状态**：设计于 2026-11-28。调研见 [tool-modes-comparison.md](tool-modes-comparison.md)。
+
+**背景**：GPT-5 及以上的模型是用 Codex 的 `apply_patch` 格式训练的，用它改文件比用 pi 的 edit / write 更稳定。pi-codex-conversion 提供的 `apply_patch` 是独立的 Rust 程序，不经过 Argon 的审批预览和沙箱检查。
+
+**决定**：
+
+1. **自己用 TS 实现，作为 inline extension 注册。** 文件是 `backend/src/apply-patch.ts`，解析和四级模糊匹配移植自 opencode 的 `packages/util/src/patch.ts`（MIT），Lark 语法取自 Codex（Apache-2.0）。工具声明 `constrainedSampling: { type: "grammar", variants: { openai_lark } }`，支持语法工具的 provider 会把它作为 grammar 工具发给模型，其他 provider 退回成 JSON 参数 `{ input }`。注册为 `builtin:apply-patch`，标记 `replaceable`：可以用 `-builtin:apply-patch` 关闭，第三方的同名工具会替换它。
+2. **两阶段执行。** `planPatch` 先在内存里校验全部文件并算出每个文件改后的内容，然后才写盘；任何一个文件校验失败，就一个文件都不写。审批预览和执行用的是同一个 `planPatch`；执行时会重新计算一遍，因为审批期间文件可能已经变了。
+3. **审批和沙箱规则与 edit / write 一致。** "ask" 模式下，补丁涉及的所有路径（包括移动的目标路径）都通过 `SandboxPolicy.canWrite` 才自动放行，否则就询问，审批卡片显示完整的多文件 diff，一次审批。补丁解析不了时直接询问。
+4. **协议改成按文件给 diff。** `ToolCallState.diffs`、`tool_diff`、`tool_ended` 和 `tool_approval` 里原来单份的 `diff: string` 都换成 `FileDiff[]`（`{ path, diff }`），`path` 与 `display.files[].path` 对应。`PROTOCOL_VERSION` 升到 2。已保存的会话里旧格式（`details.diff`、`argonNestedDiffs` 的字符串值）仍然能读。
+5. **按模型切换，与工具预设并列。** `isGpt5Family`（规则参考 opencode：id 包含 `gpt-`，排除 gpt-4 和 oss）为真且 `ArgonSettings.gptApplyPatch` 打开（默认打开）时，激活 `apply_patch`，停用 edit / write；其他情况反过来，但只恢复由这一步停用的工具。加载会话、切换预设、切换模型、reload、修改设置之后都会重新核对一次；正在运行时就等这一轮结束，所以从下一轮开始生效。
+
+**考虑过的方案**：
+
+- 直接用 pi-codex-conversion 的 Rust `apply_patch`：不经过沙箱，也没有审批预览，否决。
+- 接管 provider，由 Argon 发送 custom tool：pi 的 `constrainedSampling` 已经能做到，没必要。

@@ -37,6 +37,17 @@ export function within(path: string, root: string): boolean {
 
 export const PROTECTED_NAMES = [".git", ".argon", ".pi", ".mcp.json"];
 
+/**
+ * Resolve a file-tool path the way pi's file tools spell it (notably @, ~ and file://). Tools that write
+ * files must resolve with this too, so the sandbox check sees the path that is written.
+ */
+export function resolveToolPath(path: string, cwd: string, home = homedir()): string {
+	let normalized = path.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/^@/, "");
+	normalized = normalized.replace(/^~(?=$|\/)/, home);
+	if (normalized.startsWith("file://")) normalized = fileURLToPath(normalized);
+	return resolve(cwd, normalized);
+}
+
 export class SandboxPolicy {
 	readonly writableRoots: string[];
 	readonly readDeny: string[];
@@ -82,11 +93,7 @@ export class SandboxPolicy {
 	}
 
 	resolve(path: string): string {
-		// Match pi's file-tool spellings before checking the boundary (notably @ and file://).
-		let normalized = path.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/^@/, "");
-		normalized = normalized.replace(/^~(?=$|\/)/, this.home);
-		if (normalized.startsWith("file://")) normalized = fileURLToPath(normalized);
-		return resolve(this.cwd, normalized);
+		return resolveToolPath(path, this.cwd, this.home);
 	}
 
 	canRead(path: string, recursive = false): boolean {

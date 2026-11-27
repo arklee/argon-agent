@@ -5,7 +5,7 @@
  * backend therefore degrade to the generic card instead of failing.
  */
 
-import type { AssistantBlock, ToolCallState, ToolDisplay, TranscriptItem } from "@argon/shared";
+import type { AssistantBlock, FileDiff, ToolCallState, ToolDisplay, TranscriptItem } from "@argon/shared";
 import type { ComponentType, ReactNode } from "react";
 
 /** Everything a renderer may need about one call. */
@@ -28,8 +28,8 @@ export interface ToolRenderer {
 	summary?: (view: ToolView) => string;
 	/** Expanded card content. */
 	Body: ComponentType<{ view: ToolView }>;
-	/** What the approval card shows before the call runs. `diff` is the backend's preview, if any. */
-	Preview?: ComponentType<{ view: ToolView; diff?: string }>;
+	/** What the approval card shows before the call runs. `diffs` is the backend's preview, if any. */
+	Preview?: ComponentType<{ view: ToolView; diffs?: FileDiff[] }>;
 	/** Body places the nested calls itself (via view.renderChildren); otherwise the card appends them. */
 	placesChildren?: boolean;
 }

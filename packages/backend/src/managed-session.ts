@@ -8,6 +8,7 @@
  */
 
 import { existsSync } from "node:fs";
+import type { FileDiff } from "@argon/shared";
 import {
 	applySessionEvent,
 	type BranchPoint,
@@ -44,6 +45,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { patchedPaths, patchFileDiffs, planPatch } from "./apply-patch.ts";
 import { generateTitle, titleModel } from "./auto-title.ts";
 import { createBuiltinExtensions, sessionMcpOptions } from "./builtin-extensions.ts";
 import { previewDiff, resultDiff } from "./diff-preview.ts";
@@ -51,6 +53,7 @@ import { completeFile, type FileCompletion } from "./file-completion.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
 import { createMcpBridge, type McpBridge, type McpSignInUi } from "./mcp-bridge.ts";
+import { activeToolNames, isGpt5Family } from "./model-family.ts";
 import { createNestedDiffExtension } from "./nested-diffs.ts";
 import {
 	createPermissionExtension,
@@ -145,7 +148,9 @@ export class ManagedSession {
 	private unsandboxedBashAllowed = false;
 	private readonly networkAllowedDomains = new Set<string>();
 	private readonly sessionAllowedTools = new Set<string>();
-	private readonly writeDiffs = new Map<string, string>();
+	private toolSetPending = false;
+	private readonly patchRemovedTools = new Set<string>();
+	private readonly writeDiffs = new Map<string, FileDiff[]>();
 	private unsubscribe: (() => void) | undefined;
 	private liveItemCounter = 0;
 	private currentAssistantItemId: string | undefined;
@@ -219,8 +224,8 @@ export class ManagedSession {
 			getNestedDiffs: (id) =>
 				Object.fromEntries(
 					Object.values(self?.state.tools ?? {})
-						.filter((tool) => tool.parentToolCallId === id && typeof tool.diff === "string")
-						.map((tool) => [tool.toolCallId, tool.diff!]),
+						.filter((tool) => tool.parentToolCallId === id && tool.diffs !== undefined)
+						.map((tool) => [tool.toolCallId, tool.diffs!]),
 				),
 		});
 		const mcp = createMcpBridge();
@@ -327,7 +332,7 @@ export class ManagedSession {
 		self = managed;
 		for (const message of trustErrors) managed.appendDiagnostic({ level: "error", source: "extension", message });
 		await managed.bind();
-		managed.applyToolPreset(initialPreset);
+		managed.applyToolSet(initialPreset);
 		// After binding: session_start handlers (e.g. MCP config loading) can add diagnostics.
 		managed.reportDiagnostics(true);
 		if (runtime.modelFallbackMessage) {
@@ -471,9 +476,10 @@ export class ManagedSession {
 		}
 		if (this.state.toolPresetPending && this.isIdleForChanges()) {
 			const preset = resolveToolPreset(this.state.toolPreset);
-			this.applyToolPreset(preset);
+			this.applyToolSet(preset);
 			this.emit({ type: "tool_preset_changed", preset: preset.id, pending: false });
 		}
+		if (this.toolSetPending && this.isIdleForChanges()) this.applyToolSet();
 		if (!this.trustRefreshPending || this.trustRefresh) return;
 		void this.applyPendingProjectTrust().catch((error: unknown) => {
 			log.error("could not refresh project trust", error);
@@ -764,6 +770,7 @@ export class ManagedSession {
 		const model = modelRuntime.getModel(ref.provider, ref.id);
 		if (!model) throw new Error(`Model not found: ${ref.provider}/${ref.id}`);
 		await this.session.setModel(model);
+		this.refreshToolSet();
 		this.emit({ type: "model_changed", model: ref });
 		this.emitThinkingState();
 		this.emitContextUsage();
@@ -783,22 +790,37 @@ export class ManagedSession {
 		this.emitThinkingState();
 	}
 
-	private applyToolPreset(preset: ToolPreset): void {
+	private applyToolSet(preset = this.appliedToolPreset): void {
 		const active = this.session.getActiveToolNames();
-		const enableCodemode = preset.codemodeMode !== undefined;
+		const registered = this.session.getAllTools().map(({ name }) => name);
+		const patchMode =
+			(this.settings?.get().gptApplyPatch ?? true) &&
+			isGpt5Family(this.session.model?.id ?? "") &&
+			registered.includes("apply_patch");
+		if (patchMode) for (const name of ["edit", "write"]) if (active.includes(name)) this.patchRemovedTools.add(name);
+		const next = activeToolNames(active, {
+			codemode: preset.codemodeMode !== undefined,
+			patchMode,
+			registered,
+			removed: [...this.patchRemovedTools],
+		});
 		this.appliedToolPreset = preset;
-		if (active.includes("codemode") !== enableCodemode) {
-			this.session.setActiveToolsByName(
-				enableCodemode ? [...active, "codemode"] : active.filter((name) => name !== "codemode"),
-			);
-		}
+		if (next.length !== active.length || next.some((name, index) => name !== active[index]))
+			this.session.setActiveToolsByName(next);
+		if (!patchMode) this.patchRemovedTools.clear();
+		this.toolSetPending = false;
+	}
+
+	refreshToolSet(): void {
+		this.toolSetPending = true;
+		if (this.isIdleForChanges()) this.applyToolSet();
 	}
 
 	setToolPreset(preset: ToolPreset): void {
 		if (this.state.toolPreset === preset.id) return;
 		this.session.sessionManager.appendCustomEntry(TOOL_PRESET_ENTRY, { preset: preset.id });
 		const pending = !this.isIdleForChanges();
-		if (!pending) this.applyToolPreset(preset);
+		if (!pending) this.applyToolSet(preset);
 		this.emit({ type: "tool_preset_changed", preset: preset.id, pending });
 	}
 
@@ -1004,7 +1026,7 @@ export class ManagedSession {
 			this.disposeWidgets();
 			for (const { key } of this.state.widgets) this.emit({ type: "widget_changed", key });
 			await this.session.reload();
-			this.applyToolPreset(this.appliedToolPreset);
+			this.applyToolSet(this.appliedToolPreset);
 			this.hasReloaded = true;
 			this.reportDiagnostics(true);
 		} finally {
@@ -1177,7 +1199,7 @@ export class ManagedSession {
 	}
 
 	/** Diff of an executed `write`, for the argon-write-diff extension to store in the result (see write-diff.ts). */
-	takeWriteDiff(toolCallId: string): string | undefined {
+	takeWriteDiff(toolCallId: string): FileDiff[] | undefined {
 		const diff = this.writeDiffs.get(toolCallId);
 		this.writeDiffs.delete(toolCallId);
 		return diff;
@@ -1185,8 +1207,11 @@ export class ManagedSession {
 
 	private async previewToolCall(check: ToolCallCheck) {
 		// Preview file changes first, in every mode: the tool card shows them while the tool runs.
-		const diff = await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined);
-		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff });
+		const diff = await (check.toolName === "apply_patch"
+			? planPatch((check.input as { input?: string } | undefined)?.input ?? "", this.state.cwd).then(patchFileDiffs)
+			: previewDiff(check.toolName, check.input, this.state.cwd)
+		).catch(() => undefined);
+		if (diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diffs: diff });
 		return diff;
 	}
 
@@ -1195,7 +1220,7 @@ export class ManagedSession {
 		if (check.toolName === "write" && diff) this.rememberWriteDiff(check.toolCallId, diff);
 	}
 
-	private rememberWriteDiff(toolCallId: string, diff: string) {
+	private rememberWriteDiff(toolCallId: string, diff: FileDiff[]) {
 		this.writeDiffs.set(toolCallId, diff);
 		// Results that never arrive (aborted runs) must not accumulate.
 		if (this.writeDiffs.size > MAX_PENDING_WRITE_DIFFS) {
@@ -1212,7 +1237,7 @@ export class ManagedSession {
 			const latest = decision.waited
 				? ((await previewDiff(check.toolName, check.input, this.state.cwd).catch(() => undefined)) ?? diff)
 				: diff;
-			if (latest !== diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diff: latest });
+			if (latest !== diff) this.emit({ type: "tool_diff", toolCallId: check.toolCallId, diffs: latest });
 			this.rememberWriteDiff(check.toolCallId, latest);
 		}
 		return decision.allow ? { allow: true } : { allow: false, reason: decision.reason };
@@ -1220,21 +1245,30 @@ export class ManagedSession {
 
 	private async decideToolCall(
 		check: ToolCallCheck,
-		diff: string | undefined,
+		diff: FileDiff[] | undefined,
 	): Promise<{ allow: true; waited: boolean } | { allow: false; reason: string }> {
 		if (this.state.permissionMode === "auto") return { allow: true, waited: false };
 		const unsandboxed = isUnsandboxedBash(check);
 		const policy = new SandboxPolicy(this.state.cwd, this.settings?.argonHome ?? this.agentDir);
 		const path = (check.input as { path?: unknown } | undefined)?.path;
 		const safePath = typeof path === "string" ? path : ".";
+		const patchPaths =
+			check.toolName === "apply_patch" ? patchedPaths((check.input as { input?: string })?.input ?? "") : undefined;
 		const safeBuiltin =
-			check.toolName === "bash"
-				? !unsandboxed
-				: READ_ONLY_TOOLS.has(check.toolName)
-					? policy.canRead(safePath, check.toolName === "grep" || check.toolName === "find")
-					: (check.toolName === "write" || check.toolName === "edit") &&
-						typeof path === "string" &&
-						policy.canWrite(path);
+			check.toolName === "apply_patch"
+				? Boolean(
+						patchPaths?.length &&
+							patchPaths.every(
+								(file) => policy.canWrite(file.path) && (!file.movePath || policy.canWrite(file.movePath)),
+							),
+					)
+				: check.toolName === "bash"
+					? !unsandboxed
+					: READ_ONLY_TOOLS.has(check.toolName)
+						? policy.canRead(safePath, check.toolName === "grep" || check.toolName === "find")
+						: (check.toolName === "write" || check.toolName === "edit") &&
+							typeof path === "string" &&
+							policy.canWrite(path);
 		if (safeBuiltin || (unsandboxed ? this.unsandboxedBashAllowed : this.sessionAllowedTools.has(check.toolName))) {
 			return { allow: true, waited: false };
 		}
@@ -1246,7 +1280,7 @@ export class ManagedSession {
 				toolCallId: check.toolCallId,
 				toolName: check.toolName,
 				args: check.input,
-				diff,
+				diffs: diff,
 				suggestedRule,
 				unsandboxed: unsandboxed || undefined,
 			},
@@ -1399,7 +1433,7 @@ export class ManagedSession {
 					output,
 					imageCount,
 					durationMs: event.durationMs,
-					diff: resultDiff(event.result),
+					diffs: resultDiff(event.result, this.state.tools[event.toolCallId]?.args),
 				});
 				return;
 			}

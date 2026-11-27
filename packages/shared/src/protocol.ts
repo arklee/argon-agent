@@ -7,9 +7,9 @@
  * - Paths are opaque strings that belong to the backend's environment; clients never do IO with them.
  */
 
-import type { ToolCallState, ToolDisplay, TranscriptItem, UsageInfo } from "./transcript.ts";
+import type { FileDiff, ToolCallState, ToolDisplay, TranscriptItem, UsageInfo } from "./transcript.ts";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -106,8 +106,8 @@ export type Interaction =
 			toolCallId: string;
 			toolName: string;
 			args: unknown;
-			/** Preview of the file change, for edit/write (see ToolCallState.diff). */
-			diff?: string;
+			/** Preview of the file change, for file-changing tools (see ToolCallState.diffs). */
+			diffs?: FileDiff[];
 			/** The rule "Always allow" would save, e.g. { tool: "bash", command: "npm test" }. */
 			suggestedRule?: PermissionRule;
 			/** The model asked to run this shell command outside the sandbox. */
@@ -451,6 +451,8 @@ export interface PermissionRule {
 
 /** Argon's own settings, per backend environment ($ARGON_HOME/settings.json). */
 export interface ArgonSettings {
+	/** GPT-5 and later get `apply_patch` instead of edit / write (decisions D17). Default true. */
+	gptApplyPatch: boolean;
 	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
 	/** OS sandbox policy (decisions D15); used in "ask" mode where the sandbox is supported. */
 	sandbox: { allowedDomains: string[] };
@@ -597,9 +599,9 @@ export type SessionEvent =
 			imageCount: number;
 			durationMs?: number;
 			/** The actual change, when the tool reports one; otherwise an earlier preview stays. */
-			diff?: string;
+			diffs?: FileDiff[];
 	  }
-	| { type: "tool_diff"; toolCallId: string; diff: string }
+	| { type: "tool_diff"; toolCallId: string; diffs: FileDiff[] }
 	| { type: "tool_blocked"; toolCallId: string; reason: string }
 	| { type: "queue_updated"; steering: string[]; followUp: string[] }
 	| { type: "compaction_started" }

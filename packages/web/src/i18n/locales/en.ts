@@ -492,6 +492,9 @@ export const en = {
 		},
 		backend: "Backend: {{name}}",
 		general: {
+			gptApplyPatch: "apply_patch for GPT models",
+			gptApplyPatchDescription:
+				"GPT-5 and later edit files with one patch tool instead of edit and write. Takes effect from the next turn.",
 			toolPreset: "Default tool preset",
 			add: "Add",
 			allModels: "All models",
@@ -696,6 +699,7 @@ export const en = {
 		xhigh: "Extra high",
 	},
 	tools: {
+		fileOp: { add: "New", delete: "Deleted" },
 		nestedCount_one: "{{count, number}} call",
 		nestedCount_other: "{{count, number}} calls",
 		waitingApproval: "Waiting for approval",

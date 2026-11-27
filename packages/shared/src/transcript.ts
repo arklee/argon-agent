@@ -3,6 +3,13 @@
  * types; frontends never see pi types directly, so a pi upgrade only touches the backend adapter.
  */
 
+/** pi display diff for one file (lines start with "+", "-" or " ", then a line number). */
+export interface FileDiff {
+	/** Path as named by the tool, matching display.files[].path; source path for a move. */
+	path: string;
+	diff: string;
+}
+
 export interface UsageInfo {
 	input: number;
 	output: number;
@@ -22,7 +29,7 @@ export type ToolDisplay = ToolDisplayBase &
 	(
 		| { kind: "shell"; command: string; cwd?: string }
 		| { kind: "file_read"; path: string; offset?: number; limit?: number }
-		/** One entry per file, so multi-file patches fit. The diff itself is `ToolCallState.diff` for now. */
+		/** One entry per file, so multi-file patches fit. Diffs live in `ToolCallState.diffs`, matched by `files[].path`. */
 		| { kind: "file_change"; files: { path: string; op?: "add" | "update" | "delete" | "move"; movePath?: string }[] }
 		/** content: grep-like; files: find-like; list: ls-like. */
 		| { kind: "search"; mode: "content" | "files" | "list"; pattern?: string; path?: string }
@@ -68,10 +75,10 @@ export interface ToolCallState {
 	imageCount?: number;
 	durationMs?: number;
 	/**
-	 * For file-changing tools: pi's display diff (lines start with "+", "-" or " ", then a line number).
+	 * Per-file previews and results in pi's display diff format (lines start with "+", "-" or " ", then a line number).
 	 * A preview before the tool runs, replaced by the actual change when it has finished.
 	 */
-	diff?: string;
+	diffs?: FileDiff[];
 	/**
 	 * Set for calls another tool made (e.g. a codemode script); ids look like `<parent id>/<n>`. Such
 	 * calls have no transcript block, so they carry their own display and source.

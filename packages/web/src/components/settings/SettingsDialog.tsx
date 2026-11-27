@@ -499,6 +499,17 @@ function GeneralDefaults() {
 							}
 						/>
 					</OverrideRow>
+					{global && (
+						<Row
+							label={t("settings.general.gptApplyPatch")}
+							description={t("settings.general.gptApplyPatchDescription")}
+						>
+							<Switch
+								checked={argon.gptApplyPatch}
+								onCheckedChange={(gptApplyPatch) => void updateArgon({ gptApplyPatch })}
+							/>
+						</Row>
+					)}
 					<OverrideRow
 						label={t("settings.permissions.defaultMode")}
 						description={

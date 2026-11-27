@@ -140,17 +140,30 @@ describe("applySessionEvent", () => {
 
 	it("keeps a diff preview that arrives before tool_started, and lets the result replace it", () => {
 		const running = run([
-			{ type: "tool_diff", toolCallId: "t1", diff: "+1 preview" },
+			{ type: "tool_diff", toolCallId: "t1", diffs: [{ path: "a", diff: "+1 preview" }] },
 			{ type: "tool_started", toolCallId: "t1", name: "edit", args: { path: "a" } },
 		]);
-		expect(running.tools.t1).toMatchObject({ name: "edit", status: "running", diff: "+1 preview" });
+		expect(running.tools.t1).toMatchObject({
+			name: "edit",
+			status: "running",
+			diffs: [{ path: "a", diff: "+1 preview" }],
+		});
 		const kept = run([{ type: "tool_ended", toolCallId: "t1", isError: false, output: "ok", imageCount: 0 }], running);
-		expect(kept.tools.t1?.diff).toBe("+1 preview");
+		expect(kept.tools.t1?.diffs).toEqual([{ path: "a", diff: "+1 preview" }]);
 		const replaced = run(
-			[{ type: "tool_ended", toolCallId: "t1", isError: false, output: "ok", imageCount: 0, diff: "+1 actual" }],
+			[
+				{
+					type: "tool_ended",
+					toolCallId: "t1",
+					isError: false,
+					output: "ok",
+					imageCount: 0,
+					diffs: [{ path: "a", diff: "+1 actual" }],
+				},
+			],
 			running,
 		);
-		expect(replaced.tools.t1?.diff).toBe("+1 actual");
+		expect(replaced.tools.t1?.diffs).toEqual([{ path: "a", diff: "+1 actual" }]);
 	});
 });
 

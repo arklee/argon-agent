@@ -104,3 +104,15 @@ it("resolves private project defaults by canonical path, replaces maps and remov
 		rmSync(home, { recursive: true, force: true });
 	}
 });
+
+it("defaults GPT patches on, persists disabling, and rejects non-booleans", async () => {
+	const settings = await store();
+	expect(settings.get().gptApplyPatch).toBe(true);
+	await settings.update({ gptApplyPatch: false });
+	await settings.load();
+	expect(settings.get().gptApplyPatch).toBe(false);
+	await expect(settings.update({ gptApplyPatch: "false" as unknown as boolean })).rejects.toThrow(
+		"Invalid gptApplyPatch",
+	);
+	expect(suggestRule("apply_patch", {})).toEqual({ tool: "apply_patch" });
+});

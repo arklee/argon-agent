@@ -188,69 +188,79 @@ describe("projectHistory", () => {
 			nestedToolEvents: [],
 			blockedTools: new Map(),
 			toolResults: [
-				{ toolCallId: "t1", isError: false, output: "Edited", imageCount: 1, durationMs: 23, diff: "+1 updated" },
+				{
+					toolCallId: "t1",
+					isError: false,
+					output: "Edited",
+					imageCount: 1,
+					durationMs: 23,
+					diffs: [{ path: "", diff: "+1 updated" }],
+				},
 			],
 		});
 	});
 
-	it("projects recorded children in order, including incomplete records and persisted diffs", () => {
-		const history = projectHistory(
-			[
-				{
-					type: "message",
-					id: "r",
-					parentId: null,
-					timestamp: "2025-01-01",
-					message: {
-						role: "toolResult",
-						toolCallId: "p",
-						toolName: "codemode",
-						content: [],
-						isError: false,
-						timestamp: 0,
-						details: { argonNestedDiffs: { "p/1": "+1 hello" } },
-						nestedCalls: {
-							complete: false,
-							calls: [
-								{ id: "p/1", name: "write", arguments: { path: "a" }, status: "ok", durationMs: 4 },
-								{ id: "p/2", name: "read", argumentsBytes: 99999, status: "error", error: "missing" },
-								{ id: "p/3", name: "read", status: "unfinished" },
-							],
+	it.each(["+1 hello", [{ path: "a", diff: "+1 hello" }]])(
+		"projects recorded children including legacy/current diffs: %j",
+		(storedDiff) => {
+			const history = projectHistory(
+				[
+					{
+						type: "message",
+						id: "r",
+						parentId: null,
+						timestamp: "2025-01-01",
+						message: {
+							role: "toolResult",
+							toolCallId: "p",
+							toolName: "codemode",
+							content: [],
+							isError: false,
+							timestamp: 0,
+							details: { argonNestedDiffs: { "p/1": storedDiff } },
+							nestedCalls: {
+								complete: false,
+								calls: [
+									{ id: "p/1", name: "write", arguments: { path: "a" }, status: "ok", durationMs: 4 },
+									{ id: "p/2", name: "read", argumentsBytes: 99999, status: "error", error: "missing" },
+									{ id: "p/3", name: "read", status: "unfinished" },
+								],
+							},
 						},
 					},
-				},
-			],
-			() => "builtin",
-		);
-		expect(history.items).toEqual([]);
-		expect(history.nestedToolEvents).toEqual([
-			expect.objectContaining({
-				type: "tool_started",
-				toolCallId: "p/1",
-				parentToolCallId: "p",
-				args: { path: "a" },
-				source: "builtin",
-				display: expect.objectContaining({ kind: "file_change" }),
-			}),
-			expect.objectContaining({
-				type: "tool_ended",
-				toolCallId: "p/1",
-				isError: false,
-				output: "",
-				durationMs: 4,
-				diff: "+1 hello",
-			}),
-			expect.objectContaining({ type: "tool_started", toolCallId: "p/2", args: undefined }),
-			expect.objectContaining({ type: "tool_ended", toolCallId: "p/2", isError: true, output: "missing" }),
-			expect.objectContaining({ type: "tool_started", toolCallId: "p/3" }),
-			expect.objectContaining({
-				type: "tool_ended",
-				toolCallId: "p/3",
-				isError: true,
-				output: "Unfinished: still running when the calling tool finished",
-			}),
-		]);
-	});
+				],
+				() => "builtin",
+			);
+			expect(history.items).toEqual([]);
+			expect(history.nestedToolEvents).toEqual([
+				expect.objectContaining({
+					type: "tool_started",
+					toolCallId: "p/1",
+					parentToolCallId: "p",
+					args: { path: "a" },
+					source: "builtin",
+					display: expect.objectContaining({ kind: "file_change" }),
+				}),
+				expect.objectContaining({
+					type: "tool_ended",
+					toolCallId: "p/1",
+					isError: false,
+					output: "",
+					durationMs: 4,
+					diffs: [{ path: "a", diff: "+1 hello" }],
+				}),
+				expect.objectContaining({ type: "tool_started", toolCallId: "p/2", args: undefined }),
+				expect.objectContaining({ type: "tool_ended", toolCallId: "p/2", isError: true, output: "missing" }),
+				expect.objectContaining({ type: "tool_started", toolCallId: "p/3" }),
+				expect.objectContaining({
+					type: "tool_ended",
+					toolCallId: "p/3",
+					isError: true,
+					output: "Unfinished: still running when the calling tool finished",
+				}),
+			]);
+		},
+	);
 
 	it("collects denied calls from Argon's tool_blocked entries", () => {
 		const history = projectHistory([

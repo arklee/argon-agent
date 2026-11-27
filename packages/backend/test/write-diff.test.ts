@@ -15,7 +15,7 @@ function load(diffs: Record<string, string>) {
 		takeWriteDiff: (id) => {
 			const diff = diffs[id];
 			delete diffs[id];
-			return diff;
+			return diff === undefined ? undefined : [{ path: "a", diff }];
 		},
 	});
 	if (typeof extension === "function" || !("factory" in extension)) throw new Error("unexpected extension shape");
@@ -28,7 +28,7 @@ describe("argon-write-diff", () => {
 	it("stores the previewed diff in a successful write result", () => {
 		const handler = load({ w1: "+1 hello" });
 		expect(handler({ toolName: "write", toolCallId: "w1", isError: false, details: undefined })).toEqual({
-			details: { diff: "+1 hello" },
+			details: { diffs: [{ path: "a", diff: "+1 hello" }] },
 		});
 	});
 

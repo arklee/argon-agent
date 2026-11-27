@@ -6,15 +6,15 @@
 
 ## 对比对象
 
-| 对象 | 说明 | 主要资料 |
-|---|---|---|
-| pi 传统模式 | read / bash / edit / write 等分开的工具 | pi `dist/core/system-prompt.js`、各内置工具定义 |
-| pi codemode（`on` / `only`） | 一个 `codemode` 工具，QuickJS 里写 JS 调用其他工具 | pi `docs/codemode.md`、`docs/settings.md` |
-| PCC Structured | `exec_command`、`write_stdin`、`apply_patch`、`view_image` 直接作为顶层工具 | PCC `src/tools/exec`、`src/tools/apply-patch`、`src/adapter/activation/tool-set.ts` |
-| PCC Code | `exec` + `wait`，每个 cell 是全新 JS 环境，运行时为 openai/codex 的 code-mode host | PCC `src/tools/code-mode` |
-| PCC VM Code | `exec` + `wait`，会话内保留绑定，有内存上限 | PCC `src/tools/vm-mode` |
-| PCC TS Notebook | `exec` + `wait` + `notebook`，持久 TS 笔记本，执行前 tsrs 类型检查 | PCC `src/tools/ts-mode` |
-| Codex 官方 CLI | 行为基准，不接入 | openai/codex 仓库 |
+| 对象                         | 说明                                                                               | 主要资料                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| pi 传统模式                  | read / bash / edit / write 等分开的工具                                            | pi `dist/core/system-prompt.js`、各内置工具定义                                     |
+| pi codemode（`on` / `only`） | 一个 `codemode` 工具，QuickJS 里写 JS 调用其他工具                                 | pi `docs/codemode.md`、`docs/settings.md`                                           |
+| PCC Structured               | `exec_command`、`write_stdin`、`apply_patch`、`view_image` 直接作为顶层工具        | PCC `src/tools/exec`、`src/tools/apply-patch`、`src/adapter/activation/tool-set.ts` |
+| PCC Code                     | `exec` + `wait`，每个 cell 是全新 JS 环境，运行时为 openai/codex 的 code-mode host | PCC `src/tools/code-mode`                                                           |
+| PCC VM Code                  | `exec` + `wait`，会话内保留绑定，有内存上限                                        | PCC `src/tools/vm-mode`                                                             |
+| PCC TS Notebook              | `exec` + `wait` + `notebook`，持久 TS 笔记本，执行前 tsrs 类型检查                 | PCC `src/tools/ts-mode`                                                             |
+| Codex 官方 CLI               | 行为基准，不接入                                                                   | openai/codex 仓库                                                                   |
 
 PCC 源码可以看本机安装的 `~/.pi/agent/npm/node_modules/@howaboua/pi-codex-conversion`（5.1.2），或 [howaboua-pi-stuff](https://github.com/IgorWarzocha/howaboua-pi-stuff) 仓库的 `packages/pi-codex-conversion`。
 

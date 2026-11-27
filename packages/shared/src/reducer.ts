@@ -174,7 +174,7 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 						output: event.output,
 						imageCount: event.imageCount,
 						durationMs: event.durationMs,
-						diff: event.diff ?? prev?.diff,
+						diffs: event.diffs ?? prev?.diffs,
 					},
 				},
 			};
@@ -187,8 +187,8 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 				tools: {
 					...state.tools,
 					[event.toolCallId]: prev
-						? { ...prev, diff: event.diff }
-						: { toolCallId: event.toolCallId, name: "", args: undefined, status: "pending", diff: event.diff },
+						? { ...prev, diffs: event.diffs }
+						: { toolCallId: event.toolCallId, name: "", args: undefined, status: "pending", diffs: event.diffs },
 				},
 			};
 		}
@@ -204,7 +204,7 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
 						args: prev?.args,
 						status: "blocked",
 						output: event.reason,
-						diff: prev?.diff,
+						diffs: prev?.diffs,
 					},
 				},
 			};

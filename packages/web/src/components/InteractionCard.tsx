@@ -91,7 +91,7 @@ export function InteractionCard({
 					)}
 					<div className="max-h-80 overflow-auto rounded-md bg-muted p-2">
 						{Preview ? (
-							<Preview view={view} diff={interaction.diff} />
+							<Preview view={view} diffs={interaction.diffs} />
 						) : (
 							<pre className="font-mono text-xs whitespace-pre-wrap break-all">
 								{summary || JSON.stringify(interaction.args, null, 2)}

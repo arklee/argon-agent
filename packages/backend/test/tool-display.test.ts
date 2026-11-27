@@ -113,3 +113,27 @@ describe("describeToolCall", () => {
 		expect(describeToolCall("custom", circular)).toStrictEqual({ kind: "generic", title: "custom", summary: "" });
 	});
 });
+
+it("describes every patch path and move destination", () => {
+	expect(
+		describeToolCall("apply_patch", {
+			input:
+				"*** Begin Patch\n*** Add File: src/a.ts\n+new\n*** Update File: b\n*** Move to: c\n@@\n-old\n+new\n*** Delete File: d\n*** End Patch",
+		}),
+	).toEqual({
+		kind: "file_change",
+		title: "apply_patch",
+		summary: "src/a.ts +2",
+		files: [
+			{ path: "src/a.ts", op: "add" },
+			{ path: "b", op: "move", movePath: "c" },
+			{ path: "d", op: "delete" },
+		],
+	});
+	expect(describeToolCall("apply_patch", { input: "invalid" })).toEqual({
+		kind: "file_change",
+		title: "apply_patch",
+		files: [],
+		summary: "",
+	});
+});

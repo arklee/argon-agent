@@ -1,3 +1,4 @@
+import type { FileDiff } from "@argon/shared";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +32,20 @@ export function diffStats(diff: string): { added: number; removed: number } {
 	return { added, removed };
 }
 
-export function DiffStat({ diff }: { diff: string }) {
-	const { added, removed } = useMemo(() => diffStats(diff), [diff]);
+/** Line counts summed over every file of a change. */
+export function diffsStats(diffs: readonly FileDiff[]): { added: number; removed: number } {
+	let added = 0;
+	let removed = 0;
+	for (const file of diffs) {
+		const stats = diffStats(file.diff);
+		added += stats.added;
+		removed += stats.removed;
+	}
+	return { added, removed };
+}
+
+export function DiffStat({ diffs }: { diffs: readonly FileDiff[] }) {
+	const { added, removed } = useMemo(() => diffsStats(diffs), [diffs]);
 	return (
 		<span className="shrink-0 font-mono text-xs tabular-nums">
 			<span className="text-emerald-600 dark:text-emerald-400">+{added}</span>{" "}

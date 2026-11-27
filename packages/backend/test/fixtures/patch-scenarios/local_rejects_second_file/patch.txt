@@ -1,0 +1,10 @@
+*** Begin Patch
+*** Update File: a
+@@
+-old
++new
+*** Update File: b
+@@
+-missing
++new
+*** End Patch

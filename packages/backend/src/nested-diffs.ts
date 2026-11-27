@@ -3,11 +3,13 @@
  * result so history can restore them. This inline extension can be removed as one unit if pi
  * starts persisting nested results.
  */
+
+import type { FileDiff } from "@argon/shared";
 import type { ExtensionFactory, InlineExtension } from "@earendil-works/pi-coding-agent";
 import { capDiff } from "./diff-preview.ts";
 
 export interface NestedDiffHost {
-	getNestedDiffs(parentToolCallId: string): Record<string, string>;
+	getNestedDiffs(parentToolCallId: string): Record<string, FileDiff[]>;
 }
 
 export function createNestedDiffExtension(host: NestedDiffHost): InlineExtension {
@@ -25,7 +27,12 @@ export function createNestedDiffExtension(host: NestedDiffHost): InlineExtension
 			const diffs = Object.entries(host.getNestedDiffs(event.toolCallId));
 			if (!diffs.length) return;
 			return {
-				details: { ...details, argonNestedDiffs: Object.fromEntries(diffs.map(([id, diff]) => [id, capDiff(diff)])) },
+				details: {
+					...details,
+					argonNestedDiffs: Object.fromEntries(
+						diffs.map(([id, diff]) => [id, diff.map((entry) => ({ ...entry, diff: capDiff(entry.diff) }))]),
+					),
+				},
 			};
 		});
 	};

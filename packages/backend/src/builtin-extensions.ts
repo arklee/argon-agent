@@ -20,6 +20,7 @@ import {
 	type InlineExtension,
 	type SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { applyPatchExtension } from "./apply-patch.ts";
 import { log } from "./log.ts";
 import { piMcp } from "./mcp-config.ts";
 import type { ArgonSettingsStore } from "./settings.ts";
@@ -90,6 +91,7 @@ export function createBuiltinExtensions(
 	mcpOptions: Parameters<typeof createMcpExtension>[0] = {},
 ): InlineExtension[] {
 	return [
+		{ name: "apply-patch", factory: applyPatchExtension, builtin: true, replaceable: true },
 		// Same order and flags as pi's builtInExtensions (dist/extensions/index.js).
 		...(llamaExtension ? [{ name: "llama.cpp", factory: llamaExtension, builtin: true } as InlineExtension] : []),
 		{

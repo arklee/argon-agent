@@ -486,6 +486,8 @@ export const zhCN = {
 		},
 		backend: "后端：{{name}}",
 		general: {
+			gptApplyPatch: "GPT 模型使用 apply_patch",
+			gptApplyPatchDescription: "GPT-5 及以上用一个补丁工具代替 edit 和 write 修改文件。从下一轮开始生效。",
 			toolPreset: "默认工具预设",
 			add: "添加",
 			allModels: "全部模型",
@@ -685,6 +687,7 @@ export const zhCN = {
 		xhigh: "极高",
 	},
 	tools: {
+		fileOp: { add: "新建", delete: "删除" },
 		nestedCount_one: "{{count, number}} 次调用",
 		nestedCount_other: "{{count, number}} 次调用",
 		waitingApproval: "等待审批",

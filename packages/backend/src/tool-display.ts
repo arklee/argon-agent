@@ -1,5 +1,7 @@
 import type { ToolDisplay } from "@argon/shared";
 
+import { patchedPaths } from "./apply-patch.ts";
+
 function stringArg(value: unknown): string | undefined {
 	return typeof value === "string" ? value : undefined;
 }
@@ -40,6 +42,15 @@ function describeKnownTool(title: string, args: Record<string, unknown>): ToolDi
 				...(offset === undefined ? {} : { offset }),
 				...(limit === undefined ? {} : { limit }),
 				summary: readSummary(path, offset, limit),
+			};
+		}
+		case "apply_patch": {
+			const files = patchedPaths(stringArg(args.input) ?? "") ?? [];
+			return {
+				kind: "file_change",
+				title,
+				files,
+				summary: files.length ? `${files[0]!.path}${files.length > 1 ? ` +${files.length - 1}` : ""}` : "",
 			};
 		}
 		case "edit":

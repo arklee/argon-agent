@@ -3,8 +3,9 @@
  * registerToolRenderer; none exist yet.
  */
 
-import type { ToolDisplay } from "@argon/shared";
-import { DiffView } from "@/components/DiffView";
+import type { FileDiff, ToolDisplay } from "@argon/shared";
+import { useTranslation } from "react-i18next";
+import { DiffStat, DiffView } from "@/components/DiffView";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
@@ -45,10 +46,51 @@ function Output({ view, hideWhenDone = false }: { view: ToolView; hideWhenDone?:
 	);
 }
 
-function Diff({ diff, view }: { diff: string; view?: ToolView }) {
-	const status = view?.tool?.status;
+type FileEntry = DisplayOf<"file_change">["files"][number];
+
+function FileHeader({ path, file }: { path: string; file: FileEntry | undefined }) {
+	const { t } = useTranslation();
+	const op = file?.op === "add" || file?.op === "delete" ? file.op : undefined;
+	return (
+		<span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono">
+			<span className="truncate" title={path}>
+				{path}
+			</span>
+			{file?.movePath && (
+				<span className="truncate text-muted-foreground" title={file.movePath}>
+					→ {file.movePath}
+				</span>
+			)}
+			{op && (
+				<span className="shrink-0 rounded bg-muted px-1 font-sans text-[0.9em] text-muted-foreground">
+					{t(`tools.fileOp.${op}`)}
+				</span>
+			)}
+		</span>
+	);
+}
+
+/** One diff per file; a change touching several files labels each one. */
+function Diffs({ diffs, view }: { diffs: FileDiff[]; view: ToolView }) {
+	const status = view.tool?.status;
 	const settled = status === undefined || status === "done" || status === "running";
-	return <DiffView diff={diff} className={cn("max-h-96", !settled && "opacity-60")} />;
+	const dim = !settled && "opacity-60";
+	if (diffs.length === 1) return <DiffView diff={diffs[0]!.diff} className={cn("max-h-96", dim)} />;
+	const files = view.display.kind === "file_change" ? view.display.files : [];
+	return (
+		<div className="space-y-2">
+			{diffs.map((file, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a patch may name the same path twice
+				<div key={i} className={cn("space-y-1", dim)}>
+					<div className="flex items-center gap-2 text-xs">
+						<FileHeader path={file.path} file={files.find((f) => f.path === file.path)} />
+						<DiffStat diffs={[file]} />
+					</div>
+					<DiffView diff={file.diff} className="max-h-72" />
+				</div>
+			))}
+		</div>
+	);
 }
 
 function ShellCommand({ command }: { command: string }) {
@@ -73,7 +115,7 @@ function ScriptSource({ display }: { display: DisplayOf<"script"> }) {
 
 /** Any kind can carry a diff (e.g. from an older backend without display); show it rather than drop it. */
 function DiffOrArgs({ view }: { view: ToolView }) {
-	return view.tool?.diff ? <Diff diff={view.tool.diff} view={view} /> : <ArgsJson args={view.args} />;
+	return view.tool?.diffs?.length ? <Diffs diffs={view.tool.diffs} view={view} /> : <ArgsJson args={view.args} />;
 }
 
 registerKindRenderer("shell", {
@@ -94,10 +136,10 @@ registerKindRenderer("file_change", {
 	Body: ({ view }) => (
 		<>
 			<DiffOrArgs view={view} />
-			<Output view={view} hideWhenDone={Boolean(view.tool?.diff)} />
+			<Output view={view} hideWhenDone={Boolean(view.tool?.diffs?.length)} />
 		</>
 	),
-	Preview: ({ view, diff }) => (diff ? <Diff diff={diff} /> : <ArgsJson args={view.args} />),
+	Preview: ({ view, diffs }) => (diffs?.length ? <Diffs diffs={diffs} view={view} /> : <ArgsJson args={view.args} />),
 });
 
 registerKindRenderer("search", {
@@ -120,8 +162,8 @@ registerKindRenderer("generic", {
 	Body: ({ view }) => (
 		<>
 			<DiffOrArgs view={view} />
-			<Output view={view} hideWhenDone={Boolean(view.tool?.diff)} />
+			<Output view={view} hideWhenDone={Boolean(view.tool?.diffs?.length)} />
 		</>
 	),
-	Preview: ({ view, diff }) => (diff ? <Diff diff={diff} /> : <ArgsJson args={view.args} />),
+	Preview: ({ view, diffs }) => (diffs?.length ? <Diffs diffs={diffs} view={view} /> : <ArgsJson args={view.args} />),
 });

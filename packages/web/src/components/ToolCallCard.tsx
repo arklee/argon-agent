@@ -50,9 +50,10 @@ export function ToolCallCard({
 	const { t } = useTranslation();
 	const [openState, setOpen] = useState<boolean>();
 	const status = tool?.status ?? "pending";
-	const diff = tool?.diff;
+	const diffs = tool?.diffs?.length ? tool.diffs : undefined;
 	// Small diffs start expanded, like a code review; everything else starts collapsed.
-	const open = openState ?? (diff !== undefined && diff.split("\n").length <= 40 && status !== "blocked");
+	const diffLines = diffs?.reduce((sum, file) => sum + file.diff.split("\n").length, 0);
+	const open = openState ?? (diffLines !== undefined && diffLines <= 40 && status !== "blocked");
 	const effectiveArgs = tool?.args ?? args;
 	const children = tools ? childToolsOf(tools, toolCallId) : [];
 	const renderChildren = () =>
@@ -112,7 +113,7 @@ export function ToolCallCard({
 						{t("tools.nestedCount", { count: children.length })}
 					</span>
 				)}
-				{diff && <DiffStat diff={diff} />}
+				{diffs && <DiffStat diffs={diffs} />}
 				{awaitingApproval && (
 					<span className="shrink-0 text-[0.85em] text-amber-600 dark:text-amber-400">
 						{t("tools.waitingApproval")}

@@ -1,0 +1,9 @@
+*** Begin Patch
+*** Update File: a
+@@
+-one
++ONE
+@@
+-four
++FOUR
+*** End Patch

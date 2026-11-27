@@ -138,14 +138,16 @@
 
 - [ ] 预设控制显示偏好（D13 第 4 条）：例如“仅 Codemode”下脚本卡片的子调用默认展开；现在所有预设一样，默认折叠、标题显示“N 次调用”
 - [ ] shell 显示退出码：`ToolDisplay` 的 shell 类型加退出码（以及是否后台运行），卡片标题和输出区显示
-- [ ] 多文件 diff：`file_change.files` 已支持多个文件，但 diff 仍是单份的 `ToolCallState.diff`，每个文件不能单独带 diff。接 `apply_patch` 时需要
-- [ ] GPT 用 `apply_patch` 代替 edit / write（inline extension，TS 实现，不引入 Rust 程序；调研见 [tool-modes-comparison.md](tool-modes-comparison.md)）：
+- [x] 多文件 diff：`ToolCallState.diffs` 按文件给出 diff（`FileDiff[]`，协议版本 2），卡片和审批按文件分别显示；旧会话里的单份 diff 仍能读取
+- [x] GPT 用 `apply_patch` 代替 edit / write（inline extension，TS 实现，不引入 Rust 程序；调研见 [tool-modes-comparison.md](tool-modes-comparison.md)，决定见 D17）：
   - 解析和匹配移植 opencode 的 `packages/util/src/patch.ts`（MIT，注明出处）：四级匹配（完全一致 / 忽略行尾空白 / 忽略首尾空白 / Unicode 归一化）、BOM、CRLF；测试补上 Codex `codex-rs/apply-patch` 的用例
   - 用 pi 的 `constrainedSampling`（`openai_lark`）声明 Codex 的 Lark 语法，作为 grammar 工具发出，不接管 provider；工具名用 `apply_patch`
   - 两阶段执行（参考 opencode `plugin/patch.ts`）：先在内存里校验全部文件并算出多文件 diff，校验失败不写任何文件；审批卡片显示完整多文件 diff，一次审批；通过后再写盘
   - 写路径走与 edit / write 相同的沙箱检查；工作区外路径按沙箱越界处理
   - 按模型切换（参考 opencode `tool/model-policy.ts`）：GPT-5 及以上（排除 gpt-4、oss）隐藏 edit / write、启用 `apply_patch`，其他模型反之；与预设并列，可在设置里关闭，切换模型后下一轮生效
   - presenter 把它映射为 `file_change`，子调用（codemode 里调用）同样显示 diff
+  - 待补：Codex `codex-rs/apply-patch` 的场景用例只移植了一个（当时连不上 GitHub），其余用例和上游 commit 号待补
+  - 已知：用户装的扩展若注册同名 `apply_patch`（如 magpie 的 codex-exec-pi、pi-codex-conversion），会替换内置实现，两阶段、审批预览和沙箱检查都不再适用
 - [ ] 已知风险：pi-codex-conversion 的 `exec_command` / `write_stdin` / `apply_patch` 是独立 Rust 程序，不经过 `argon-sandbox`；用户在 `ARGON_HOME` 装了它时沙箱失效。至少要检测到不受沙箱覆盖的工具并在界面上标"未隔离"
 - [ ] 各类型的显示细节（按需）：read 内容语法高亮；search 结果做成列表；MCP 工具标题带上服务器名（可用 `source` 或命名空间）；按需注册第一个“来源 + 工具名”覆盖渲染器
 - [ ] pi-codex-conversion 的预设（Structured、Code、TS Notebook、VM Code）：设计上已预留，暂不实现；先按 [tool-modes-comparison.md](tool-modes-comparison.md) 的计划与 pi 传统模式、codemode 做对比

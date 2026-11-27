@@ -9,11 +9,12 @@
  * shape (no preview is computed), or when pi starts returning its own `details.diff`.
  */
 
+import type { FileDiff } from "@argon/shared";
 import type { ExtensionFactory, InlineExtension } from "@earendil-works/pi-coding-agent";
 
 export interface WriteDiffHost {
 	/** The diff previewed for this call, removed from the host once taken. */
-	takeWriteDiff(toolCallId: string): string | undefined;
+	takeWriteDiff(toolCallId: string): FileDiff[] | undefined;
 }
 
 export function createWriteDiffExtension(host: WriteDiffHost): InlineExtension {
@@ -25,8 +26,9 @@ export function createWriteDiffExtension(host: WriteDiffHost): InlineExtension {
 			const details: Record<string, unknown> =
 				event.details && typeof event.details === "object" ? { ...(event.details as object) } : {};
 			// Never replace a diff pi supplies itself.
+			if (Array.isArray(details.diffs)) return undefined;
 			if (typeof details.diff === "string" && details.diff) return undefined;
-			return { details: { ...details, diff } };
+			return { details: { ...details, diffs: diff } };
 		});
 	};
 	return { name: "argon-write-diff", factory, hidden: true };
