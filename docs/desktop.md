@@ -56,6 +56,8 @@ npm run pack:desktop
 
 x64 的安装程序位于 `packages/desktop/dist/*.exe`，未安装的应用位于 `win-unpacked/Argon.exe`。NSIS 安装器默认按用户安装，可选择安装目录。ARM64 输出目录为 `win-arm64-unpacked`，尚待验证。最终用户运行安装包无需另外安装 Node.js；使用 pi 的 bash 工具需要 Git for Windows，外部 MCP 命令需要它们各自的运行环境。
 
+Magpie 社区插件不需要用户安装 Node.js、npm 或 Bun：magpie-pi（0.3.0 起）首次安装或启动插件时会下载钉住版本的 Bun（一次性约 25–40 MB，校验 SHA-256），既用来 `bun add` 安装插件，也用来运行插件。backend 启动时按 `HTTP(S)_PROXY` / `NO_PROXY` 设置全局 fetch 代理（与 pi CLI 相同），所以这次下载和模型请求都会走代理。
+
 默认配置目录是 `%USERPROFILE%\.argon`，与 macOS 一样和 pi CLI 隔离。需要自定义位置时在启动前设置环境变量：
 
 ```powershell

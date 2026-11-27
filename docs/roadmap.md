@@ -148,6 +148,11 @@
 
 ## 技术债与已知问题
 
+- [ ] Windows 安装 Magpie 插件报 `spawn npm ENOENT`：根因是 magpie-pi 抽取时去掉了上游的 Bun 下载，改成依赖系统 npm 和 Bun。magpie-pi 分支 `feat/bun-only`（0.3.0）改为首次使用时下载钉住的 Bun 1.4.2 并用 `bun add` 安装；待发布后把 backend 依赖升到 `^0.3.0`，再在 Windows 打包版上实机验收安装和运行插件
+- [x] backend 的 fetch 不认 `HTTP(S)_PROXY`：SDK 嵌入不经过 pi CLI 的 `configureHttpDispatcher`，`http-proxy.ts` 按 pi 的参数装全局 `EnvHttpProxyAgent`
+- [ ] 只认环境变量代理：Windows / macOS 的系统代理设置（不导出环境变量的代理客户端）目前不生效，可在 desktop 里用 `session.resolveProxy` 查到后传给 backend
+- [ ] Windows backend 全量测试适配：本机运行发现 models-config 的 POSIX mode 断言、sandbox / uploads-gc 的 symlink 权限、session-prefs 的 ENOTDIR 预期失败，并出现文件替换 rename EPERM 日志；需区分平台语义、权限前提和实际文件替换问题
+
 - [x] 系统设置“常规 → 工具”集中展示默认工具模式和默认沙箱模式，保存后用于新会话
 
 - [x] 递归 grep / find 检查受保护路径的父目录，避免从上层目录搜索绕过凭据读保护
