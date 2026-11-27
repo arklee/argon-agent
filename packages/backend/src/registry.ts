@@ -27,6 +27,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { AuthFlows } from "./auth-flows.ts";
 import { refreshImagegenExposure } from "./codex-imagegen.ts";
+import { refreshWebSearchExposure } from "./codex-web-run.ts";
 import { log } from "./log.ts";
 import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
@@ -164,6 +165,7 @@ export class SessionRegistry {
 	async updateSettings(update: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> }): Promise<void> {
 		if (update.pi) await writePiSettings(this.options.agentDir, update.pi);
 		if (update.argon) await this.options.settings.update(update.argon);
+		if (update.argon?.webSearch !== undefined) refreshWebSearchExposure(this.options.settings);
 		if (update.argon?.imageGeneration !== undefined) refreshImagegenExposure(this.options.settings);
 		if (update.argon?.gptApplyPatch !== undefined)
 			for (const session of this.sessions.values()) session.refreshToolSet();

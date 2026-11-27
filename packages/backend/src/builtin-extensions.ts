@@ -23,6 +23,7 @@ import {
 import { applyPatchExtension } from "./apply-patch.ts";
 import { createCompactExtension } from "./codex-compact.ts";
 import { createImagegenExtension } from "./codex-imagegen.ts";
+import { createWebSearchExtension } from "./codex-web-run.ts";
 import { log } from "./log.ts";
 import { piMcp } from "./mcp-config.ts";
 import type { ArgonSettingsStore } from "./settings.ts";
@@ -96,6 +97,7 @@ export function createBuiltinExtensions(
 	return [
 		{ name: "apply-patch", factory: applyPatchExtension, builtin: true, replaceable: true },
 		{ name: "codex-compact", factory: createCompactExtension(settings), builtin: true, replaceable: true },
+		{ name: "codex-web-run", factory: createWebSearchExtension(settings), builtin: true, replaceable: true },
 		{ name: "codex-imagegen", factory: createImagegenExtension(settings), builtin: true, replaceable: true },
 		// Same order and flags as pi's builtInExtensions (dist/extensions/index.js).
 		...(llamaExtension ? [{ name: "llama.cpp", factory: llamaExtension, builtin: true } as InlineExtension] : []),

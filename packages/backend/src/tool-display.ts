@@ -30,6 +30,22 @@ function describeKnownTool(title: string, args: Record<string, unknown>): ToolDi
 			if (command) return { kind: "shell", title, command, summary: command.split(/\r\n?|\n/, 1)[0] };
 			break;
 		}
+		case "web_run": {
+			const operations = ["search_query", "image_query", "open", "click", "find"];
+			const summary = operations
+				.flatMap((op) =>
+					Array.isArray(args[op])
+						? (args[op] as unknown[]).flatMap((value) => {
+								if (!value || typeof value !== "object") return [];
+								const item = value as Record<string, unknown>;
+								const text = stringArg(item.q) ?? stringArg(item.ref_id);
+								return text ? [text] : [];
+							})
+						: [],
+				)
+				.join(" · ");
+			return { kind: "generic", title, summary: summary.slice(0, 240) };
+		}
 		case "codex_imagegen": {
 			const prompt = stringArg(args.prompt);
 			if (prompt !== undefined)

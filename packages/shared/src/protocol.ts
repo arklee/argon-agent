@@ -455,6 +455,8 @@ export interface ArgonSettings {
 	gptApplyPatch: boolean;
 	/** Offer the `codex_imagegen` tool (needs a ChatGPT login; uses its quota). Default false. */
 	imageGeneration: boolean;
+	/** Offer Codex web search using this backend’s login. Default false. */
+	webSearch: boolean;
 	/**
 	 * Compact through the provider's Responses compaction (opaque server checkpoint) where supported
 	 * (OpenAI / Codex / Azure Responses APIs), else pi's own summary. Default true.

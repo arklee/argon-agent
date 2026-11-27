@@ -350,3 +350,13 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 - 整包依赖 + patch-package：仍然要带上全部依赖，打包版也装不了用户包。
 - 移植时按 Argon 风格重写（D17 最初的做法）：几乎每一行都和上游不同，上游一更新合并就冲突，等于 fork。
 - git subtree / submodule：拉进整个仓库，只用一个文件时代价太大。
+
+## D19. Codex 联网搜索
+
+**状态**：实现于 2026-11-28。
+
+**决定**：按 D18 vendor `@howaboua/pi-codex-web-run` 的请求、schema、认证和 HTTP 文件，作为 `builtin:codex-web-run` inline extension 提供 `web_run`。不引入整套 conversion、终端渲染或 pi CLI 配置。Argon 的适配层经当前 backend 的 ModelRegistry 解析 Codex 凭据，即使聊天使用其他 provider 也保持该认证来源；由 Argon 设置控制工具曝光，并在执行时再次检查开关。关闭会话会取消请求，每次搜索设置两分钟超时。
+
+前端从持久化工具文本中的来源标题/链接或 JSON 结果生成卡片，不增加会话状态来源。搜索沿用现有工具审批；网页读取发生在 Codex 服务端。搜索请求使用稳定 session ID，来源文本可在本地重开后显示，但服务端 ref_id 的有效期由服务端决定。
+
+**边界**：该实现调用 Codex 的 `/alpha/search`，不把它视为公开 Responses API 的兼容承诺。暂不向主聊天请求注入托管 `web_search`，避免把功能限定在 OpenAI 模型并额外扩展 provider 事件处理。后续可在相同工具入口增加公开 API 后备实现。

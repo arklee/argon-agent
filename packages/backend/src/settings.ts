@@ -278,6 +278,7 @@ const DEFAULT_ARGON: ArgonSettings = {
 	defaultToolPreset: "classic",
 	gptApplyPatch: true,
 	imageGeneration: false,
+	webSearch: false,
 	remoteCompaction: true,
 	permissions: { defaultMode: "ask", rules: [] },
 	sandbox: { allowedDomains: [] },
@@ -328,6 +329,7 @@ export class ArgonSettingsStore {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
 				gptApplyPatch: typeof data.gptApplyPatch === "boolean" ? data.gptApplyPatch : true,
 				imageGeneration: typeof data.imageGeneration === "boolean" ? data.imageGeneration : false,
+				webSearch: typeof data.webSearch === "boolean" ? data.webSearch : false,
 				remoteCompaction: typeof data.remoteCompaction === "boolean" ? data.remoteCompaction : true,
 				sandbox: {
 					allowedDomains: validateAllowedDomains(data.sandbox?.allowedDomains) ? data.sandbox.allowedDomains : [],
@@ -358,6 +360,7 @@ export class ArgonSettingsStore {
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
 		if (patch.remoteCompaction !== undefined && typeof patch.remoteCompaction !== "boolean")
 			throw new Error("Invalid remoteCompaction");
+		if (patch.webSearch !== undefined && typeof patch.webSearch !== "boolean") throw new Error("Invalid webSearch");
 		if (patch.imageGeneration !== undefined && typeof patch.imageGeneration !== "boolean")
 			throw new Error("Invalid imageGeneration");
 		if (patch.gptApplyPatch !== undefined && typeof patch.gptApplyPatch !== "boolean")

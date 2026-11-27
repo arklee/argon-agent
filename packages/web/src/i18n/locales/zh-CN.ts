@@ -491,6 +491,8 @@ export const zhCN = {
 		general: {
 			gptApplyPatch: "GPT 模型使用 apply_patch",
 			gptApplyPatchDescription: "GPT-5 及以上用一个补丁工具代替 edit 和 write 修改文件。从下一轮开始生效。",
+			webSearch: "联网搜索",
+			webSearchDescription: "复用 Argon 中的 OpenAI Codex 登录，让任何模型都能搜索和阅读网页。",
 			imageGeneration: "生成图片",
 			imageGenerationDescription: "让模型用 codex_imagegen 生成图片。需要登录 ChatGPT，会消耗其额度；任何模型都能用。",
 			toolPreset: "默认工具预设",
@@ -696,6 +698,7 @@ export const zhCN = {
 	},
 	tools: {
 		fileOp: { add: "新建", delete: "删除" },
+		webSearch: { running: "正在检索网页…", results: "搜索结果" },
 		imagegen: { generating: "正在生成图片…", savedTo: "保存到" },
 		nestedCount_one: "{{count, number}} 次调用",
 		nestedCount_other: "{{count, number}} 次调用",

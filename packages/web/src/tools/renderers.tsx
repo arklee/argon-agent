@@ -4,7 +4,7 @@
  */
 
 import type { FileDiff, ToolDisplay } from "@argon/shared";
-import { ImageIcon, Loader2 } from "lucide-react";
+import { Globe, ImageIcon, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DiffStat, DiffView } from "@/components/DiffView";
 import { SessionImages } from "@/components/Images";
@@ -12,6 +12,8 @@ import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
 import { registerKindRenderer, registerToolRenderer, type ToolView } from "./registry";
+
+import { webSearchSources } from "./web-search";
 
 type DisplayOf<K extends ToolDisplay["kind"]> = Extract<ToolDisplay, { kind: K }>;
 
@@ -229,4 +231,56 @@ registerToolRenderer("codex_imagegen", {
 			<ImagegenPrompt view={view} />
 		</div>
 	),
+});
+
+function WebSearchInline({ view }: { view: ToolView }) {
+	const { t } = useTranslation();
+	const tool = view.tool;
+	if (tool?.status === "running")
+		return (
+			<div className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+				<Loader2 className="size-3.5 animate-spin" />
+				{t("tools.webSearch.running")}
+			</div>
+		);
+	if (tool?.status !== "done") return null;
+	const sources = webSearchSources(tool.output ?? "");
+	if (!sources.length) return null;
+	return (
+		<div className="space-y-2 border-t px-3 py-2">
+			<div className="flex items-center gap-2 text-xs text-muted-foreground">
+				<Globe className="size-3.5" />
+				{t("tools.webSearch.results")} · {sources.length}
+			</div>
+			<div className="grid max-h-56 gap-2 overflow-auto sm:grid-cols-2">
+				{sources.map((source) => (
+					<a
+						key={source.url}
+						href={source.url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="min-w-0 rounded-md border p-2 text-xs hover:bg-muted"
+					>
+						<div className="line-clamp-2 font-medium">{source.title}</div>
+						<div className="mt-1 truncate text-muted-foreground">{new URL(source.url).hostname}</div>
+					</a>
+				))}
+			</div>
+		</div>
+	);
+}
+registerToolRenderer("web_run", {
+	Inline: WebSearchInline,
+	Preview: ({ view }) => <ArgsJson args={view.args} />,
+	Body: ({ view }) =>
+		view.tool?.status === "done" ? (
+			<div className="max-h-96 overflow-auto text-xs">
+				<Markdown text={view.tool.output ?? ""} />
+			</div>
+		) : (
+			<>
+				<ArgsJson args={view.args} />
+				<Output view={view} />
+			</>
+		),
 });

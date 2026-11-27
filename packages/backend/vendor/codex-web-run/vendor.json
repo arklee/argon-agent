@@ -1,0 +1,17 @@
+{
+	"source": "npm:@howaboua/pi-codex-web-run",
+	"version": "0.0.14",
+	"license": "LICENSE",
+	"files": {
+		"src/contract.ts": "src/contract.ts",
+		"src/execute.ts": "src/execute.ts",
+		"src/request.ts": "src/request.ts",
+		"src/codex-runtime/resolve.ts": "src/codex-runtime/resolve.ts",
+		"src/codex-runtime/urls.ts": "src/codex-runtime/urls.ts",
+		"src/codex-runtime/types.ts": "src/codex-runtime/types.ts",
+		"src/codex-runtime/headers.ts": "src/codex-runtime/headers.ts",
+		"src/codex-runtime/http.ts": "src/codex-runtime/http.ts",
+		"src/codex-runtime/cloudflare-cookies.ts": "src/codex-runtime/cloudflare-cookies.ts"
+	},
+	"notes": "Core search request, schema, authentication and HTTP only. Omit TUI, conversion and event-bus adapters. Argon-owned config.ts disables pi CLI routing; auth-diagnostics.ts never reads CLI credentials. Argon extension selects its own ModelRegistry Codex login, controls exposure, cancellation and timeout. http.ts converts Headers to a record for the installed Node/undici types."
+}

@@ -521,6 +521,11 @@ function GeneralDefaults() {
 							/>
 						</Row>
 					)}
+					{global && (
+						<Row label={t("settings.general.webSearch")} description={t("settings.general.webSearchDescription")}>
+							<Switch checked={argon.webSearch} onCheckedChange={(webSearch) => void updateArgon({ webSearch })} />
+						</Row>
+					)}
 					<OverrideRow
 						label={t("settings.permissions.defaultMode")}
 						description={

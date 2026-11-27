@@ -499,6 +499,8 @@ export const en = {
 			gptApplyPatch: "apply_patch for GPT models",
 			gptApplyPatchDescription:
 				"GPT-5 and later edit files with one patch tool instead of edit and write. Takes effect from the next turn.",
+			webSearch: "Web search",
+			webSearchDescription: "Let any model search and read web pages using your Argon OpenAI Codex login.",
 			imageGeneration: "Image generation",
 			imageGenerationDescription:
 				"Let the model generate images with codex_imagegen. Needs a ChatGPT login and uses its quota; works with any model.",
@@ -710,6 +712,7 @@ export const en = {
 	},
 	tools: {
 		fileOp: { add: "New", delete: "Deleted" },
+		webSearch: { running: "Searching the web…", results: "Search results" },
 		imagegen: { generating: "Generating image…", savedTo: "Saves to" },
 		nestedCount_one: "{{count, number}} call",
 		nestedCount_other: "{{count, number}} calls",

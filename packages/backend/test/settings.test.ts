@@ -138,6 +138,25 @@ it("defaults image generation off, validates updates and loads persisted boolean
 		rmSync(settings.argonHome, { recursive: true, force: true });
 	}
 });
+it("defaults web search off, validates updates and loads persisted booleans", async () => {
+	const settings = await store();
+	try {
+		expect(settings.get().webSearch).toBe(false);
+		for (const webSearch of [true, false]) {
+			await settings.update({ webSearch });
+			await settings.load();
+			expect(settings.get().webSearch).toBe(webSearch);
+		}
+		await expect(settings.update({ webSearch: "true" as unknown as boolean })).rejects.toThrow("Invalid webSearch");
+		for (const data of [{}, { webSearch: "true" }]) {
+			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
+			await settings.load();
+			expect(settings.get().webSearch).toBe(false);
+		}
+	} finally {
+		rmSync(settings.argonHome, { recursive: true, force: true });
+	}
+});
 
 it("defaults remote compaction on, validates updates and loads persisted booleans", async () => {
 	const settings = await store();
