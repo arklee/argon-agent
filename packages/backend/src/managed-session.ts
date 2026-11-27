@@ -626,7 +626,7 @@ export class ManagedSession {
 	forkPoint(itemId: string): { leafId: string | undefined; text: string } {
 		const entryId = this.userEntryIdFor(itemId);
 		const entry = entryId ? this.session.sessionManager.getEntry(entryId) : undefined;
-		if (!entry || entry.type !== "message") throw new Error("That message is no longer in this branch");
+		if (entry?.type !== "message") throw new Error("That message is no longer in this branch");
 		const { text } = contentToText((entry.message as { content?: never }).content);
 		return { leafId: entry.parentId ?? undefined, text };
 	}

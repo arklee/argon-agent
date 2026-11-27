@@ -54,7 +54,9 @@ export async function smoke(
 				true,
 			);
 			await delay(100);
-			assert.equal(await clipboard.readText(), "Argon copy smoke: 中文\nsecond line", "Renderer can copy text");
+			// Windows clipboard text uses CRLF; compare logical lines across platforms.
+			const copiedText = (await clipboard.readText()).replace(/\r\n/g, "\n");
+			assert.equal(copiedText, "Argon copy smoke: 中文\nsecond line", "Renderer can copy text");
 			const readDenied = await getWindow()!.webContents.executeJavaScript(
 				"navigator.clipboard.readText().then(() => false, () => true)",
 				true,

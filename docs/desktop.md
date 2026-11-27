@@ -70,7 +70,7 @@ npm run smoke:desktop
 
 pi 会寻找 Git for Windows 提供的 Bash；非默认安装无法自动识别时，可在 Argon 设置中配置 `shellPath`，例如 `C:\Program Files\Git\bin\bash.exe`。不要把 WSL 项目路径直接当作 Windows backend 的项目路径：当前桌面 backend 运行在原生 Windows，WSL/SSH backend 切换仍属于远程阶段。
 
-`.github/workflows/desktop.yml` 在 Windows x64、macOS arm64 / x64 runner 上生成 NSIS / DMG 安装包、运行安全与路径测试以及无凭据的桌面冒烟，再上传安装包。该工作流仅由版本发布流程调用；普通分支推送和 PR 只运行 CI，不打包，也不发布 Release。工作流已配置，仍需 GitHub 实跑及实机验收。
+`.github/workflows/desktop.yml` 在 Windows x64、macOS arm64 runner 上生成 NSIS / DMG 安装包、运行安全与路径测试以及无凭据的桌面冒烟，再上传安装包。该工作流仅由版本发布流程调用；普通分支推送和 PR 只运行 CI，不打包，也不发布 Release。工作流已配置，仍需 GitHub 实跑及实机验收。
 
 ## 自动发布 Release
 
@@ -91,7 +91,7 @@ git push origin v0.1.1
 
 发布使用 GitHub 自动提供的 `GITHUB_TOKEN`，仅发布 job 授予 `contents: write`，无需个人 token；仓库/组织需允许 Actions 创建 Release。构建显式使用 `--publish never`，防止 electron-builder 在冒烟通过前发布。
 
-安装包文件名包含版本、系统与架构，避免 Intel 和 Apple Silicon 的 DMG 重名。当前没有配置开发者证书和 Apple 公证，下载后可能遇到系统安全提示；自动发版不等于应用内自动更新。若发布步骤因网络等原因失败且已创建 Release，先检查并删除该次不完整 Release（保留 tag），再重跑失败 job。
+安装包文件名包含版本、系统与架构，便于区分各平台产物；macOS 仅发布 Apple Silicon（arm64）版本。当前没有配置开发者证书和 Apple 公证，下载后可能遇到系统安全提示；自动发版不等于应用内自动更新。若发布步骤因网络等原因失败且已创建 Release，先检查并删除该次不完整 Release（保留 tag），再重跑失败 job。
 
 ## 集成窗口按钮
 

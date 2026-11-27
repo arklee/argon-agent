@@ -117,7 +117,7 @@ export class AuthFlows {
 
 	cancel(flowId: string): void {
 		const entry = this.flows.get(flowId);
-		if (!entry || entry.flow.status !== "running") return;
+		if (entry?.flow.status !== "running") return;
 		entry.controller.abort();
 		entry.answer?.reject(new Error("Login cancelled"));
 		entry.answer = undefined;
