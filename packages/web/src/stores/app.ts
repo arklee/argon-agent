@@ -50,7 +50,9 @@ interface AppState {
 	unloadedSessions: Record<string, true>;
 	modelScopes: Record<string, { scoped: (ModelRef & { thinkingLevel?: ThinkingLevel })[]; warnings: string[] } | null>;
 	refreshModelScope(cwd: string): Promise<void>;
+	/** Archiving shows a toast with an undo action. */
 	setArchived(summary: SessionSummary, archived: boolean): Promise<void>;
+	setPinned(summary: SessionSummary, pinned: boolean): Promise<void>;
 	clearDiagnostics(): Promise<void>;
 	composerDrafts: Record<string, string>;
 	refreshProjects(): Promise<void>;
@@ -331,6 +333,19 @@ export const useApp = create<AppState>((set, get) => ({
 	async setArchived(summary, archived) {
 		try {
 			await getClient().request("sessions.setArchived", { sessionPath: summary.sessionPath, archived });
+			await get().refreshSessions();
+		} catch (error) {
+			toast.error(errorMessage(error));
+			return;
+		}
+		if (archived)
+			toast(t("sessionMenu.archivedToast"), {
+				action: { label: t("common.undo"), onClick: () => void get().setArchived(summary, false) },
+			});
+	},
+	async setPinned(summary, pinned) {
+		try {
+			await getClient().request("sessions.setPinned", { sessionPath: summary.sessionPath, pinned });
 			await get().refreshSessions();
 		} catch (error) {
 			toast.error(errorMessage(error));

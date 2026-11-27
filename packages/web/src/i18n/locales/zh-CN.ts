@@ -70,6 +70,7 @@ export const zhCN = {
 		new: "在此项目中新建会话",
 	},
 	common: {
+		undo: "撤销",
 		remove: "移除",
 		retry: "重试",
 		actionsFor: "{{name}} 的操作",
@@ -297,7 +298,10 @@ export const zhCN = {
 		name: "会话名称",
 		rename: "重命名",
 		archive: "归档",
+		archivedToast: "会话已归档",
+		pin: "置顶",
 		unarchive: "取消归档",
+		unpin: "取消置顶",
 	},
 	settings: {
 		accounts: {
@@ -578,7 +582,6 @@ export const zhCN = {
 		noProjects: "还没有项目。",
 		noSessions: "还没有会话",
 		pin: "置顶",
-		projectActions: "项目操作（{{path}}）",
 		remove: "移除项目",
 		search: "搜索会话",
 		settingsShortcut: "设置（{{shortcut}}）",
@@ -591,6 +594,13 @@ export const zhCN = {
 		archivedTitle: "已归档的会话",
 		backToSessions: "返回会话列表",
 		noArchived: "没有已归档的会话",
+		newSession: "新建会话",
+		pinnedTitle: "置顶",
+		projectSettings: "项目设置…",
+		projectsTitle: "项目",
+		showLess: "收起",
+		showMore_one: "再显示 {{count, number}} 个",
+		showMore_other: "再显示 {{count, number}} 个",
 	},
 	thinking: {
 		high: "高",

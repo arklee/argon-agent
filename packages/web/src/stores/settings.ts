@@ -54,7 +54,8 @@ interface SettingsState {
 	settings: SettingsData | undefined;
 	plugins: PluginsData | undefined;
 
-	show(section?: SettingsSection, cwd?: string): void;
+	/** `scope` defaults to the last one used (global when there is no `cwd`). */
+	show(section?: SettingsSection, cwd?: string, scope?: "global" | "project"): void;
 	close(): void;
 	setSection(section: SettingsSection): void;
 	onGlobalEvent(event: GlobalEvent): void;
@@ -102,8 +103,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	cwd: undefined,
 	...initial,
 
-	show(section, cwd) {
-		set({ open: true, section: section ?? get().section, cwd, scope: cwd ? get().scope : "global" });
+	show(section, cwd, scope) {
+		set({ open: true, section: section ?? get().section, cwd, scope: cwd ? (scope ?? get().scope) : "global" });
 		void get().refreshSettings();
 		void get().refreshProviders();
 		void get().refreshFlows();
@@ -294,11 +295,15 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	},
 }));
 
-/** Open settings for the active session's project. */
-export function openSettings(section?: SettingsSection): void {
+/** Open settings for the active session's project, or (with `cwd`) for that project, in project scope. */
+export function openSettings(section?: SettingsSection, cwd?: string): void {
+	if (cwd) {
+		useSettings.getState().show(section, cwd, "project");
+		return;
+	}
 	const app = useApp.getState();
-	const cwd = app.activeSessionId ? app.sessionStates[app.activeSessionId]?.cwd : undefined;
-	useSettings.getState().show(section, cwd);
+	const active = app.activeSessionId ? app.sessionStates[app.activeSessionId]?.cwd : undefined;
+	useSettings.getState().show(section, active);
 }
 
 /** Flows to show for a provider: running, or finished but not yet dismissed. */

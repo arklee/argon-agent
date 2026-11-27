@@ -67,6 +67,7 @@ export const en = {
 		new: "Start a new session in this project",
 	},
 	common: {
+		undo: "Undo",
 		remove: "Remove",
 		retry: "Retry",
 		actionsFor: "Actions for {{name}}",
@@ -296,7 +297,10 @@ export const en = {
 		name: "Session name",
 		rename: "Rename",
 		archive: "Archive",
+		archivedToast: "Session archived",
+		pin: "Pin",
 		unarchive: "Unarchive",
+		unpin: "Unpin",
 	},
 	settings: {
 		accounts: {
@@ -585,7 +589,6 @@ export const en = {
 		noProjects: "No projects yet.",
 		noSessions: "No sessions yet",
 		pin: "Pin",
-		projectActions: "Actions for {{path}}",
 		remove: "Remove project",
 		search: "Search sessions",
 		settingsShortcut: "Settings ({{shortcut}})",
@@ -598,6 +601,13 @@ export const en = {
 		archivedTitle: "Archived sessions",
 		backToSessions: "Back to sessions",
 		noArchived: "No archived sessions",
+		newSession: "New session",
+		pinnedTitle: "Pinned",
+		projectSettings: "Project settings…",
+		projectsTitle: "Projects",
+		showLess: "Show less",
+		showMore_one: "Show {{count, number}} more",
+		showMore_other: "Show {{count, number}} more",
 	},
 	thinking: {
 		high: "High",

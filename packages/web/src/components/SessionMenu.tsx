@@ -1,8 +1,15 @@
 import type { SessionSummary } from "@argon/shared";
 import { Ellipsis } from "lucide-react";
-import { useRef, useState } from "react";
+import { Fragment, type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
 	Dialog,
 	DialogContent,
@@ -15,6 +22,7 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -45,27 +53,111 @@ export function SessionNameInput({ session, close }: { session: SessionSummary; 
 	);
 }
 
+interface SessionAction {
+	key: string;
+	label: string;
+	onSelect: () => void;
+	destructive?: boolean;
+	disabled?: boolean;
+	/** Draw a separator before this item. */
+	separated?: boolean;
+}
+
+/**
+ * The actions of a session, shared by the header's dropdown and the sidebar's context menu, plus the
+ * delete confirmation. Rename and delete run after the menu has closed and restored focus, so the
+ * rename input or the dialog keeps it.
+ */
+export function useSessionActions(session: SessionSummary, onRename: () => void, header = false) {
+	const { t } = useTranslation();
+	const [deleting, setDeleting] = useState(false);
+	const pending = useRef<"rename" | "delete" | undefined>(undefined);
+	const app = useApp.getState;
+	const saved = Boolean(session.sessionPath);
+	const actions: SessionAction[] = [
+		{ key: "rename", label: t("sessionMenu.rename"), onSelect: () => (pending.current = "rename") },
+		...(session.archived
+			? []
+			: [
+					{
+						key: "pin",
+						label: session.pinnedAt === undefined ? t("sessionMenu.pin") : t("sessionMenu.unpin"),
+						disabled: !saved,
+						onSelect: () => void app().setPinned(session, session.pinnedAt === undefined),
+					},
+				]),
+		{
+			key: "duplicate",
+			label: header ? t("sessionMenu.duplicateSession") : t("sessionMenu.duplicate"),
+			onSelect: () => void app().duplicateSession(session),
+		},
+		{
+			key: "archive",
+			label: session.archived ? t("sessionMenu.unarchive") : t("sessionMenu.archive"),
+			disabled: !saved,
+			separated: true,
+			onSelect: () => void app().setArchived(session, !session.archived),
+		},
+		{
+			key: "delete",
+			label: header ? t("sessionMenu.deleteSession") : t("sessionMenu.delete"),
+			destructive: true,
+			disabled: !saved,
+			onSelect: () => (pending.current = "delete"),
+		},
+	];
+	const onCloseAutoFocus = (e: Event) => {
+		if (!pending.current) return;
+		e.preventDefault();
+		if (pending.current === "rename") onRename();
+		else setDeleting(true);
+		pending.current = undefined;
+	};
+	const deleteDialog = (
+		<Dialog open={deleting} onOpenChange={setDeleting}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{t("sessionMenu.confirmDelete")}</DialogTitle>
+					<DialogDescription>{t("sessionMenu.deleteDescription")}</DialogDescription>
+				</DialogHeader>
+				<p className="truncate text-sm">{sessionTitle(session)}</p>
+				<DialogFooter>
+					<Button variant="outline" onClick={() => setDeleting(false)}>
+						{t("common.cancel")}
+					</Button>
+					<Button
+						variant="destructive"
+						onClick={() => {
+							setDeleting(false);
+							void useApp.getState().deleteSession(session);
+						}}
+					>
+						{t("sessionMenu.delete")}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+	return { actions, onCloseAutoFocus, deleteDialog, requestDelete: () => setDeleting(true) };
+}
+
+/** The session's actions behind a "…" button (chat header). */
 export function SessionMenu({
 	session,
 	onRename,
-	open,
-	onOpenChange,
 	className,
 	header = false,
 }: {
 	session: SessionSummary;
 	onRename: () => void;
-	open?: boolean;
-	onOpenChange?: (open: boolean) => void;
 	className?: string;
 	header?: boolean;
 }) {
 	const { t } = useTranslation();
-	const [deleting, setDeleting] = useState(false);
-	const pendingAction = useRef<"rename" | "delete" | undefined>(undefined);
+	const { actions, onCloseAutoFocus, deleteDialog } = useSessionActions(session, onRename, header);
 	return (
 		<>
-			<DropdownMenu open={open} onOpenChange={onOpenChange}>
+			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
 					<Button
 						variant="ghost"
@@ -76,67 +168,57 @@ export function SessionMenu({
 						<Ellipsis />
 					</Button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent
-					align="end"
-					onCloseAutoFocus={(e) => {
-						if (pendingAction.current) {
-							e.preventDefault();
-							if (pendingAction.current === "rename") onRename();
-							else setDeleting(true);
-							pendingAction.current = undefined;
-						}
-					}}
-				>
-					<DropdownMenuItem
-						onSelect={() => {
-							pendingAction.current = "rename";
-						}}
-					>
-						{t("sessionMenu.rename")}
-					</DropdownMenuItem>
-					<DropdownMenuItem onSelect={() => void useApp.getState().duplicateSession(session)}>
-						{header ? t("sessionMenu.duplicateSession") : t("sessionMenu.duplicate")}
-					</DropdownMenuItem>
-					<DropdownMenuItem
-						disabled={!session.sessionPath}
-						onSelect={() => void useApp.getState().setArchived(session, !session.archived)}
-					>
-						{session.archived ? t("sessionMenu.unarchive") : t("sessionMenu.archive")}
-					</DropdownMenuItem>
-					<DropdownMenuItem
-						variant="destructive"
-						disabled={!session.sessionPath}
-						onSelect={() => {
-							pendingAction.current = "delete";
-						}}
-					>
-						{header ? t("sessionMenu.deleteSession") : t("sessionMenu.delete")}
-					</DropdownMenuItem>
+				<DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
+					{actions.map((action) => (
+						<Fragment key={action.key}>
+							{action.separated && <DropdownMenuSeparator />}
+							<DropdownMenuItem
+								variant={action.destructive ? "destructive" : "default"}
+								disabled={action.disabled}
+								onSelect={action.onSelect}
+							>
+								{action.label}
+							</DropdownMenuItem>
+						</Fragment>
+					))}
 				</DropdownMenuContent>
 			</DropdownMenu>
-			<Dialog open={deleting} onOpenChange={setDeleting}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>{t("sessionMenu.confirmDelete")}</DialogTitle>
-						<DialogDescription>{t("sessionMenu.deleteDescription")}</DialogDescription>
-					</DialogHeader>
-					<p className="truncate text-sm">{sessionTitle(session)}</p>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setDeleting(false)}>
-							{t("common.cancel")}
-						</Button>
-						<Button
-							variant="destructive"
-							onClick={() => {
-								setDeleting(false);
-								void useApp.getState().deleteSession(session);
-							}}
-						>
-							{t("sessionMenu.delete")}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			{deleteDialog}
 		</>
+	);
+}
+
+/** Right-click menu with the given session actions around `children` (a sidebar row). */
+export function SessionContextMenu({
+	actions,
+	onCloseAutoFocus,
+	disabled,
+	children,
+}: {
+	actions: SessionAction[];
+	onCloseAutoFocus: (e: Event) => void;
+	disabled?: boolean;
+	children: ReactNode;
+}) {
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger asChild disabled={disabled}>
+				{children}
+			</ContextMenuTrigger>
+			<ContextMenuContent onCloseAutoFocus={onCloseAutoFocus}>
+				{actions.map((action) => (
+					<Fragment key={action.key}>
+						{action.separated && <ContextMenuSeparator />}
+						<ContextMenuItem
+							variant={action.destructive ? "destructive" : "default"}
+							disabled={action.disabled}
+							onSelect={action.onSelect}
+						>
+							{action.label}
+						</ContextMenuItem>
+					</Fragment>
+				))}
+			</ContextMenuContent>
+		</ContextMenu>
 	);
 }
