@@ -5,11 +5,13 @@ import { t } from "@/i18n";
  */
 
 import type {
+	ArgonProjectSettings,
 	ArgonSettings,
 	AuthFlow,
 	AuthType,
 	BunSource,
 	GlobalEvent,
+	McpConfigFile,
 	PiSettings,
 	PluginInfo,
 	PluginsStatus,
@@ -24,10 +26,12 @@ import { getClient, useApp } from "@/stores/app";
 
 const PLUGIN_CHANGE_TIMEOUT_MS = 10 * 60_000;
 
-export type SettingsSection = "general" | "accounts" | "permissions" | "plugins" | "resources";
+export type SettingsSection = "general" | "accounts" | "mcp" | "permissions" | "plugins" | "resources";
 
 interface SettingsData {
 	project?: ProjectSettingsInfo;
+	/** The project's private Argon settings (with a cwd). */
+	argonProject?: ArgonProjectSettings;
 	pi: PiSettings;
 	resources: ResourceSettings[];
 	argon: ArgonSettings;
@@ -65,6 +69,10 @@ interface SettingsState {
 	refreshFlows(): Promise<void>;
 	refreshSettings(): Promise<void>;
 	refreshPlugins(): Promise<void>;
+	/** The global mcp.json and the project's (with a cwd). */
+	mcp: { global: McpConfigFile; project?: McpConfigFile } | undefined;
+	refreshMcp(): Promise<void>;
+	updateArgonProject(set: ArgonProjectSettings, unset?: (keyof ArgonProjectSettings)[]): Promise<void>;
 
 	updatePi(patch: Partial<PiSettings>): Promise<void>;
 	updateArgon(patch: Partial<ArgonSettings>): Promise<void>;
@@ -95,6 +103,7 @@ const initial = {
 	flows: {},
 	settings: undefined,
 	plugins: undefined,
+	mcp: undefined,
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -109,6 +118,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		void get().refreshProviders();
 		void get().refreshFlows();
 		void get().refreshPlugins();
+		void get().refreshMcp();
 	},
 	setScope(scope) {
 		set({ scope });
@@ -132,6 +142,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		if (event.type === "plugins_status") {
 			const plugins = get().plugins;
 			if (plugins) set({ plugins: { ...plugins, status: event.status } });
+		}
+		if (event.type === "mcp_config_changed" && get().open) {
+			void get().refreshMcp();
+			void get().refreshSettings();
 		}
 		if (event.type === "providers_changed" && get().open) {
 			void get().refreshProviders();
@@ -162,6 +176,29 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		} catch (e) {
 			toast.error(t("notifications.loadSettings", { error: errorMessage(e) }));
 		}
+	},
+	async refreshMcp() {
+		try {
+			set({ mcp: await getClient().request("mcp.config.get", { cwd: get().cwd }) });
+		} catch (e) {
+			toast.error(t("notifications.loadSettings", { error: errorMessage(e) }));
+		}
+	},
+	async updateArgonProject(patch, unset) {
+		const cwd = get().cwd;
+		if (!cwd) return;
+		const current = get().settings;
+		if (current) {
+			const values = { ...current.argonProject, ...patch };
+			for (const key of unset ?? []) delete values[key];
+			set({ settings: { ...current, argonProject: values } });
+		}
+		try {
+			await getClient().request("settings.updateArgonProject", { cwd, set: patch, unset });
+		} catch (e) {
+			toast.error(t("notifications.save", { error: errorMessage(e) }));
+		}
+		await get().refreshSettings();
 	},
 	async refreshPlugins() {
 		try {

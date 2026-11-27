@@ -63,9 +63,9 @@
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
-- [ ] MCP 配置入口（D16）：设置页 MCP 分区，全局 mcp.json 和项目 `.argon/mcp.json` 的服务器增删改、编辑 JSON，“新对话默认开启”开关（全局写 mcp.json，项目写私有设置）
-- [ ] 对话级 MCP 开关（D16）：输入框工具栏的 MCP 弹层，开关只作用于当前对话（会话条目 `argon.mcp_servers`），MCP 面板的启用/停用也改为对话级
-- [ ] 项目设置（D16）：设置页项目范围对应侧栏项目，可从项目菜单进入；权限模式、工具预设、MCP 默认开启存在 `$ARGON_HOME/settings.json` 的 `projects` 里，新会话按 会话 > 项目 > 全局 取值
+- [x] MCP 配置入口（D16）：设置页 MCP 分区，全局 mcp.json 和项目 `.argon/mcp.json` 的服务器增删改、编辑 JSON，“新对话默认开启”开关（全局写 mcp.json，项目写私有设置）
+- [x] 对话级 MCP 开关（D16）：输入框工具栏的 MCP 弹层，开关只作用于当前对话（会话条目 `argon.mcp_servers`），MCP 面板的启用/停用也改为对话级
+- [x] 项目设置（D16）：设置页项目范围对应侧栏项目，可从项目菜单进入；权限模式、工具预设、MCP 默认开启存在 `$ARGON_HOME/settings.json` 的 `projects` 里，新会话按 会话 > 项目 > 全局 取值
 - [x] 项目信任（project trust）流程：信任未决的项目先按不信任加载，对话区顶部横幅询问（信任 / 信任上级目录 / 仅本次 / 不信任），顶栏盾牌图标可随时更改；`projects.setTrust` 会重新加载受影响的会话（运行中的等本轮结束）。见 decisions D11
 - [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误：`SessionState.diagnostics`，顶栏警告图标显示数量，弹层列出来源、信息和路径
 - [x] 更丰富地渲染扩展 widget：`SessionState.widgets` 记录 key、行和位置（输入框上方或下方），组件型 widget 由 backend 以 100 列无头渲染成文本（剥离 ANSI，`requestRender` 时重绘）；`setWorkingMessage` 替换“正在处理”提示
@@ -153,6 +153,7 @@
 
 ## 技术债与已知问题
 
+- [ ] 扩展自己注册的 MCP 服务器（`registerMcpServer`，不在 mcp.json 里）在对话里关闭只在本次运行时有效：pi 对 `scope: "extension"` 的条目不调用 `updateConfig`，会话条目不会写入，重新打开会话后恢复为开启
 - [x] Windows 安装 Magpie 插件报 `spawn npm ENOENT`：根因是 magpie-pi 抽取时去掉了上游的 Bun 下载，改成依赖系统 npm 和 Bun。magpie-pi 0.3.0 改为首次使用时下载钉住的 Bun 1.4.2 并用 `bun add` 安装，backend 已升级；`plugins.change` 请求超时放宽到 10 分钟以容纳首次下载。Linux 端到端已验证，Windows 打包版仍待实机验收安装和运行插件
 - [x] backend 的 fetch 不认 `HTTP(S)_PROXY`：SDK 嵌入不经过 pi CLI 的 `configureHttpDispatcher`，`http-proxy.ts` 按 pi 的参数装全局 `EnvHttpProxyAgent`
 - [ ] 只认环境变量代理：Windows / macOS 的系统代理设置（不导出环境变量的代理客户端）目前不生效，可在 desktop 里用 `session.resolveProxy` 查到后传给 backend

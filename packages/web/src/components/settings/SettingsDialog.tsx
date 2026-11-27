@@ -3,6 +3,7 @@ import {
 	FolderTree,
 	KeyRound,
 	type LucideIcon,
+	Plug,
 	Puzzle,
 	RotateCcw,
 	ShieldCheck,
@@ -14,8 +15,9 @@ import { Trans, useTranslation } from "react-i18next";
 import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
 import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings/EnabledModelsEditor";
+import { McpSection } from "@/components/settings/McpSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
-import { Group, Loading, Row } from "@/components/settings/parts";
+import { Group, Loading, Row, ScopeSwitch } from "@/components/settings/parts";
 import { presetLabel } from "@/components/ToolPresetPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -23,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
-import { basename, displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
+import { displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
 import { clampTextSize, getTextSize, MAX_TEXT_SIZE, MIN_TEXT_SIZE, setTextSize } from "@/lib/text-size";
 import { setThemePreference, type ThemePreference, useThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -33,6 +35,7 @@ import { type SettingsSection, useSettings } from "@/stores/settings";
 const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
 	{ id: "general", icon: SlidersHorizontal },
 	{ id: "accounts", icon: KeyRound },
+	{ id: "mcp", icon: Plug },
 	{ id: "permissions", icon: ShieldCheck },
 	{ id: "plugins", icon: Puzzle },
 	{ id: "resources", icon: FolderTree },
@@ -81,6 +84,7 @@ export function SettingsDialog() {
 					<div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
 						{section === "general" && <GeneralSection />}
 						{section === "accounts" && <AccountsSection />}
+						{section === "mcp" && <McpSection />}
 						{section === "permissions" && <PermissionsSection />}
 						{section === "plugins" && <PluginsSection />}
 						{section === "resources" && <ResourcesSection />}
@@ -112,7 +116,7 @@ function useScopedPi() {
 	};
 }
 
-/** A settings row that, in project scope, marks project overrides and can reset them to the global value. */
+/** A pi settings row that, in project scope, marks project overrides and can reset them to the global value. */
 function ScopedRow({
 	settingKey,
 	label,
@@ -124,9 +128,34 @@ function ScopedRow({
 	description?: string;
 	children: ReactNode;
 }) {
-	const { t } = useTranslation();
 	const { overridden, reset } = useScopedPi();
-	const isSet = overridden(settingKey);
+	return (
+		<OverrideRow
+			label={label}
+			description={description}
+			isSet={overridden(settingKey)}
+			onReset={() => void reset(settingKey)}
+		>
+			{children}
+		</OverrideRow>
+	);
+}
+
+/** A row whose value may be set for the project (marked, with a button back to the global value). */
+export function OverrideRow({
+	label,
+	description,
+	isSet,
+	onReset,
+	children,
+}: {
+	label: string;
+	description?: string;
+	isSet: boolean;
+	onReset(): void;
+	children: ReactNode;
+}) {
+	const { t } = useTranslation();
 	return (
 		<Row
 			label={label}
@@ -152,7 +181,7 @@ function ScopedRow({
 					className="ml-1 text-muted-foreground"
 					aria-label={t("settings.general.useGlobal")}
 					title={t("settings.general.useGlobal")}
-					onClick={() => void reset(settingKey)}
+					onClick={onReset}
 				>
 					<RotateCcw />
 				</Button>
@@ -324,40 +353,6 @@ function TextSizeInput() {
 	);
 }
 
-function ScopeSwitch() {
-	const { t } = useTranslation();
-	const cwd = useSettings((s) => s.cwd);
-	const scope = useSettings((s) => s.scope);
-	const setScope = useSettings((s) => s.setScope);
-	if (!cwd) return null;
-	const options = [
-		{ value: "global", label: t("settings.general.scopeGlobal") },
-		{ value: "project", label: `${t("settings.general.scopeProject")} · ${basename(cwd) || cwd}` },
-	] as const;
-	return (
-		<fieldset
-			aria-label={t("settings.general.scope")}
-			className="m-0 min-w-0 border-0 mb-5 flex rounded-lg bg-muted p-0.5"
-		>
-			{options.map((option) => (
-				<button
-					key={option.value}
-					type="button"
-					aria-pressed={scope === option.value}
-					title={option.value === "project" ? cwd : undefined}
-					onClick={() => setScope(option.value)}
-					className={cn(
-						"min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors",
-						scope === option.value && "bg-background font-medium text-foreground shadow-xs",
-					)}
-				>
-					{option.label}
-				</button>
-			))}
-		</fieldset>
-	);
-}
-
 /** Where project settings are saved, and why they might not apply. */
 function ProjectScopeNote() {
 	const { t } = useTranslation();
@@ -376,6 +371,7 @@ function ProjectScopeNote() {
 					components={{ path: <code className="font-mono break-all" /> }}
 				/>
 			</p>
+			<p>{t("settings.general.projectPrivate")}</p>
 			{!project.trusted && (
 				<p className="rounded-md bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-300">
 					{t("settings.general.projectUntrusted")}
@@ -445,11 +441,13 @@ function GeneralDefaults() {
 	const argon = useSettings((s) => s.settings?.argon);
 	const updatePi = useSettings((s) => s.updatePi);
 	const updateArgon = useSettings((s) => s.updateArgon);
+	const argonProject = useSettings((s) => s.settings?.argonProject);
+	const updateArgonProject = useSettings((s) => s.updateArgonProject);
 	const presets = useApp((s) => s.toolPresets);
 	const sandbox = useApp((s) => s.environment?.sandbox);
 	const sandboxSupported = sandbox?.supported !== false;
 	if (!pi) return <Loading />;
-	// Backend-wide choices (tool preset, sandbox mode, project trust) have no project-level setting.
+	// In project scope, tool preset and permission mode are the project's private Argon settings (D16).
 	const global = project === undefined;
 	const queueModes = [
 		{ value: "one-at-a-time", label: t("settings.general.oneAtATime") },
@@ -485,31 +483,44 @@ function GeneralDefaults() {
 					<EnabledModels />
 				</ScopedRow>
 			</Group>
-			{global && argon && (
+			{argon && (
 				<Group title={t("settings.general.tools")}>
-					<Row label={t("settings.general.toolPreset")} description={t("settings.general.toolPresetDescription")}>
+					<OverrideRow
+						label={t("settings.general.toolPreset")}
+						description={t("settings.general.toolPresetDescription")}
+						isSet={!global && argonProject?.toolPreset !== undefined}
+						onReset={() => void updateArgonProject({}, ["toolPreset"])}
+					>
 						<Choice
-							value={argon.defaultToolPreset}
+							value={(global ? undefined : argonProject?.toolPreset) ?? argon.defaultToolPreset}
 							options={presets.map((preset) => ({ value: preset.id, label: presetLabel(preset.id, presets, t) }))}
-							onChange={(defaultToolPreset) => void updateArgon({ defaultToolPreset })}
+							onChange={(toolPreset) =>
+								void (global ? updateArgon({ defaultToolPreset: toolPreset }) : updateArgonProject({ toolPreset }))
+							}
 						/>
-					</Row>
-					<Row
+					</OverrideRow>
+					<OverrideRow
 						label={t("settings.permissions.defaultMode")}
 						description={
 							sandboxSupported ? t("settings.permissions.defaultModeDescription") : t("chat.sandboxUnavailable")
 						}
+						isSet={!global && argonProject?.permissionMode !== undefined}
+						onReset={() => void updateArgonProject({}, ["permissionMode"])}
 					>
 						<Choice
 							ariaLabel={t("settings.permissions.defaultMode")}
-							value={argon.permissions.defaultMode}
+							value={(global ? undefined : argonProject?.permissionMode) ?? argon.permissions.defaultMode}
 							options={[
 								{ value: "ask", label: t("chat.askChanges"), disabled: !sandboxSupported },
 								{ value: "auto", label: t("chat.runEverything") },
 							]}
-							onChange={(defaultMode) => void updateArgon({ permissions: { ...argon.permissions, defaultMode } })}
+							onChange={(defaultMode) =>
+								void (global
+									? updateArgon({ permissions: { ...argon.permissions, defaultMode } })
+									: updateArgonProject({ permissionMode: defaultMode }))
+							}
 						/>
-					</Row>
+					</OverrideRow>
 				</Group>
 			)}
 			<Group title={t("settings.general.conversation")}>

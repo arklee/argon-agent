@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AttachmentStrip, useAttachments } from "@/components/Attachments";
 import { ContextMeter } from "@/components/ContextMeter";
 import { ExtensionWidgets } from "@/components/ExtensionWidgets";
-import { hasMcpPanel } from "@/components/McpPanel";
+import { hasMcpPanel, McpPicker } from "@/components/McpPanel";
 import { ModelPicker, PermissionPicker, ThinkingPicker } from "@/components/SessionControls";
 import { SlashCompletionMenu, type Suggestion, useSlashCompletion } from "@/components/SlashCompletion";
 import { ToolPresetPicker } from "@/components/ToolPresetPicker";
@@ -259,6 +259,7 @@ export function Composer({ session }: { session: SessionState }) {
 						</Button>
 						<PermissionPicker session={session} />
 						<ToolPresetPicker session={session} />
+						<McpPicker mcp={session.mcp} />
 					</div>
 					{/* Only the model name gives way when space runs out. */}
 					<div className="flex min-w-0 flex-1 items-center justify-end gap-0.5">

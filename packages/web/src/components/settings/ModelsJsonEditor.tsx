@@ -1,4 +1,4 @@
-/** Raw editor for pi's models.json, for everything the provider form does not cover. */
+/** Raw editors for pi's JSON config files (models.json, mcp.json), for everything the forms do not cover. */
 
 import { AgentClientError } from "@argon/shared";
 import { Loader2, RotateCcw } from "lucide-react";
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { getClient } from "@/stores/app";
 
-const TEMPLATE = `{
+const MODELS_TEMPLATE = `{
 	"$schema": "https://pi.dev/schemas/models.schema.json",
 	"providers": {}
 }
@@ -23,6 +23,40 @@ interface Loaded {
 }
 
 export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
+	return (
+		<JsonFileEditor
+			open={open}
+			onOpenChange={onOpenChange}
+			fileName="models.json"
+			template={MODELS_TEMPLATE}
+			load={() => getClient().request("models.config.get", {})}
+			save={(text, version) => getClient().request("models.config.set", { text, version })}
+		/>
+	);
+}
+
+export function JsonFileEditor({
+	open,
+	onOpenChange,
+	fileName,
+	template,
+	load: loadFile,
+	save: saveFile,
+	onSaved,
+	hint,
+}: {
+	open: boolean;
+	onOpenChange(open: boolean): void;
+	fileName: string;
+	/** Shown when the file is empty or missing. */
+	template: string;
+	load(): Promise<Loaded>;
+	/** Rejects with an AgentClientError "conflict" when the file changed since `version`. */
+	save(text: string, version: string): Promise<unknown>;
+	onSaved?(): void;
+	/** Footer hint; defaults to the models.json one. */
+	hint?: string;
+}) {
 	const { t } = useTranslation();
 	const [loaded, setLoaded] = useState<Loaded>();
 	const [text, setText] = useState("");
@@ -34,9 +68,9 @@ export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpen
 		setError(undefined);
 		setConflict(false);
 		try {
-			const result = await getClient().request("models.config.get", {});
+			const result = await loadFile();
 			setLoaded(result);
-			setText(result.text || TEMPLATE);
+			setText(result.text || template);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		}
@@ -53,8 +87,9 @@ export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpen
 		setSaving(true);
 		setError(undefined);
 		try {
-			await getClient().request("models.config.set", { text, version: loaded.version });
+			await saveFile(text, loaded.version);
 			onOpenChange(false);
+			onSaved?.();
 		} catch (e) {
 			setConflict(e instanceof AgentClientError && e.code === "conflict");
 			setError(e instanceof Error ? e.message : String(e));
@@ -63,15 +98,15 @@ export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpen
 		}
 	};
 
-	const dirty = loaded !== undefined && text !== (loaded.text || TEMPLATE);
+	const dirty = loaded !== undefined && text !== (loaded.text || template);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="flex h-[min(760px,90vh)] flex-col gap-0 p-0 sm:max-w-3xl">
 				<div className="border-b px-6 py-4 pr-12">
-					<DialogTitle className="text-base">{t("settings.modelsJson.title")}</DialogTitle>
+					<DialogTitle className="text-base">{t("settings.modelsJson.title", { file: fileName })}</DialogTitle>
 					<DialogDescription className="truncate font-mono text-xs" title={loaded?.path}>
-						{loaded?.path ?? "models.json"}
+						{loaded?.path ?? fileName}
 					</DialogDescription>
 				</div>
 				{loaded?.error && !dirty && (
@@ -97,7 +132,7 @@ export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpen
 									requestAnimationFrame(() => el.setSelectionRange(selectionStart + 1, selectionStart + 1));
 								}
 							}}
-							aria-label={t("settings.modelsJson.title")}
+							aria-label={t("settings.modelsJson.title", { file: fileName })}
 							spellCheck={false}
 							autoComplete="off"
 							className="field-sizing-fixed h-full resize-none font-mono text-xs leading-relaxed [tab-size:2] md:text-xs"
@@ -113,7 +148,7 @@ export function ModelsJsonEditor({ open, onOpenChange }: { open: boolean; onOpen
 								{error}
 							</span>
 						) : (
-							t("settings.modelsJson.hint")
+							(hint ?? t("settings.modelsJson.hint"))
 						)}
 					</p>
 					<div className="flex shrink-0 items-center gap-2">

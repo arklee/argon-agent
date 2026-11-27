@@ -2,6 +2,7 @@ import type { McpExposure, McpServerStatus, McpStatus } from "@argon/shared";
 import { ChevronRight, Loader2, Plug } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toolbarButton } from "@/components/SessionControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -13,9 +14,19 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
+import { openSettings } from "@/stores/settings";
 
 const EXPOSURES = ["codemode", "deferred", "direct", "hidden"] as const satisfies readonly McpExposure[];
 
@@ -211,5 +222,64 @@ export function McpPanel({ mcp }: { mcp: McpStatus | undefined }) {
 				</div>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+/**
+ * Composer-toolbar switches for the session's MCP servers (decisions D16): on/off applies to this
+ * session only. Hidden when the session has no servers.
+ */
+export function McpPicker({ mcp }: { mcp: McpStatus | undefined }) {
+	const { t } = useTranslation();
+	const mcpAction = useApp((s) => s.mcpAction);
+	const setPanelOpen = useApp((s) => s.setMcpPanelOpen);
+	if (!mcp || mcp.servers.length === 0) return null;
+	const enabled = mcp.servers.filter((s) => s.enabled).length;
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button
+					variant="ghost"
+					size="sm"
+					className={toolbarButton}
+					title={t("mcp.pickerTitle", { enabled, total: mcp.servers.length })}
+				>
+					<span className="relative">
+						<Plug />
+						{enabled > 0 && (
+							<span className={cn("absolute -top-0.5 -right-0.5 size-1.5 rounded-full", DOT[overallTone(mcp)])} />
+						)}
+					</span>
+					<span className="@max-md/toolbar:hidden">{t("mcp.pickerLabel", { count: enabled })}</span>
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="start" className="w-72">
+				<DropdownMenuLabel>{t("mcp.pickerHeading")}</DropdownMenuLabel>
+				{mcp.servers.map((server) => {
+					const label = STATE_LABELS.get(server.state);
+					return (
+						<DropdownMenuCheckboxItem
+							key={server.name}
+							checked={server.enabled}
+							// Keep the menu open to switch several servers.
+							onSelect={(e) => {
+								e.preventDefault();
+								void mcpAction(server.name, server.enabled ? "disable" : "enable");
+							}}
+						>
+							<span className={cn("size-1.5 shrink-0 rounded-full", DOT[toneOf(server)])} />
+							<span className="min-w-0 flex-1 truncate">{server.name}</span>
+							{server.enabled && label && server.state !== "connected" && (
+								<span className="shrink-0 text-xs text-muted-foreground">{t(label)}</span>
+							)}
+						</DropdownMenuCheckboxItem>
+					);
+				})}
+				<DropdownMenuSeparator />
+				<p className="px-1.5 py-1 text-xs text-muted-foreground">{t("mcp.pickerNote")}</p>
+				<DropdownMenuItem onSelect={() => setPanelOpen(true)}>{t("mcp.details")}</DropdownMenuItem>
+				<DropdownMenuItem onSelect={() => openSettings("mcp")}>{t("mcp.manage")}</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
