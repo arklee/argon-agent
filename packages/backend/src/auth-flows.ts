@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import type { AuthFlow, AuthFlowEvent, AuthPromptInfo, AuthType, ProviderInfo } from "@argon/shared";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { log } from "./log.ts";
+import { isBuiltinProvider, type ModelsConfigStore } from "./models-config.ts";
 
 const FINISHED_FLOW_TTL_MS = 10 * 60_000;
 const MAX_EVENTS = 20;
@@ -34,13 +35,16 @@ export class AuthFlows {
 		private readonly onFlow: (flow: AuthFlow) => void,
 		private readonly onProvidersChanged: () => void,
 		private readonly isPluginProvider: (providerId: string) => boolean,
+		private readonly modelsConfig: ModelsConfigStore,
 	) {}
 
-	listProviders(): ProviderInfo[] {
+	async listProviders(): Promise<ProviderInfo[]> {
+		const configs = await this.modelsConfig.providerConfigs();
 		const available = this.runtime.getAvailableSnapshot();
 		return this.runtime
 			.getProviders()
 			.map((provider): ProviderInfo => {
+				const config = configs.get(provider.id);
 				const status = this.runtime.getProviderAuthStatus(provider.id);
 				const methods: ProviderInfo["methods"] = [];
 				if (provider.auth.oauth) {
@@ -55,7 +59,12 @@ export class AuthFlows {
 				return {
 					id: provider.id,
 					name: provider.name,
-					origin: this.isPluginProvider(provider.id) ? "plugin" : "builtin",
+					origin: this.isPluginProvider(provider.id)
+						? "plugin"
+						: config && !isBuiltinProvider(provider.id)
+							? "custom"
+							: "builtin",
+					config,
 					auth: { configured: status.configured, source: status.source, label: status.label },
 					stored:
 						status.source === "stored" ? (this.runtime.isUsingOAuth(provider.id) ? "oauth" : "api_key") : undefined,

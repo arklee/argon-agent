@@ -24,6 +24,7 @@ import { listDir, saveUpload } from "./fs-api.ts";
 import { log } from "./log.ts";
 import { canonicalProjectPath, projectTrustParent } from "./project-trust.ts";
 import { NotFoundError, type SessionRegistry } from "./registry.ts";
+import { RequestError } from "./request-error.ts";
 
 import { findToolPreset, listToolPresets } from "./tool-presets.ts";
 
@@ -32,15 +33,6 @@ const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
 
 type Handler<M extends MethodName> = (params: MethodParams<M>, conn: Connection) => Promise<MethodResult<M>>;
 type HandlerTable = { [M in MethodName]: Handler<M> };
-
-class RequestError extends Error {
-	constructor(
-		readonly code: ProtocolError["code"],
-		message: string,
-	) {
-		super(message);
-	}
-}
 
 function tokensMatch(a: string, b: string): boolean {
 	const ab = Buffer.from(a);
@@ -227,7 +219,26 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		},
 		"sessions.fork": async (params) => registry.fork(params.sessionId, params.itemId),
 		"sessions.clone": async (params) => registry.clone(params.sessionId),
-		"providers.list": async () => ({ providers: registry.auth.listProviders() }),
+		"models.config.get": () => registry.modelsConfig.get(),
+		"models.config.set": ({ text, version }) => registry.modelsConfig.set(text, version),
+		"providers.save": async ({ id, config, create }) => {
+			await registry.modelsConfig.saveProvider(id, config, create);
+			return {};
+		},
+		"providers.remove": async ({ id }) => {
+			await registry.modelsConfig.removeProvider(id);
+			return {};
+		},
+		"providers.discoverModels": async (params) => {
+			try {
+				return await registry.modelsConfig.discoverModels(params);
+			} catch (error) {
+				if (error instanceof RequestError) throw error;
+				// Auth and HTTP errors may contain credentials. Keep them out of server logs.
+				throw new RequestError("bad_request", "Could not discover models. Check the endpoint and credentials.");
+			}
+		},
+		"providers.list": async () => ({ providers: await registry.auth.listProviders() }),
 		"auth.login": async (params) => ({ flowId: registry.auth.start(params.providerId, params.type) }),
 		"auth.flows": async () => ({ flows: registry.auth.list() }),
 		"auth.respond": async (params) => ({

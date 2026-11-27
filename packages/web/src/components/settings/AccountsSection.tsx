@@ -1,19 +1,42 @@
 import type { AuthFlow, AuthPromptInfo, ProviderInfo } from "@argon/shared";
-import { Check, Copy, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { Braces, Check, Copy, ExternalLink, Loader2, MoreHorizontal, Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ModelsJsonEditor } from "@/components/settings/ModelsJsonEditor";
+import { ProviderEditor } from "@/components/settings/ProviderEditor";
 import { Group, Loading } from "@/components/settings/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { getClient } from "@/stores/app";
 import { latestFlow, useSettings } from "@/stores/settings";
+
+interface RowActions {
+	edit(provider: ProviderInfo): void;
+	remove(provider: ProviderInfo): void;
+}
 
 export function AccountsSection() {
 	const { t } = useTranslation();
 	const providers = useSettings((s) => s.providers);
 	const [query, setQuery] = useState("");
+	// `provider: undefined`: adding a new one. The key remounts the form for each opening.
+	const [editing, setEditing] = useState<{ provider?: ProviderInfo; key: number }>();
+	const [jsonOpen, setJsonOpen] = useState(false);
+	const [removing, setRemoving] = useState<ProviderInfo>();
+	const actions: RowActions = {
+		edit: (provider) => setEditing({ provider, key: Date.now() }),
+		remove: setRemoving,
+	};
 	const filtered = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		if (!providers) return undefined;
@@ -25,46 +48,152 @@ export function AccountsSection() {
 
 	return (
 		<>
-			<div className="relative mb-4">
-				<Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-				<Input
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					placeholder={t("settings.accounts.search")}
-					className="h-8 pl-8"
-				/>
+			<div className="mb-4 flex gap-2">
+				<div className="relative flex-1">
+					<Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						value={query}
+						onChange={(e) => setQuery(e.target.value)}
+						placeholder={t("settings.accounts.search")}
+						className="h-8 pl-8"
+					/>
+				</div>
+				<Button variant="outline" size="sm" onClick={() => setEditing({ key: Date.now() })}>
+					<Plus />
+					{t("settings.accounts.addProvider")}
+				</Button>
+				<Button variant="ghost" size="sm" onClick={() => setJsonOpen(true)} title={t("settings.accounts.editJsonHint")}>
+					<Braces />
+					{t("settings.accounts.editJson")}
+				</Button>
 			</div>
 			{connected.length > 0 && (
 				<Group title={t("settings.accounts.connected")}>
 					{connected.map((p) => (
-						<ProviderRow key={p.id} provider={p} />
+						<ProviderRow key={p.id} provider={p} actions={actions} />
 					))}
 				</Group>
 			)}
 			{others.length > 0 && (
 				<Group title={connected.length > 0 ? t("settings.accounts.otherProviders") : t("settings.accounts.providers")}>
 					{others.map((p) => (
-						<ProviderRow key={p.id} provider={p} />
+						<ProviderRow key={p.id} provider={p} actions={actions} />
 					))}
 				</Group>
 			)}
 			{filtered.length === 0 && (
 				<p className="py-8 text-center text-sm text-muted-foreground">{t("settings.accounts.noMatch", { query })}</p>
 			)}
+			{editing && (
+				<ProviderEditor
+					key={editing.key}
+					provider={editing.provider}
+					open
+					onOpenChange={(open) => !open && setEditing(undefined)}
+					onEditJson={() => {
+						setEditing(undefined);
+						setJsonOpen(true);
+					}}
+				/>
+			)}
+			<ModelsJsonEditor open={jsonOpen} onOpenChange={setJsonOpen} />
+			<RemoveDialog provider={removing} onClose={() => setRemoving(undefined)} />
 		</>
 	);
 }
 
 function statusText(provider: ProviderInfo): string {
-	if (!provider.auth.configured) return t("settings.accounts.notConnected");
+	if (!provider.auth.configured)
+		return provider.origin === "custom" ? t("settings.accounts.noKeyCustom") : t("settings.accounts.notConnected");
 	if (provider.stored === "oauth") return t("settings.accounts.signedIn");
 	if (provider.stored === "api_key") return t("settings.accounts.keySaved");
+	if (provider.config?.apiKey) return t("settings.accounts.keyInModelsJson");
 	return provider.auth.label
 		? t("settings.accounts.from", { name: provider.auth.label })
 		: t("settings.accounts.environment");
 }
 
-function ProviderRow({ provider }: { provider: ProviderInfo }) {
+function RemoveDialog({ provider, onClose }: { provider: ProviderInfo | undefined; onClose(): void }) {
+	const { t } = useTranslation();
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string>();
+	const custom = provider?.origin === "custom";
+	return (
+		<Dialog
+			open={provider !== undefined}
+			onOpenChange={(open) => {
+				if (!open) {
+					setError(undefined);
+					onClose();
+				}
+			}}
+		>
+			<DialogContent className="sm:max-w-md">
+				<DialogTitle>
+					{custom
+						? t("settings.accounts.confirmDelete", { name: provider?.name ?? "" })
+						: t("settings.accounts.confirmReset", { name: provider?.name ?? "" })}
+				</DialogTitle>
+				<DialogDescription>
+					{custom ? t("settings.accounts.confirmDeleteBody") : t("settings.accounts.confirmResetBody")}
+				</DialogDescription>
+				{error && <p className="text-xs whitespace-pre-wrap text-destructive">{error}</p>}
+				<DialogFooter>
+					<Button variant="ghost" onClick={onClose}>
+						{t("common.cancel")}
+					</Button>
+					<Button
+						variant="destructive"
+						disabled={busy}
+						onClick={async () => {
+							if (!provider) return;
+							setBusy(true);
+							try {
+								await getClient().request("providers.remove", { id: provider.id });
+								onClose();
+							} catch (e) {
+								setError(e instanceof Error ? e.message : String(e));
+							} finally {
+								setBusy(false);
+							}
+						}}
+					>
+						{busy && <Loader2 className="animate-spin" />}
+						{custom ? t("settings.accounts.deleteProvider") : t("settings.accounts.resetEndpoint")}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function ProviderMenu({ provider, actions }: { provider: ProviderInfo; actions: RowActions }) {
+	const { t } = useTranslation();
+	const custom = provider.origin === "custom";
+	// Plugin providers are defined by their plugin; models.json cannot redirect them.
+	if (provider.origin === "plugin") return null;
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button variant="ghost" size="icon-xs" aria-label={t("common.actionsFor", { name: provider.name })}>
+					<MoreHorizontal />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end">
+				<DropdownMenuItem onSelect={() => actions.edit(provider)}>
+					{custom ? t("settings.accounts.editProvider") : t("settings.accounts.editEndpoint")}
+				</DropdownMenuItem>
+				{(custom || provider.config) && (
+					<DropdownMenuItem variant="destructive" onSelect={() => actions.remove(provider)}>
+						{custom ? t("settings.accounts.deleteProvider") : t("settings.accounts.resetEndpoint")}
+					</DropdownMenuItem>
+				)}
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
+function ProviderRow({ provider, actions }: { provider: ProviderInfo; actions: RowActions }) {
 	const { t } = useTranslation();
 	const flows = useSettings((s) => s.flows);
 	const login = useSettings((s) => s.login);
@@ -87,6 +216,12 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 					<div className="flex items-center gap-2">
 						<span className="truncate text-sm font-medium">{provider.name}</span>
 						{provider.origin === "plugin" && <Badge variant="secondary">{t("settings.accounts.plugin")}</Badge>}
+						{provider.origin === "custom" && <Badge variant="secondary">{t("settings.accounts.custom")}</Badge>}
+						{provider.origin === "builtin" && provider.config?.baseUrl && (
+							<Badge variant="outline" title={provider.config.baseUrl}>
+								{t("settings.accounts.customEndpoint")}
+							</Badge>
+						)}
 					</div>
 					<div className="text-xs text-muted-foreground">
 						{statusText(provider)}
@@ -131,9 +266,10 @@ function ProviderRow({ provider }: { provider: ProviderInfo }) {
 							{provider.stored === "oauth" ? t("common.signOut") : t("settings.accounts.removeKey")}
 						</Button>
 					)}
-					{!provider.auth.configured && provider.methods.length === 0 && (
+					{!provider.auth.configured && provider.methods.length === 0 && provider.origin !== "custom" && (
 						<span className="text-xs text-muted-foreground">{t("settings.accounts.setupEnvironment")}</span>
 					)}
+					<ProviderMenu provider={provider} actions={actions} />
 				</div>
 			</div>
 			{showFlow && <FlowPanel flow={flow} />}

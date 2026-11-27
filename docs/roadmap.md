@@ -50,6 +50,7 @@
 - [x] 设置页：侧栏齿轮或 ⌘/Ctrl+, 打开，分 General / Providers / Permissions / Plugins / Resources。pi settings 只编辑全局一级的常用子集；资源列表（全局 + 当前项目）只读
 - [x] 设置页：项目级 settings 编辑（通用页顶部切换“所有项目 / 当前项目”，`settings.updateProject` 在 pi 的文件锁下改写 `<cwd>/.argon/settings.json`，可逐项恢复为全局值；项目未信任时提示设置不生效）；`enabledModels` 编辑器（勾选模型或填写匹配模式），模型选择器优先列出已启用的模型（`models.list { cwd }` 返回 `scoped`），模式里的思考级别（如 `:high`）选模型时一并应用
 - [x] Provider 与登录：`auth.*` 协议，登录流程由 backend 持有（`AuthFlows`），任何客户端可应答；设置页里加/换/删 API key、OAuth 登录登出，模型选择器里有“Manage providers…”入口；magpie 社区插件的安装/移除（需二次确认）
+- [x] 自定义 provider / 模型：设置页“提供方”可添加兼容 OpenAI / Anthropic / Google 的端点（模板：Ollama、LM Studio、vLLM），填写 Base URL、API 协议、密钥（字面量 / `$ENV` / `!command`）、请求头和模型列表，OpenAI 兼容端点可一键获取模型列表；内置 provider 可设自定义端点（Base URL、请求头）。都写入 `$ARGON_HOME/agent/models.json`（`ModelsConfigStore`：先用临时 ModelRuntime 按 pi 的 schema 校验，再原子写入并 `refresh`；表单只改它管的字段，其余字段保留）。另有“编辑 JSON”直接编辑整个 models.json（带版本号防覆盖）。结构化保存会丢掉文件里的注释
 - [ ] 用真实浏览器 OAuth（auth_url 回调、device code）完整走一遍登录；目前只验证了 select 提示和取消
 - [x] 权限设置持久化：默认权限模式、"总是允许"的规则（`$ARGON_HOME/settings.json`；bash 规则按命令前缀，含管道/重定向等的命令永远询问），审批卡片上可直接添加，设置页里可删除
 - [x] 每个会话的模型、思考级别、权限模式，重新打开会话时恢复（模型和思考级别由 pi 从会话文件恢复，权限模式存为 `argon.permission_mode` 自定义条目；恢复失败时作为 model 诊断显示；`npm run smoke` 覆盖）

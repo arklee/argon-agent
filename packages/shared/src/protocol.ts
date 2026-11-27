@@ -214,11 +214,50 @@ export interface ProjectPrefs {
 
 export type AuthType = "api_key" | "oauth";
 
+/** API protocols a custom provider can speak (pi's `api` values; models.json accepts others too). */
+export const PROVIDER_APIS = [
+	"openai-completions",
+	"openai-responses",
+	"anthropic-messages",
+	"google-generative-ai",
+] as const;
+
+/** A model entry of a provider in models.json: the subset Argon's form edits. */
+export interface CustomModelConfig {
+	/** Model ID sent to the API. */
+	id: string;
+	name?: string;
+	reasoning?: boolean;
+	input?: ("text" | "image")[];
+	contextWindow?: number;
+	maxTokens?: number;
+}
+
+/**
+ * A provider entry in pi's models.json (`$ARGON_HOME/agent/models.json`): the subset Argon's form
+ * edits. Saving keeps every other field of the entry (compat, cost, modelOverrides, ...) as it was;
+ * a managed field left out is removed. On a built-in provider only `baseUrl` and `headers` apply.
+ */
+export interface CustomProviderConfig {
+	name?: string;
+	baseUrl?: string;
+	/** One of PROVIDER_APIS, or another pi API id. Required for a new (non built-in) provider. */
+	api?: string;
+	/** Literal key, `$ENV_NAME` interpolation, or `!command` output (resolved by pi at request time). */
+	apiKey?: string;
+	headers?: Record<string, string>;
+	/** Send the key as `Authorization: Bearer`. */
+	authHeader?: boolean;
+	models?: CustomModelConfig[];
+}
+
 export interface ProviderInfo {
 	id: string;
 	name: string;
-	/** "plugin": a magpie community plugin provider. */
-	origin: "builtin" | "plugin";
+	/** "plugin": a magpie community plugin provider. "custom": defined in models.json only. */
+	origin: "builtin" | "plugin" | "custom";
+	/** What models.json sets for this provider (a custom provider, or overrides of a built-in one). */
+	config?: CustomProviderConfig;
 	/** Whether requests can authenticate, and from where (stored credential, env var, ...). */
 	auth: { configured: boolean; source?: string; label?: string };
 	/** Stored credential type, when one is stored (logout removes it). */
@@ -652,6 +691,37 @@ export interface Methods {
 	"auth.respond": { params: { flowId: string; promptId: string; value: string }; result: { accepted: boolean } };
 	"auth.cancel": { params: { flowId: string }; result: Record<string, never> };
 	"auth.logout": { params: { providerId: string }; result: Record<string, never> };
+	/**
+	 * models.json as text, for the raw editor. `version` identifies the content (pass it back to
+	 * `models.config.set`); `error` is pi's current problem loading it, if any.
+	 */
+	"models.config.get": {
+		params: Record<string, never>;
+		result: { path: string; text: string; version: string; error?: string };
+	};
+	/**
+	 * Replace models.json. Rejected (bad_request) when it is not valid JSON or fails pi's schema, and
+	 * (conflict) when the file changed since `version` was read. Reloads models for all sessions.
+	 */
+	"models.config.set": { params: { text: string; version: string }; result: { version: string } };
+	/**
+	 * Create (`create: true`, the id must be unused) or update a provider entry in models.json, then
+	 * reload. Fields outside CustomProviderConfig in the existing entry are kept.
+	 */
+	"providers.save": {
+		params: { id: string; config: CustomProviderConfig; create: boolean };
+		result: Record<string, never>;
+	};
+	/** Remove the provider's models.json entry (a custom provider disappears; a built-in one loses its overrides). */
+	"providers.remove": { params: { id: string }; result: Record<string, never> };
+	/**
+	 * List the models an OpenAI-compatible endpoint offers (`GET {baseUrl}/models`). Without `apiKey`,
+	 * a saved provider's (`providerId`) credentials are used.
+	 */
+	"providers.discoverModels": {
+		params: { baseUrl: string; api: string; apiKey?: string; headers?: Record<string, string>; providerId?: string };
+		result: { models: { id: string; name?: string }[] };
+	};
 	"plugins.list": {
 		params: Record<string, never>;
 		result: { plugins: PluginInfo[]; errors: string[]; available: boolean };
