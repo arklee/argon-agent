@@ -6,24 +6,39 @@ import {
 	createCodexCompactExtension,
 	DEFAULT_CODEX_COMPACT_SETTINGS,
 } from "../vendor/codex-compact/entry.js";
+import { openaiFeaturesEnabled } from "./openai-features.ts";
 import type { ArgonSettingsStore } from "./settings.ts";
 
 export function createCompactExtension(settings: Pick<ArgonSettingsStore, "get">): ExtensionFactory {
-	const get = (): CodexCompactSettingsState => ({
-		kind: "loaded",
-		path: "Argon settings",
-		settings: { ...DEFAULT_CODEX_COMPACT_SETTINGS, enabled: settings.get().remoteCompaction },
-	});
-	const settingsRuntime: CodexCompactSettingsRuntime = {
-		get,
-		reload: async () => get(),
-		update: async () => {
-			throw new Error("Remote compaction settings are managed in Argon");
-		},
-		flush: async () => {},
-	};
-	const factory = createCodexCompactExtension({ settingsRuntime });
 	return (pi) => {
+		let provider: string | undefined;
+		// Register first: upstream reads settings during the same lifecycle events.
+		pi.on("session_start", async (_event, ctx) => {
+			provider = ctx.model?.provider;
+		});
+		pi.on("model_select", async (event) => {
+			provider = event.model.provider;
+		});
+		pi.on("session_before_compact", async (_event, ctx) => {
+			provider = ctx.model?.provider;
+		});
+		const get = (): CodexCompactSettingsState => ({
+			kind: "loaded",
+			path: "Argon settings",
+			settings: {
+				...DEFAULT_CODEX_COMPACT_SETTINGS,
+				enabled: openaiFeaturesEnabled(settings.get().openaiFeatures, provider),
+			},
+		});
+		const settingsRuntime: CodexCompactSettingsRuntime = {
+			get,
+			reload: async () => get(),
+			update: async () => {
+				throw new Error("Remote compaction settings are managed in Argon");
+			},
+			flush: async () => {},
+		};
+		const factory = createCodexCompactExtension({ settingsRuntime });
 		const registerCommand: ExtensionAPI["registerCommand"] = (name, options) => {
 			if (name !== "codex-compact") pi.registerCommand(name, options);
 		};

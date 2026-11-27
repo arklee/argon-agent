@@ -117,63 +117,25 @@ it("defaults GPT patches on, persists disabling, and rejects non-booleans", asyn
 	expect(suggestRule("apply_patch", {})).toEqual({ tool: "apply_patch" });
 });
 
-it("defaults image generation off, validates updates and loads persisted booleans", async () => {
+it("persists the unified policy and defaults old or invalid settings to OpenAI only", async () => {
 	const settings = await store();
 	try {
-		expect(settings.get().imageGeneration).toBe(false);
-		for (const imageGeneration of [true, false]) {
-			await settings.update({ imageGeneration });
+		expect(settings.get().openaiFeatures).toBe("openai");
+		for (const openaiFeatures of ["on", "off", "openai"] as const) {
+			await settings.update({ openaiFeatures });
 			await settings.load();
-			expect(settings.get().imageGeneration).toBe(imageGeneration);
+			expect(settings.get().openaiFeatures).toBe(openaiFeatures);
 		}
-		await expect(settings.update({ imageGeneration: "true" as unknown as boolean })).rejects.toThrow(
-			"Invalid imageGeneration",
-		);
-		for (const data of [{}, { imageGeneration: "true" }]) {
+		await expect(settings.update({ openaiFeatures: "invalid" as "on" })).rejects.toThrow("Invalid openaiFeatures");
+		for (const data of [
+			{},
+			{ imageGeneration: true, webSearch: false, remoteCompaction: true },
+			{ openaiFeatures: true },
+		]) {
 			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
 			await settings.load();
-			expect(settings.get().imageGeneration).toBe(false);
-		}
-	} finally {
-		rmSync(settings.argonHome, { recursive: true, force: true });
-	}
-});
-it("defaults web search off, validates updates and loads persisted booleans", async () => {
-	const settings = await store();
-	try {
-		expect(settings.get().webSearch).toBe(false);
-		for (const webSearch of [true, false]) {
-			await settings.update({ webSearch });
-			await settings.load();
-			expect(settings.get().webSearch).toBe(webSearch);
-		}
-		await expect(settings.update({ webSearch: "true" as unknown as boolean })).rejects.toThrow("Invalid webSearch");
-		for (const data of [{}, { webSearch: "true" }]) {
-			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
-			await settings.load();
-			expect(settings.get().webSearch).toBe(false);
-		}
-	} finally {
-		rmSync(settings.argonHome, { recursive: true, force: true });
-	}
-});
-
-it("defaults remote compaction on, validates updates and loads persisted booleans", async () => {
-	const settings = await store();
-	try {
-		expect(settings.get().remoteCompaction).toBe(true);
-		for (const remoteCompaction of [true, false]) {
-			await settings.update({ remoteCompaction });
-			await settings.load();
-			expect(settings.get().remoteCompaction).toBe(remoteCompaction);
-		}
-		await expect(settings.update({ remoteCompaction: "true" as unknown as boolean })).rejects.toThrow(
-			"Invalid remoteCompaction",
-		);
-		for (const data of [{}, { remoteCompaction: "true" }]) {
-			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
-			await settings.load();
-			expect(settings.get().remoteCompaction).toBe(true);
+			expect(settings.get().openaiFeatures).toBe("openai");
+			expect(settings.get()).not.toHaveProperty("imageGeneration");
 		}
 	} finally {
 		rmSync(settings.argonHome, { recursive: true, force: true });

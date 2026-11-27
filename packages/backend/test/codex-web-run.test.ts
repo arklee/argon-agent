@@ -12,8 +12,8 @@ beforeEach(() => http.mockReset());
 function setup() {
 	const settings = new ArgonSettingsStore("/unused");
 	const defaults = settings.get();
-	let enabled = true;
-	vi.spyOn(settings, "get").mockImplementation(() => ({ ...defaults, webSearch: enabled }));
+	let mode: "on" | "off" | "openai" = "on";
+	vi.spyOn(settings, "get").mockImplementation(() => ({ ...defaults, openaiFeatures: mode }));
 	const registerTool = vi.fn();
 	const on = vi.fn();
 	const factory = createWebSearchExtension(settings);
@@ -33,6 +33,12 @@ function setup() {
 		sessionManager: { getSessionId: () => "stable-session" },
 	} as unknown as ExtensionToolContext;
 	return {
+		setMode: (v: typeof mode) => {
+			mode = v;
+			refreshWebSearchExposure(settings);
+		},
+		select: (provider: string) =>
+			on.mock.calls.find(([event]) => event === "model_select")?.[1]({ model: { provider } }),
 		tool,
 		ctx,
 		getApiKeyAndHeaders,
@@ -40,7 +46,7 @@ function setup() {
 		registerTool,
 		settings,
 		setEnabled: (v: boolean) => {
-			enabled = v;
+			mode = v ? "on" : "off";
 			refreshWebSearchExposure(settings);
 		},
 		shutdown: () => on.mock.calls.find(([event]) => event === "session_shutdown")?.[1](),
@@ -110,4 +116,17 @@ it("passes cancellation and reports rejected login without exposing the response
 	expect(signal?.aborted).toBe(false);
 	await s.shutdown();
 	expect(signal?.aborted).toBe(true);
+});
+
+it("updates exposure on model selection and blocks stale calls on other providers", async () => {
+	const s = setup();
+	s.setMode("openai");
+	expect(s.tool().exposure).toBe("hidden");
+	for (const provider of ["openai", "openai-codex", "azure", "anthropic"]) {
+		await s.select(provider);
+		expect(s.tool().exposure).toBe(provider === "openai" || provider === "openai-codex" ? "direct" : "hidden");
+	}
+	await expect(s.tool().execute("id", {}, undefined, undefined, s.ctx)).rejects.toThrow("disabled");
+	expect(http).not.toHaveBeenCalled();
+	await s.shutdown();
 });

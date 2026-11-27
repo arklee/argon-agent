@@ -165,8 +165,8 @@ export class SessionRegistry {
 	async updateSettings(update: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> }): Promise<void> {
 		if (update.pi) await writePiSettings(this.options.agentDir, update.pi);
 		if (update.argon) await this.options.settings.update(update.argon);
-		if (update.argon?.webSearch !== undefined) refreshWebSearchExposure(this.options.settings);
-		if (update.argon?.imageGeneration !== undefined) refreshImagegenExposure(this.options.settings);
+		if (update.argon?.openaiFeatures !== undefined) refreshWebSearchExposure(this.options.settings);
+		if (update.argon?.openaiFeatures !== undefined) refreshImagegenExposure(this.options.settings);
 		if (update.argon?.gptApplyPatch !== undefined)
 			for (const session of this.sessions.values()) session.refreshToolSet();
 	}

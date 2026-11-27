@@ -2,6 +2,7 @@ import type { ExtensionContext, ExtensionFactory } from "@earendil-works/pi-codi
 import { resolveCodexToolProvider } from "../vendor/codex-web-run/src/codex-runtime/resolve.ts";
 import { WEB_SEARCH_PARAMETERS } from "../vendor/codex-web-run/src/contract.ts";
 import { executeCodexWebSearch } from "../vendor/codex-web-run/src/execute.ts";
+import { openaiFeaturesEnabled } from "./openai-features.ts";
 import type { ArgonSettingsStore } from "./settings.ts";
 
 type Settings = Pick<ArgonSettingsStore, "get">;
@@ -13,6 +14,7 @@ export function createWebSearchExtension(settings: Settings): ExtensionFactory {
 	const apply = new Set<() => void>();
 	const factory: ExtensionFactory = (pi) => {
 		const lifetime = new AbortController();
+		let provider: string | undefined;
 		const refresh = () =>
 			pi.registerTool({
 				name: "web_run",
@@ -22,9 +24,10 @@ export function createWebSearchExtension(settings: Settings): ExtensionFactory {
 					"Use web_run for web research. Pass returned ref_ids to open, click and find. Cite source URLs as Markdown links, never internal ref_ids.",
 				],
 				parameters: WEB_SEARCH_PARAMETERS,
-				exposure: settings.get().webSearch ? "direct" : "hidden",
+				exposure: openaiFeaturesEnabled(settings.get().openaiFeatures, provider) ? "direct" : "hidden",
 				async execute(_id, params, signal, _onUpdate, ctx) {
-					if (!settings.get().webSearch) throw new Error("Web search is disabled in Argon settings.");
+					if (!openaiFeaturesEnabled(settings.get().openaiFeatures, ctx.model?.provider))
+						throw new Error("Web search is disabled in Argon settings.");
 					const combined = AbortSignal.any([
 						lifetime.signal,
 						AbortSignal.timeout(120_000),
@@ -44,6 +47,14 @@ export function createWebSearchExtension(settings: Settings): ExtensionFactory {
 					return { content: [{ type: "text", text: result.text }], details: { webRun: result.details } };
 				},
 			});
+		pi.on("session_start", async (_event, ctx) => {
+			provider = ctx.model?.provider;
+			refresh();
+		});
+		pi.on("model_select", async (event) => {
+			provider = event.model.provider;
+			refresh();
+		});
 		refresh();
 		apply.add(refresh);
 		pi.on("session_shutdown", async () => {

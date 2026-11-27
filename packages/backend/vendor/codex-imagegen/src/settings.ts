@@ -1,6 +1,6 @@
 // Argon-owned stand-in for upstream src/settings.ts. Upstream keeps its settings in
 // <agentDir>/pi-codex-imagegen.json, edited from a TUI menu; in Argon they come from Argon's own
-// settings (ArgonSettings.imageGeneration), read live on every call. Not in vendor.json, so
+// settings (ArgonSettings.openaiFeatures; provider gating is in the extension wrapper), read live on every call. Not in vendor.json, so
 // `vendor sync` leaves it alone. The shape matches what codex-imagegen.ts uses.
 
 export interface ImagegenSettings {

@@ -62,7 +62,6 @@ npm run vendor -- check   # vendor 是否有上游更新；sync / diff / add 见
 
 环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）。dev token 保存在 `$ARGON_HOME/dev-token`。
 
-
 ## 约定
 
 - TypeScript strict（开了 `noUncheckedIndexedAccess`）；ESM；包之间直接引用 TS 源码（`exports` 指向 `src/index.ts`）。

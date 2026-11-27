@@ -149,10 +149,11 @@
   - 待补：Codex `codex-rs/apply-patch` 的场景用例只移植了一个（当时连不上 GitHub），其余用例待补
   - [x] opencode 的解析器改为 vendor（D18），只改一行 import，可用 `npm run vendor -- sync opencode-patch` 跟随上游
   - 已知：用户装的扩展若注册同名 `apply_patch`（如 magpie 的 codex-exec-pi、pi-codex-conversion），会替换内置实现，两阶段、审批预览和沙箱检查都不再适用
-- [x] 生图：vendor `@narumitw/pi-codex-imagegen`（D18，上游文件不改），工具 `codex_imagegen`；去掉终端菜单和 `/codex-imagegen` 命令，开关改为 Argon 设置"生成图片"（默认关，切换即时生效）；输出路径按 write 走沙箱写检查；卡片在标题下直接显示生成的图片。需要 ChatGPT 登录并消耗额度；已用 GPT-6 Astra 在干净的 `ARGON_HOME` 实测（生成、自动放行、重新加载后图片仍在）
-- [x] Codex 远程压缩：vendor `@narumitw/pi-codex-compact`（D18，上游文件不改）；去掉 `settings-menu.ts`、pi-tui-kit 和 `/codex-compact` 命令，开关为 Argon 设置"服务端压缩"（默认开，经工厂的 `settingsRuntime` 选项读取）；上游未按 `noUncheckedIndexedAccess` 写，backend 经 `entry.js` / `entry.d.ts` 引用，单独的 tsconfig 检查上游代码；压缩卡片对服务端 checkpoint 显示"已在服务端压缩上下文"和说明。已用 GPT-6 Astra 实测：两次连续远程压缩、压缩掉的内容能被模型回忆、重新加载后卡片正确
+- [x] 生图：vendor `@narumitw/pi-codex-imagegen`（D18，上游文件不改），工具 `codex_imagegen`；去掉终端菜单和 `/codex-imagegen` 命令，由统一的“OpenAI 专属功能”三态设置控制；输出路径按 write 走沙箱写检查；卡片在标题下直接显示生成的图片。需要 ChatGPT 登录并消耗额度；已用 GPT-6 Astra 在干净的 `ARGON_HOME` 实测（生成、自动放行、重新加载后图片仍在）
+- [x] Codex 远程压缩：vendor `@narumitw/pi-codex-compact`（D18，上游文件不改）；去掉 `settings-menu.ts`、pi-tui-kit 和 `/codex-compact` 命令，经工厂的 `settingsRuntime` 读取统一的“OpenAI 专属功能”三态设置；上游未按 `noUncheckedIndexedAccess` 写，backend 经 `entry.js` / `entry.d.ts` 引用，单独的 tsconfig 检查上游代码；压缩卡片对服务端 checkpoint 显示"已在服务端压缩上下文"和说明。已用 GPT-6 Astra 实测：两次连续远程压缩、压缩掉的内容能被模型回忆、重新加载后卡片正确
   - 已知（上游设计）：已有服务端 checkpoint 时换成非 Responses 模型，本地压缩会被取消（避免丢失 checkpoint）；上下文仍会经签发方转换为明文 checkpoint
-- [x] 联网搜索：vendor `@howaboua/pi-codex-web-run` 0.0.14 的请求、认证和 HTTP 核心（D18），工具 `web_run`；复用 Argon ModelRegistry 的 Codex 登录，支持其他聊天模型调用。系统设置 → 常规 → 工具增加“联网搜索”（默认关，切换即时生效）；来源卡片提供可点击链接和完整检索内容，沿用工具输出保存历史。离线测试覆盖认证路由、开关、取消、失败和历史投影；真实账号搜索及服务端 ref_id 跨重启有效期尚未实测。
+- [x] 联网搜索：vendor `@howaboua/pi-codex-web-run` 0.0.14 的请求、认证和 HTTP 核心（D18），工具 `web_run`；复用 Argon ModelRegistry 的 Codex 登录，支持其他聊天模型调用。由系统设置 → 常规 → 工具的“OpenAI 专属功能”统一控制；来源卡片提供可点击链接和完整检索内容，沿用工具输出保存历史。离线测试覆盖认证路由、开关、取消、失败和历史投影；真实账号搜索及服务端 ref_id 跨重启有效期尚未实测。
+- [x] OpenAI 专属功能统一配置：生图、联网搜索、服务端压缩共用“强制关闭 / 强制开启 / 仅 OpenAI”三态，默认仅 OpenAI（精确匹配 `openai` / `openai-codex`）。模型切换和设置修改即时生效，各会话独立判断；移除原来的三个布尔开关，旧配置缺少新字段时采用新默认值。
 - [ ] Codex 额度显示（`/wham/usage`），参考 `@narumitw/pi-usage`
 - [ ] GPT 的 Fast / verbosity：在 `before_provider_request` 改写 `service_tier`、`text.verbosity`，参考 `@narumitw/pi-usage`
 - [ ] GPT 专用提示词：等工具模式对比（[tool-modes-comparison.md](tool-modes-comparison.md)）做完再定

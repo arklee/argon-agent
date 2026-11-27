@@ -453,15 +453,8 @@ export interface PermissionRule {
 export interface ArgonSettings {
 	/** GPT-5 and later get `apply_patch` instead of edit / write (decisions D17). Default true. */
 	gptApplyPatch: boolean;
-	/** Offer the `codex_imagegen` tool (needs a ChatGPT login; uses its quota). Default false. */
-	imageGeneration: boolean;
-	/** Offer Codex web search using this backend’s login. Default false. */
-	webSearch: boolean;
-	/**
-	 * Compact through the provider's Responses compaction (opaque server checkpoint) where supported
-	 * (OpenAI / Codex / Azure Responses APIs), else pi's own summary. Default true.
-	 */
-	remoteCompaction: boolean;
+	/** Unified image generation, web search and remote compaction policy. Default openai. */
+	openaiFeatures: "off" | "on" | "openai";
 	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
 	/** OS sandbox policy (decisions D15); used in "ask" mode where the sandbox is supported. */
 	sandbox: { allowedDomains: string[] };

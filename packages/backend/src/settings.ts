@@ -1,3 +1,4 @@
+import { isOpenaiFeaturesMode } from "./openai-features.ts";
 /**
  * Settings shown in the GUI.
  *
@@ -277,9 +278,7 @@ export function writeProjectSettings(
 const DEFAULT_ARGON: ArgonSettings = {
 	defaultToolPreset: "classic",
 	gptApplyPatch: true,
-	imageGeneration: false,
-	webSearch: false,
-	remoteCompaction: true,
+	openaiFeatures: "openai",
 	permissions: { defaultMode: "ask", rules: [] },
 	sandbox: { allowedDomains: [] },
 };
@@ -328,9 +327,7 @@ export class ArgonSettingsStore {
 			this.current = {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
 				gptApplyPatch: typeof data.gptApplyPatch === "boolean" ? data.gptApplyPatch : true,
-				imageGeneration: typeof data.imageGeneration === "boolean" ? data.imageGeneration : false,
-				webSearch: typeof data.webSearch === "boolean" ? data.webSearch : false,
-				remoteCompaction: typeof data.remoteCompaction === "boolean" ? data.remoteCompaction : true,
+				openaiFeatures: isOpenaiFeaturesMode(data.openaiFeatures) ? data.openaiFeatures : "openai",
 				sandbox: {
 					allowedDomains: validateAllowedDomains(data.sandbox?.allowedDomains) ? data.sandbox.allowedDomains : [],
 				},
@@ -358,11 +355,8 @@ export class ArgonSettingsStore {
 	}
 
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
-		if (patch.remoteCompaction !== undefined && typeof patch.remoteCompaction !== "boolean")
-			throw new Error("Invalid remoteCompaction");
-		if (patch.webSearch !== undefined && typeof patch.webSearch !== "boolean") throw new Error("Invalid webSearch");
-		if (patch.imageGeneration !== undefined && typeof patch.imageGeneration !== "boolean")
-			throw new Error("Invalid imageGeneration");
+		if (patch.openaiFeatures !== undefined && !isOpenaiFeaturesMode(patch.openaiFeatures))
+			throw new Error("Invalid openaiFeatures");
 		if (patch.gptApplyPatch !== undefined && typeof patch.gptApplyPatch !== "boolean")
 			throw new Error("Invalid gptApplyPatch");
 		if (patch.permissions?.defaultMode === "ask" && !this.support.supported) throw new Error(this.support.reason);

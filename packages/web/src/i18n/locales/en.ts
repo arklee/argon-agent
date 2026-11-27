@@ -499,11 +499,12 @@ export const en = {
 			gptApplyPatch: "apply_patch for GPT models",
 			gptApplyPatchDescription:
 				"GPT-5 and later edit files with one patch tool instead of edit and write. Takes effect from the next turn.",
-			webSearch: "Web search",
-			webSearchDescription: "Let any model search and read web pages using your Argon OpenAI Codex login.",
-			imageGeneration: "Image generation",
-			imageGenerationDescription:
-				"Let the model generate images with codex_imagegen. Needs a ChatGPT login and uses its quota; works with any model.",
+			openaiFeatures: "OpenAI features",
+			openaiFeaturesDescription:
+				"Control image generation, web search and remote compaction together. OpenAI only matches the current model’s openai or openai-codex provider. Enabling still requires supported endpoints and credentials.",
+			openaiFeaturesOff: "Always off",
+			openaiFeaturesOn: "Always on",
+			openaiFeaturesAuto: "OpenAI only",
 			toolPreset: "Default tool preset",
 			add: "Add",
 			allModels: "All models",
@@ -536,9 +537,6 @@ export const en = {
 			ask: "Ask",
 			autoCompact: "Automatic compaction",
 			autoCompactDescription: "Summarize older messages when the context fills up.",
-			remoteCompaction: "Server-side compaction",
-			remoteCompactionDescription:
-				"With OpenAI and ChatGPT (Codex) models, let the provider compact the context into an encrypted checkpoint. Other models, or a refused request, use the usual summary.",
 			autoRetry: "Automatic retry",
 			autoRetryDescription: "Retry requests that fail with transient errors.",
 			blockImages: "Block images",

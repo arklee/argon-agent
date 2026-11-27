@@ -5,9 +5,9 @@ import { ArgonSettingsStore } from "../src/settings.ts";
 
 it("drops the TUI command and refreshes each live runtime's tool exposure", async () => {
 	const settings = new ArgonSettingsStore("/unused");
-	let enabled = false;
+	let mode: "on" | "off" | "openai" = "off";
 	const defaults = settings.get();
-	vi.spyOn(settings, "get").mockImplementation(() => ({ ...defaults, imageGeneration: enabled }));
+	vi.spyOn(settings, "get").mockImplementation(() => ({ ...defaults, openaiFeatures: mode }));
 	const factory = createImagegenExtension(settings);
 	expect(createImagegenExtension(settings)).toBe(factory);
 	const runtimes = await Promise.all(
@@ -25,13 +25,28 @@ it("drops the TUI command and refreshes each live runtime's tool exposure", asyn
 	);
 	try {
 		for (const value of [true, false]) {
-			enabled = value;
+			mode = value ? "on" : "off";
 			refreshImagegenExposure(settings);
 			for (const runtime of runtimes)
 				expect(runtime.registerTool).toHaveBeenLastCalledWith(
 					expect.objectContaining({ exposure: value ? "direct" : "hidden" }),
 				);
 		}
+
+		mode = "openai";
+		for (const [i, runtime] of runtimes.entries()) {
+			await runtime.on.mock.calls.find(([event]) => event === "model_select")?.[1]({
+				model: { provider: i === 0 ? "openai" : "anthropic" },
+			});
+		}
+		refreshImagegenExposure(settings);
+		expect(runtimes[0]?.registerTool.mock.lastCall?.[0].exposure).toBe("direct");
+		expect(runtimes[1]?.registerTool.mock.lastCall?.[0].exposure).toBe("hidden");
+		await expect(
+			runtimes[0]?.registerTool.mock.lastCall?.[0].execute("id", {}, undefined, undefined, {
+				model: { provider: "anthropic" },
+			}),
+		).rejects.toThrow("disabled");
 	} finally {
 		for (const runtime of runtimes) {
 			// The wrapper's cleanup is registered after the upstream shutdown handler.

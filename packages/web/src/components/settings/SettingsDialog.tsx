@@ -512,18 +512,19 @@ function GeneralDefaults() {
 					)}
 					{global && (
 						<Row
-							label={t("settings.general.imageGeneration")}
-							description={t("settings.general.imageGenerationDescription")}
+							label={t("settings.general.openaiFeatures")}
+							description={t("settings.general.openaiFeaturesDescription")}
 						>
-							<Switch
-								checked={argon.imageGeneration}
-								onCheckedChange={(imageGeneration) => void updateArgon({ imageGeneration })}
+							<Choice
+								value={argon.openaiFeatures}
+								ariaLabel={t("settings.general.openaiFeatures")}
+								options={[
+									{ value: "off", label: t("settings.general.openaiFeaturesOff") },
+									{ value: "on", label: t("settings.general.openaiFeaturesOn") },
+									{ value: "openai", label: t("settings.general.openaiFeaturesAuto") },
+								]}
+								onChange={(openaiFeatures) => void updateArgon({ openaiFeatures })}
 							/>
-						</Row>
-					)}
-					{global && (
-						<Row label={t("settings.general.webSearch")} description={t("settings.general.webSearchDescription")}>
-							<Switch checked={argon.webSearch} onCheckedChange={(webSearch) => void updateArgon({ webSearch })} />
 						</Row>
 					)}
 					<OverrideRow
@@ -580,17 +581,6 @@ function GeneralDefaults() {
 				>
 					<Toggle settingKey="compaction" />
 				</ScopedRow>
-				{global && argon && (
-					<Row
-						label={t("settings.general.remoteCompaction")}
-						description={t("settings.general.remoteCompactionDescription")}
-					>
-						<Switch
-							checked={argon.remoteCompaction}
-							onCheckedChange={(remoteCompaction) => void updateArgon({ remoteCompaction })}
-						/>
-					</Row>
-				)}
 				<ScopedRow
 					settingKey="retry"
 					label={t("settings.general.autoRetry")}

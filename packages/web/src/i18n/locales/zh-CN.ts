@@ -491,10 +491,12 @@ export const zhCN = {
 		general: {
 			gptApplyPatch: "GPT 模型使用 apply_patch",
 			gptApplyPatchDescription: "GPT-5 及以上用一个补丁工具代替 edit 和 write 修改文件。从下一轮开始生效。",
-			webSearch: "联网搜索",
-			webSearchDescription: "复用 Argon 中的 OpenAI Codex 登录，让任何模型都能搜索和阅读网页。",
-			imageGeneration: "生成图片",
-			imageGenerationDescription: "让模型用 codex_imagegen 生成图片。需要登录 ChatGPT，会消耗其额度；任何模型都能用。",
+			openaiFeatures: "OpenAI 专属功能",
+			openaiFeaturesDescription:
+				"统一控制生图、联网搜索和服务端压缩。“仅 OpenAI”只对当前模型的 openai 或 openai-codex provider 开启；开启后仍需相应登录和接口支持。",
+			openaiFeaturesOff: "强制关闭",
+			openaiFeaturesOn: "强制开启",
+			openaiFeaturesAuto: "仅 OpenAI",
 			toolPreset: "默认工具预设",
 			add: "添加",
 			allModels: "全部模型",
@@ -525,9 +527,6 @@ export const zhCN = {
 			ask: "询问",
 			autoCompact: "自动压缩",
 			autoCompactDescription: "上下文用满时，总结较早的消息。",
-			remoteCompaction: "服务端压缩",
-			remoteCompactionDescription:
-				"使用 OpenAI 和 ChatGPT（Codex）模型时，由服务端把上下文压缩成加密的 checkpoint。其他模型或请求被拒时，照常生成摘要。",
 			autoRetry: "自动重试",
 			autoRetryDescription: "请求遇到临时错误时自动重试。",
 			blockImages: "禁止发送图片",
