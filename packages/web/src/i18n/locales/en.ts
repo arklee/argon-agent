@@ -34,6 +34,10 @@ export const en = {
 		ask: "Ask",
 		askChanges: "Ask outside the sandbox",
 		auto: "Auto",
+		compacted: "Context compacted",
+		compactedRemote: "Context compacted on the server",
+		compactedRemoteDetail:
+			"The provider stored the older messages as an encrypted checkpoint. It is sent back with each request, but it can’t be shown here.",
 		compacting: "Compacting context…",
 		copyFailed: "Could not copy to the clipboard",
 		editAndResend: "Edit and resend",
@@ -530,6 +534,9 @@ export const en = {
 			ask: "Ask",
 			autoCompact: "Automatic compaction",
 			autoCompactDescription: "Summarize older messages when the context fills up.",
+			remoteCompaction: "Server-side compaction",
+			remoteCompactionDescription:
+				"With OpenAI and ChatGPT (Codex) models, let the provider compact the context into an encrypted checkpoint. Other models, or a refused request, use the usual summary.",
 			autoRetry: "Automatic retry",
 			autoRetryDescription: "Retry requests that fail with transient errors.",
 			blockImages: "Block images",

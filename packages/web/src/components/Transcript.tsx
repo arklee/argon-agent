@@ -99,16 +99,21 @@ const NOTICE_ICON = {
 } as const;
 
 function Notice({ item }: { item: Extract<TranscriptItem, { kind: "notice" }> }) {
+	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	const Icon = NOTICE_ICON[item.variant];
+	// Compaction titles are Argon's own; other notices carry text from pi or extensions.
+	const compaction = item.variant === "compaction";
+	const title = compaction ? t(item.remoteCheckpoint ? "chat.compactedRemote" : "chat.compacted") : item.title;
+	const text = compaction && item.remoteCheckpoint ? t("chat.compactedRemoteDetail") : item.text;
 	return (
 		<div className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
 			<button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setOpen((o) => !o)}>
 				<Icon className="size-3.5 shrink-0" />
-				<span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
-				{item.text && <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />}
+				<span className="min-w-0 flex-1 truncate font-medium">{title}</span>
+				{text && <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />}
 			</button>
-			{open && item.text && <div className="mt-2 text-xs whitespace-pre-wrap">{item.text}</div>}
+			{open && text && <div className="mt-2 text-xs whitespace-pre-wrap">{text}</div>}
 		</div>
 	);
 }

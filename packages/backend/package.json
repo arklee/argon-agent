@@ -13,7 +13,7 @@
 	"scripts": {
 		"dev": "tsx watch --clear-screen=false src/main.ts",
 		"start": "tsx src/main.ts",
-		"typecheck": "tsc -p tsconfig.json",
+		"typecheck": "tsc -p tsconfig.json && tsc -p vendor/codex-compact/tsconfig.json",
 		"test": "vitest run --passWithNoTests"
 	},
 	"dependencies": {

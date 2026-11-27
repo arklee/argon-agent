@@ -575,6 +575,17 @@ function GeneralDefaults() {
 				>
 					<Toggle settingKey="compaction" />
 				</ScopedRow>
+				{global && argon && (
+					<Row
+						label={t("settings.general.remoteCompaction")}
+						description={t("settings.general.remoteCompactionDescription")}
+					>
+						<Switch
+							checked={argon.remoteCompaction}
+							onCheckedChange={(remoteCompaction) => void updateArgon({ remoteCompaction })}
+						/>
+					</Row>
+				)}
 				<ScopedRow
 					settingKey="retry"
 					label={t("settings.general.autoRetry")}

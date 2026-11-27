@@ -343,6 +343,8 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 第二个例子是 `vendor/codex-imagegen`（`@narumitw/pi-codex-imagegen`）：上游文件一行不改，终端菜单用替身 `menu.ts` 占位，设置用替身 `settings.ts` 改读 Argon 设置，`/codex-imagegen` 命令由 `backend/src/codex-imagegen.ts` 包一层 ExtensionAPI 过滤掉。
 
+第三个例子是 `vendor/codex-compact`（`@narumitw/pi-codex-compact`）：上游文件同样不改，设置经工厂自带的 `settingsRuntime` 选项接到 Argon 设置。上游没有按 `noUncheckedIndexedAccess` 写，为了不逐行改上游，backend 只经 Argon 自己的 `entry.js` / `entry.d.ts` 引用它，backend 的 tsconfig 排除这个目录，另用 `vendor/codex-compact/tsconfig.json`（关掉这一项）检查上游代码，`entry.check.ts` 保证声明与实现一致。以后的 vendor 遇到同样情况照此处理。
+
 **考虑过的方案**：
 
 - 整包依赖 + patch-package：仍然要带上全部依赖，打包版也装不了用户包。

@@ -455,6 +455,11 @@ export interface ArgonSettings {
 	gptApplyPatch: boolean;
 	/** Offer the `codex_imagegen` tool (needs a ChatGPT login; uses its quota). Default false. */
 	imageGeneration: boolean;
+	/**
+	 * Compact through the provider's Responses compaction (opaque server checkpoint) where supported
+	 * (OpenAI / Codex / Azure Responses APIs), else pi's own summary. Default true.
+	 */
+	remoteCompaction: boolean;
 	permissions: { defaultMode: PermissionMode; rules: PermissionRule[] };
 	/** OS sandbox policy (decisions D15); used in "ask" mode where the sandbox is supported. */
 	sandbox: { allowedDomains: string[] };

@@ -300,3 +300,53 @@ describe("projectHistory", () => {
 		expect(items[0]?.timestamp).toBe(0);
 	});
 });
+
+it.each([undefined, { kind: "ordinary" }, { kind: "pi-codex-remote-compaction" }])(
+	"projects compaction details %j consistently for entries and messages",
+	(details) => {
+		const remote = details?.kind === "pi-codex-remote-compaction";
+		const expected = {
+			kind: "notice",
+			id: "c",
+			variant: "compaction",
+			title: "Context compacted",
+			timestamp: 0,
+			...(remote ? { remoteCheckpoint: true } : { text: "summary" }),
+		};
+		expect(
+			projectHistory([
+				{
+					type: "compaction",
+					id: "c",
+					parentId: null,
+					timestamp: new Date(0).toISOString(),
+					summary: "summary",
+					firstKeptEntryId: "m",
+					tokensBefore: 100,
+					details,
+				},
+			]).items,
+		).toEqual([expected]);
+		expect(messageToItem({ role: "compactionSummary", summary: "summary", details, timestamp: 0 }, "c")).toEqual(
+			expected,
+		);
+	},
+);
+
+it("hides remote checkpoint continuation messages in history and live translation", () => {
+	const customType = "codex-compact:continue-v1";
+	expect(
+		projectHistory([
+			{
+				type: "custom_message",
+				id: "hidden",
+				parentId: null,
+				timestamp: new Date(0).toISOString(),
+				customType,
+				content: "continue",
+				display: false,
+			},
+		]).items,
+	).toEqual([]);
+	expect(messageToItem({ role: "custom", customType, content: "continue", display: false }, "hidden")).toBeUndefined();
+});

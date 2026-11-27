@@ -115,6 +115,8 @@ export type TranscriptItem =
 			variant: "compaction" | "branchSummary" | "bash" | "custom" | "error" | "info";
 			title: string;
 			text?: string;
+			/** compaction only: the older history is an opaque server checkpoint, with no readable summary. */
+			remoteCheckpoint?: boolean;
 			timestamp: number;
 	  };
 

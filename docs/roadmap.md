@@ -150,7 +150,8 @@
   - [x] opencode 的解析器改为 vendor（D18），只改一行 import，可用 `npm run vendor -- sync opencode-patch` 跟随上游
   - 已知：用户装的扩展若注册同名 `apply_patch`（如 magpie 的 codex-exec-pi、pi-codex-conversion），会替换内置实现，两阶段、审批预览和沙箱检查都不再适用
 - [x] 生图：vendor `@narumitw/pi-codex-imagegen`（D18，上游文件不改），工具 `codex_imagegen`；去掉终端菜单和 `/codex-imagegen` 命令，开关改为 Argon 设置"生成图片"（默认关，切换即时生效）；输出路径按 write 走沙箱写检查；卡片在标题下直接显示生成的图片。需要 ChatGPT 登录并消耗额度；已用 GPT-6 Astra 在干净的 `ARGON_HOME` 实测（生成、自动放行、重新加载后图片仍在）
-- [ ] Codex 远程压缩：vendor `@narumitw/pi-codex-compact`（约 3600 行）；去掉 `settings-menu.ts` 和 pi-tui-kit；压缩卡片对加密 checkpoint 显示"服务端 checkpoint"；确认 `ctx.ui.notify` / `setStatus` 经 ui-bridge 送到前端
+- [x] Codex 远程压缩：vendor `@narumitw/pi-codex-compact`（D18，上游文件不改）；去掉 `settings-menu.ts`、pi-tui-kit 和 `/codex-compact` 命令，开关为 Argon 设置"服务端压缩"（默认开，经工厂的 `settingsRuntime` 选项读取）；上游未按 `noUncheckedIndexedAccess` 写，backend 经 `entry.js` / `entry.d.ts` 引用，单独的 tsconfig 检查上游代码；压缩卡片对服务端 checkpoint 显示"已在服务端压缩上下文"和说明。已用 GPT-6 Astra 实测：两次连续远程压缩、压缩掉的内容能被模型回忆、重新加载后卡片正确
+  - 已知（上游设计）：已有服务端 checkpoint 时换成非 Responses 模型，本地压缩会被取消（避免丢失 checkpoint）；上下文仍会经签发方转换为明文 checkpoint
 - [ ] 已知风险：pi-codex-conversion 的 `exec_command` / `write_stdin` / `apply_patch` 是独立 Rust 程序，不经过 `argon-sandbox`；用户在 `ARGON_HOME` 装了它时沙箱失效。至少要检测到不受沙箱覆盖的工具并在界面上标"未隔离"
 - [ ] 各类型的显示细节（按需）：read 内容语法高亮；search 结果做成列表；MCP 工具标题带上服务器名（可用 `source` 或命名空间）；按需注册第一个“来源 + 工具名”覆盖渲染器
 - [ ] pi-codex-conversion 的预设（Structured、Code、TS Notebook、VM Code）：设计上已预留，暂不实现；先按 [tool-modes-comparison.md](tool-modes-comparison.md) 的计划与 pi 传统模式、codemode 做对比
@@ -167,6 +168,8 @@
 
 ## 技术债与已知问题
 
+- [x] 压缩成功后对话里不出现压缩卡片（要重新打开会话才有）：pi 1.6.1 手动和自动压缩写入 compaction 条目时不发 `entry_appended`；改为在 `compaction_end` 带结果时补发
+- [ ] 添加项目对话框：路径很长时底部路径不换行，对话框被撑出视口，"添加项目"按钮点不到
 - [x] 首次 Release 三平台冒烟在备份空剪贴板时失败：Electron 可返回 `types` 为空的条目，构造 `ClipboardItem` 会报错；备份时过滤空条目，保留复制、读取权限和恢复检查。修复后仍需 GitHub 三平台重验
 
 - [x] 扩展自己注册的 MCP 服务器（`registerMcpServer`，不在 mcp.json 里）在对话里关闭只在本次运行时有效：pi 对 `scope: "extension"` 的条目不调用 `updateConfig`。已在补丁里加 `registeredServerConfig` / `updateRegisteredConfig` 两个选项解决（D16）

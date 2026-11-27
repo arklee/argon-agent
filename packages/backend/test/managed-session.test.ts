@@ -762,3 +762,31 @@ it("defers model-driven switching until agent_settled", async () => {
 	await managed.setModel({ provider: "anthropic", id: "claude-opus" }, runtime);
 	expect(setActiveToolsByName).toHaveBeenLastCalledWith(["read", "edit", "write"]);
 });
+
+it("adds the compaction notice when compaction ends, once even if entry_appended follows", async () => {
+	let manager: SessionManager | undefined;
+	const { managed, emit } = await loadSession({
+		setup: (sessionManager) => {
+			manager = sessionManager;
+			sessionManager.appendMessage({ role: "user", content: "hello", timestamp: 1 });
+		},
+	});
+	const kept = manager!.appendMessage({ role: "user", content: "again", timestamp: 2 });
+	manager!.appendCompaction("placeholder", kept, 100, { kind: "pi-codex-remote-compaction" }, true);
+	const result = { summary: "placeholder", firstKeptEntryId: kept, tokensBefore: 100 };
+	emit({ type: "compaction_end", reason: "manual", result, aborted: false, willRetry: false } as AgentSessionEvent);
+	const notices = () => managed.snapshot().state.items.filter((item) => item.kind === "notice");
+	expect(notices()).toEqual([expect.objectContaining({ variant: "compaction", remoteCheckpoint: true })]);
+	const entry = manager!.getBranch().findLast((e) => e.type === "compaction")!;
+	emit({ type: "entry_appended", entry } as AgentSessionEvent);
+	expect(notices()).toHaveLength(1);
+	emit({
+		type: "compaction_end",
+		reason: "manual",
+		result: undefined,
+		aborted: false,
+		willRetry: false,
+		errorMessage: "x",
+	} as AgentSessionEvent);
+	expect(notices()).toHaveLength(1);
+});

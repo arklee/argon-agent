@@ -1446,6 +1446,12 @@ export class ManagedSession {
 				return;
 			case "compaction_end":
 				this.emit({ type: "compaction_ended", errorMessage: event.errorMessage });
+				if (event.result) {
+					// pi 1.6.1 appends compaction entries without an entry_appended event; item ids are entry
+					// ids, so a later entry_appended for the same entry only replaces this item.
+					const entry = this.session.sessionManager.getBranch().findLast((e) => e.type === "compaction");
+					if (entry) for (const item of projectHistory([entry]).items) this.emit({ type: "item_added", item });
+				}
 				if (event.errorMessage && !event.aborted) {
 					this.emit({ type: "notification", level: "error", message: event.errorMessage });
 				}

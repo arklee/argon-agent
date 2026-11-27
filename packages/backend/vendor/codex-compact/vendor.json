@@ -1,0 +1,27 @@
+{
+	"source": "npm:@narumitw/pi-codex-compact",
+	"version": "0.56.6",
+	"license": "LICENSE",
+	"files": {
+		"src/checkpoint-portability.ts": "src/checkpoint-portability.ts",
+		"src/checkpoint-projection.ts": "src/checkpoint-projection.ts",
+		"src/checkpoint-recovery.ts": "src/checkpoint-recovery.ts",
+		"src/checkpoint.ts": "src/checkpoint.ts",
+		"src/codex-compact.ts": "src/codex-compact.ts",
+		"src/compaction-failure.ts": "src/compaction-failure.ts",
+		"src/compaction-ownership.ts": "src/compaction-ownership.ts",
+		"src/context-management.ts": "src/context-management.ts",
+		"src/model-api.ts": "src/model-api.ts",
+		"src/protocol.ts": "src/protocol.ts",
+		"src/rejection-state.ts": "src/rejection-state.ts",
+		"src/remote-compact.ts": "src/remote-compact.ts",
+		"src/remote-context-management.ts": "src/remote-context-management.ts",
+		"src/remote-shared.ts": "src/remote-shared.ts",
+		"src/remote-types.ts": "src/remote-types.ts",
+		"src/remote-v2.ts": "src/remote-v2.ts",
+		"src/remote.ts": "src/remote.ts",
+		"src/settings.ts": "src/settings.ts",
+		"src/terminal.ts": "src/terminal.ts"
+	},
+	"notes": "Responses remote compaction (opaque server checkpoints) hooked into pi's normal compaction lifecycle. Upstream files are unchanged. Dropped: src/settings-menu.ts (TUI, @narumitw/pi-tui-kit) and the /codex-compact command (filtered by packages/backend/src/codex-compact.ts); src/index.ts. src/settings-menu.ts here is Argon's stand-in for a dynamic import. Settings come from Argon (ArgonSettings.remoteCompaction) through the factory's settingsRuntime option, so upstream settings.ts is kept but its file is never read. Upstream is not written for noUncheckedIndexedAccess: backend code imports entry.js / entry.d.ts (Argon's), the backend tsconfig excludes this folder, and ./tsconfig.json checks src with that flag off; entry.check.ts keeps entry.d.ts in sync."
+}

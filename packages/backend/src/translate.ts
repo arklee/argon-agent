@@ -39,6 +39,15 @@ export function toUsage(usage: AnyMessage): UsageInfo | undefined {
 	};
 }
 
+function compactionContent(details: unknown, summary: string): { remoteCheckpoint: true } | { text: string } {
+	return typeof details === "object" &&
+		details !== null &&
+		"kind" in details &&
+		details.kind === "pi-codex-remote-compaction"
+		? { remoteCheckpoint: true }
+		: { text: summary };
+}
+
 type ToolSourceResolver = (name: string) => string | undefined;
 
 export function toAssistantBlocks(
@@ -112,7 +121,7 @@ export function messageToItem(
 				id,
 				variant: "compaction",
 				title: "Context compacted",
-				text: message.summary,
+				...compactionContent(message.details, message.summary),
 				timestamp,
 			};
 		case "branchSummary":
@@ -224,7 +233,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 					id: entry.id,
 					variant: "compaction",
 					title: "Context compacted",
-					text: entry.summary,
+					...compactionContent(entry.details, entry.summary),
 					timestamp,
 				});
 				break;

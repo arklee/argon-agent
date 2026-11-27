@@ -138,3 +138,25 @@ it("defaults image generation off, validates updates and loads persisted boolean
 		rmSync(settings.argonHome, { recursive: true, force: true });
 	}
 });
+
+it("defaults remote compaction on, validates updates and loads persisted booleans", async () => {
+	const settings = await store();
+	try {
+		expect(settings.get().remoteCompaction).toBe(true);
+		for (const remoteCompaction of [true, false]) {
+			await settings.update({ remoteCompaction });
+			await settings.load();
+			expect(settings.get().remoteCompaction).toBe(remoteCompaction);
+		}
+		await expect(settings.update({ remoteCompaction: "true" as unknown as boolean })).rejects.toThrow(
+			"Invalid remoteCompaction",
+		);
+		for (const data of [{}, { remoteCompaction: "true" }]) {
+			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
+			await settings.load();
+			expect(settings.get().remoteCompaction).toBe(true);
+		}
+	} finally {
+		rmSync(settings.argonHome, { recursive: true, force: true });
+	}
+});

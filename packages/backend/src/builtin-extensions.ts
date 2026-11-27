@@ -21,6 +21,7 @@ import {
 	type SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { applyPatchExtension } from "./apply-patch.ts";
+import { createCompactExtension } from "./codex-compact.ts";
 import { createImagegenExtension } from "./codex-imagegen.ts";
 import { log } from "./log.ts";
 import { piMcp } from "./mcp-config.ts";
@@ -94,6 +95,7 @@ export function createBuiltinExtensions(
 ): InlineExtension[] {
 	return [
 		{ name: "apply-patch", factory: applyPatchExtension, builtin: true, replaceable: true },
+		{ name: "codex-compact", factory: createCompactExtension(settings), builtin: true, replaceable: true },
 		{ name: "codex-imagegen", factory: createImagegenExtension(settings), builtin: true, replaceable: true },
 		// Same order and flags as pi's builtInExtensions (dist/extensions/index.js).
 		...(llamaExtension ? [{ name: "llama.cpp", factory: llamaExtension, builtin: true } as InlineExtension] : []),
