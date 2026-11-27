@@ -1,4 +1,4 @@
-/** Adapted from sst/opencode model-policy.ts (MIT, see ../licenses/OPENCODE-MIT.txt), usesPatch's model ID rule. */
+/** Adapted from sst/opencode model-policy.ts (MIT, see ../vendor/opencode-patch/LICENSE), usesPatch's model ID rule. */
 export function isGpt5Family(modelId: string): boolean {
 	const id = modelId.toLowerCase();
 	return id.includes("gpt-") && !id.includes("gpt-4") && !id.includes("oss");

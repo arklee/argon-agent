@@ -31,6 +31,7 @@ packages/web      React 19 + Vite + Tailwind v4 + shadcn/ui（radix-nova）+ zus
 6. **agent 生命周期独立于客户端。** 客户端断开不影响任务继续运行。待决交互（工具审批、扩展弹窗）由 backend 的 `InteractionBroker` 持有，任何客户端重连后都能看到并回答，且只接受第一次回答。
 7. **命令幂等。** `sessions.prompt` 必须带客户端生成的 `clientMessageId`，重发不会重复执行。
 8. **改 pi 的优先级：** inline extension（例如 `backend/src/permissions.ts`）> SDK 参数 > patch-package > fork。能用扩展解决的，就不要打补丁。
+9. **只用第三方代码的一部分时，放进 `packages/backend/vendor/`**（见 D18 和 `vendor/README.md`）：只取用到的文件，改动越少越好，用 `npm run vendor -- sync` 跟随上游。不要为了一个功能整包安装，也不要按 Argon 风格重写上游代码。
 
 ## pi SDK 注意事项（当前钉在 1.6.1）
 
@@ -56,6 +57,7 @@ npm run typecheck    # 所有包
 npm test             # vitest
 npm run smoke        # 端到端冒烟（真实 backend 和模型）
 npm run lint         # biome；npm run format 自动修复
+npm run vendor -- check   # vendor 是否有上游更新；sync / diff / add 见 packages/backend/vendor/README.md
 ```
 
 环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）。dev token 保存在 `$ARGON_HOME/dev-token`。

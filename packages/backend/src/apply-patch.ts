@@ -3,11 +3,18 @@ import { dirname } from "node:path";
 import type { FileDiff } from "@argon/shared";
 import { type ExtensionFactory, generateDiffString } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { derive, type Hunk, joinBom, parse as parseResult } from "../vendor/opencode-patch/src/patch.ts";
 import { APPLY_PATCH_LARK } from "./apply-patch-grammar.ts";
 import { capDiff } from "./diff-preview.ts";
 import { log } from "./log.ts";
-import { derive, joinBom, parse } from "./patch-parser.ts";
 import { resolveToolPath } from "./sandbox-policy.ts";
+
+/** opencode's parser returns a Result; Argon's callers expect a throw with the model-readable message. */
+function parse(input: string): ReadonlyArray<Hunk> {
+	const result = parseResult(input);
+	if (result._tag === "Failure") throw new Error(result.failure.message);
+	return result.success;
+}
 
 export interface PlannedFileChange {
 	path: string;

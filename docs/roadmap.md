@@ -146,7 +146,8 @@
   - 写路径走与 edit / write 相同的沙箱检查；工作区外路径按沙箱越界处理
   - 按模型切换（参考 opencode `tool/model-policy.ts`）：GPT-5 及以上（排除 gpt-4、oss）隐藏 edit / write、启用 `apply_patch`，其他模型反之；与预设并列，可在设置里关闭，切换模型后下一轮生效
   - presenter 把它映射为 `file_change`，子调用（codemode 里调用）同样显示 diff
-  - 待补：Codex `codex-rs/apply-patch` 的场景用例只移植了一个（当时连不上 GitHub），其余用例和上游 commit 号待补
+  - 待补：Codex `codex-rs/apply-patch` 的场景用例只移植了一个（当时连不上 GitHub），其余用例待补
+  - [x] opencode 的解析器改为 vendor（D18），只改一行 import，可用 `npm run vendor -- sync opencode-patch` 跟随上游
   - 已知：用户装的扩展若注册同名 `apply_patch`（如 magpie 的 codex-exec-pi、pi-codex-conversion），会替换内置实现，两阶段、审批预览和沙箱检查都不再适用
 - [ ] 已知风险：pi-codex-conversion 的 `exec_command` / `write_stdin` / `apply_patch` 是独立 Rust 程序，不经过 `argon-sandbox`；用户在 `ARGON_HOME` 装了它时沙箱失效。至少要检测到不受沙箱覆盖的工具并在界面上标"未隔离"
 - [ ] 各类型的显示细节（按需）：read 内容语法高亮；search 结果做成列表；MCP 工具标题带上服务器名（可用 `source` 或命名空间）；按需注册第一个“来源 + 工具名”覆盖渲染器

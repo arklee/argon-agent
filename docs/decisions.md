@@ -314,7 +314,7 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 **决定**：
 
-1. **自己用 TS 实现，作为 inline extension 注册。** 文件是 `backend/src/apply-patch.ts`，解析和四级模糊匹配移植自 opencode 的 `packages/util/src/patch.ts`（MIT），Lark 语法取自 Codex（Apache-2.0）。工具声明 `constrainedSampling: { type: "grammar", variants: { openai_lark } }`，支持语法工具的 provider 会把它作为 grammar 工具发给模型，其他 provider 退回成 JSON 参数 `{ input }`。注册为 `builtin:apply-patch`，标记 `replaceable`：可以用 `-builtin:apply-patch` 关闭，第三方的同名工具会替换它。
+1. **自己用 TS 实现，作为 inline extension 注册。** 文件是 `backend/src/apply-patch.ts`，解析和四级模糊匹配直接用 opencode 的 `packages/util/src/patch.ts`（MIT，见 D18 的 `vendor/opencode-patch`），Lark 语法取自 Codex（Apache-2.0）。工具声明 `constrainedSampling: { type: "grammar", variants: { openai_lark } }`，支持语法工具的 provider 会把它作为 grammar 工具发给模型，其他 provider 退回成 JSON 参数 `{ input }`。注册为 `builtin:apply-patch`，标记 `replaceable`：可以用 `-builtin:apply-patch` 关闭，第三方的同名工具会替换它。
 2. **两阶段执行。** `planPatch` 先在内存里校验全部文件并算出每个文件改后的内容，然后才写盘；任何一个文件校验失败，就一个文件都不写。审批预览和执行用的是同一个 `planPatch`；执行时会重新计算一遍，因为审批期间文件可能已经变了。
 3. **审批和沙箱规则与 edit / write 一致。** "ask" 模式下，补丁涉及的所有路径（包括移动的目标路径）都通过 `SandboxPolicy.canWrite` 才自动放行，否则就询问，审批卡片显示完整的多文件 diff，一次审批。补丁解析不了时直接询问。
 4. **协议改成按文件给 diff。** `ToolCallState.diffs`、`tool_diff`、`tool_ended` 和 `tool_approval` 里原来单份的 `diff: string` 都换成 `FileDiff[]`（`{ path, diff }`），`path` 与 `display.files[].path` 对应。`PROTOCOL_VERSION` 升到 2。已保存的会话里旧格式（`details.diff`、`argonNestedDiffs` 的字符串值）仍然能读。
@@ -324,3 +324,25 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 - 直接用 pi-codex-conversion 的 Rust `apply_patch`：不经过沙箱，也没有审批预览，否决。
 - 接管 provider，由 Argon 发送 custom tool：pi 的 `constrainedSampling` 已经能做到，没必要。
+
+## D18. 部分引入第三方代码（vendor）
+
+**状态**：设计于 2026-11-28。
+
+**背景**：经常只需要某个包或项目里的一部分功能（例如 opencode 的补丁解析、narumitw 扩展里的生图请求），或者只需要很小的改动。整包安装会带上用不到的依赖（终端 UI、effect、pi-codex-conversion 等），桌面打包版也没有 npm，用户装不了 pi 包；fork 整个项目维护成本又太高。
+
+**决定**：
+
+1. 放在 `packages/backend/vendor/<name>/`，只取用到的文件。这些代码会用到 pi 的类型，按边界规则只能放在 backend 里；它们是普通源码，随 backend 一起打包。
+2. `vendor.json` 记录来源（`npm:` 或 `github:`）、基线版本（npm 版本号或 commit）、本地路径到上游路径的映射和改动说明；`LICENSE` 原样保留。不保存上游原样副本：npm 版本和 commit 都不可变，需要时重新下载。
+3. 同步用三方合并：`npm run vendor -- sync <name>` 对每个文件执行 `git merge-file 本地 旧基线 新版本`，上游改动自动合入，冲突留标记并以非零退出。`check` 列出有新版本的 vendor，`diff` 显示我们相对基线的改动（不另存 patch 文件）。
+4. 改动尽量小，能放进 Argon 自己的文件（不在 `files` 映射里，同步时不动）就不改上游文件；必须改的行加 `// Argon:` 注释。`src/` 不参与 Biome 格式化，保持上游风格，否则每次合并都会冲突。
+5. 改 pi 本身仍按 CLAUDE.md 的优先级（inline extension > SDK 参数 > patch-package > fork）；vendor 用于第三方扩展和其他项目的代码。
+
+第一个例子是 `vendor/opencode-patch`：opencode 的 `patch.ts` 原样引入，只改了一行 import，把 `effect` 换成 Argon 的 `effect-lite.ts`（只实现了它用到的 `Result` 和 `Schema.TaggedError`）。
+
+**考虑过的方案**：
+
+- 整包依赖 + patch-package：仍然要带上全部依赖，打包版也装不了用户包。
+- 移植时按 Argon 风格重写（D17 最初的做法）：几乎每一行都和上游不同，上游一更新合并就冲突，等于 fork。
+- git subtree / submodule：拉进整个仓库，只用一个文件时代价太大。

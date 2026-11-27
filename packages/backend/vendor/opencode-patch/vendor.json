@@ -1,0 +1,10 @@
+{
+	"source": "github:anomalyco/opencode",
+	"ref": "HEAD",
+	"version": "5d1f78844492ed36c771f2ec3d2d5e459ed90670",
+	"license": "LICENSE",
+	"files": {
+		"src/patch.ts": "packages/util/src/patch.ts"
+	},
+	"notes": "Patch parser and fuzzy matcher for apply_patch (decisions D17). Only the `effect` import line is changed, to ../effect-lite.ts (Result and Schema.TaggedError, the parts patch.ts uses). src/bom.ts is Argon's: upstream's also has Effect file IO."
+}
