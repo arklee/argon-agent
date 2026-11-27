@@ -1,0 +1,2 @@
+# Biome requires LF; keep Windows checkouts (CI included) from converting to CRLF.
+* text=auto eol=lf
