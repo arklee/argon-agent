@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
+	ArgonProjectSettings,
 	ArgonSettings,
 	PermissionMode,
 	PermissionRule,
@@ -21,6 +22,7 @@ import type {
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import lockfile from "proper-lockfile";
 
+import { canonicalProjectPath } from "./project-trust.ts";
 import { validateAllowedDomains } from "./sandbox.ts";
 import { effectiveMode, sandboxSupport } from "./sandbox-policy.ts";
 import { resolveToolPreset } from "./tool-presets.ts";
@@ -278,7 +280,18 @@ const DEFAULT_ARGON: ArgonSettings = {
 	sandbox: { allowedDomains: [] },
 };
 
+function projectValues(value: ArgonProjectSettings | null): ArgonProjectSettings {
+	const result: ArgonProjectSettings = {};
+	if (value?.permissionMode === "auto" || value?.permissionMode === "ask") result.permissionMode = value.permissionMode;
+	if (typeof value?.toolPreset === "string") result.toolPreset = resolveToolPreset(value.toolPreset).id;
+	if (value?.mcpServers && typeof value.mcpServers === "object" && !Array.isArray(value.mcpServers)) {
+		const entries = Object.entries(value.mcpServers).filter(([, enabled]) => typeof enabled === "boolean");
+		if (entries.length) result.mcpServers = Object.fromEntries(entries);
+	}
+	return result;
+}
 export class ArgonSettingsStore {
+	private readonly projects = new Map<string, ArgonProjectSettings>();
 	private current: ArgonSettings = DEFAULT_ARGON;
 	private readonly path: string;
 	private writes: Promise<void> = Promise.resolve();
@@ -297,8 +310,16 @@ export class ArgonSettingsStore {
 	}
 
 	async load(): Promise<void> {
+		this.projects.clear();
 		try {
-			const data = JSON.parse(await readFile(this.path, "utf8")) as Partial<ArgonSettings>;
+			const data = JSON.parse(await readFile(this.path, "utf8")) as Partial<ArgonSettings> & {
+				projects?: Record<string, ArgonProjectSettings>;
+			};
+
+			for (const [cwd, value] of Object.entries(data.projects ?? {})) {
+				const project = projectValues(value);
+				if (Object.keys(project).length) this.projects.set(canonicalProjectPath(cwd), project);
+			}
 			const permissions = (data.permissions ?? {}) as Partial<ArgonSettings["permissions"]>;
 			this.current = {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
@@ -338,7 +359,48 @@ export class ArgonSettingsStore {
 			defaultToolPreset: resolveToolPreset(patch.defaultToolPreset ?? this.current.defaultToolPreset).id,
 			permissions: { ...this.current.permissions, ...patch.permissions },
 		};
-		const data = `${JSON.stringify(this.current, null, 2)}\n`;
+		await this.save();
+	}
+
+	getProject(cwd: string) {
+		return structuredClone(this.projects.get(canonicalProjectPath(cwd)) ?? {});
+	}
+
+	permissionModeFor(cwd: string) {
+		return effectiveMode(
+			this.envMode ?? this.getProject(cwd).permissionMode ?? this.current.permissions.defaultMode,
+			this.support,
+		);
+	}
+
+	toolPresetFor(cwd: string) {
+		return this.getProject(cwd).toolPreset ?? this.get().defaultToolPreset;
+	}
+
+	async updateProject(cwd: string, set: ArgonProjectSettings = {}, unset: (keyof ArgonProjectSettings)[] = []) {
+		if (!cwd?.trim()) throw new Error("cwd is required");
+		if (set.permissionMode !== undefined && set.permissionMode !== "auto" && set.permissionMode !== "ask")
+			throw new Error("Invalid permissionMode");
+		if (
+			set.mcpServers !== undefined &&
+			(!set.mcpServers ||
+				typeof set.mcpServers !== "object" ||
+				Array.isArray(set.mcpServers) ||
+				Object.values(set.mcpServers).some((enabled) => typeof enabled !== "boolean"))
+		)
+			throw new Error("mcpServers must map names to booleans");
+		if (set.permissionMode === "ask" && !this.support.supported) throw new Error(this.support.reason);
+		const key = canonicalProjectPath(cwd);
+		const existing = this.getProject(key);
+		for (const field of unset) delete existing[field];
+		const next = projectValues({ ...existing, ...set });
+		if (Object.keys(next).length) this.projects.set(key, next);
+		else this.projects.delete(key);
+		await this.save();
+	}
+
+	private async save() {
+		const data = `${JSON.stringify({ ...this.current, projects: Object.fromEntries(this.projects) }, null, 2)}\n`;
 		const write = this.writes
 			.catch(() => {})
 			.then(async () => {

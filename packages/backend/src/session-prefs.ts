@@ -1,5 +1,6 @@
 /**
  * Argon's per-session preferences, per backend environment ($ARGON_HOME/session-prefs.json):
+ * - pinned: pin timestamps keyed by session path;
  * - archived: session paths hidden from the main list (pi has no archive concept);
  * - externalSessions: session files outside pi's session directory that Argon has opened, so the
  *   uploads cleanup still sees their references after they are unloaded.
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { log } from "./log.ts";
 
 interface Data {
+	pinned: Record<string, number>;
 	archived: string[];
 	externalSessions: string[];
 }
@@ -19,6 +21,7 @@ interface Data {
 export class SessionPrefs {
 	private readonly path: string;
 	private readonly archived: Set<string>;
+	private readonly pinned: Map<string, number>;
 	private readonly external: Set<string>;
 	private writing = Promise.resolve();
 
@@ -26,6 +29,7 @@ export class SessionPrefs {
 		this.path = join(argonHome, "session-prefs.json");
 		const data = this.read();
 		this.archived = new Set(data.archived);
+		this.pinned = new Map(Object.entries(data.pinned).filter(([, at]) => Number.isFinite(at)));
 		this.external = new Set(data.externalSessions);
 	}
 
@@ -33,10 +37,23 @@ export class SessionPrefs {
 		return this.archived.has(sessionPath);
 	}
 
+	pinnedAt(path: string) {
+		return this.pinned.get(path);
+	}
+
+	async setPinned(path: string, pinned: boolean) {
+		if (this.pinned.has(path) === pinned || (pinned && this.isArchived(path))) return;
+		if (pinned) this.pinned.set(path, Date.now());
+		else this.pinned.delete(path);
+		await this.save();
+	}
+
 	async setArchived(sessionPath: string, archived: boolean): Promise<void> {
 		if (this.archived.has(sessionPath) === archived) return;
-		if (archived) this.archived.add(sessionPath);
-		else this.archived.delete(sessionPath);
+		if (archived) {
+			this.archived.add(sessionPath);
+			this.pinned.delete(sessionPath);
+		} else this.archived.delete(sessionPath);
 		await this.save();
 	}
 
@@ -69,11 +86,11 @@ export class SessionPrefs {
 		return [...this.external];
 	}
 
-	/** A deleted session leaves both lists. */
+	/** Remove all private preferences for a deleted session. */
 	async forget(sessionPath: string): Promise<void> {
 		const wasArchived = this.archived.delete(sessionPath);
 		const wasExternal = this.external.delete(sessionPath);
-		if (wasArchived || wasExternal) await this.save();
+		if (this.pinned.delete(sessionPath) || wasArchived || wasExternal) await this.save();
 	}
 
 	private read(): Data {
@@ -81,14 +98,22 @@ export class SessionPrefs {
 			const data = JSON.parse(readFileSync(this.path, "utf8")) as Partial<Data>;
 			const strings = (list: unknown) =>
 				Array.isArray(list) ? list.filter((entry): entry is string => typeof entry === "string") : [];
-			return { archived: strings(data.archived), externalSessions: strings(data.externalSessions) };
+			return {
+				pinned: data.pinned ?? {},
+				archived: strings(data.archived),
+				externalSessions: strings(data.externalSessions),
+			};
 		} catch {
-			return { archived: [], externalSessions: [] };
+			return { pinned: {}, archived: [], externalSessions: [] };
 		}
 	}
 
 	private save(): Promise<void> {
-		const data: Data = { archived: [...this.archived], externalSessions: [...this.external] };
+		const data: Data = {
+			pinned: Object.fromEntries(this.pinned),
+			archived: [...this.archived],
+			externalSessions: [...this.external],
+		};
 		this.writing = this.writing.then(async () => {
 			const tmp = `${this.path}.${process.pid}.${randomUUID()}.tmp`;
 			try {

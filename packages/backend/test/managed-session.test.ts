@@ -154,6 +154,18 @@ describe("ManagedSession trust and diagnostics", () => {
 		expect(events.map(({ event }) => event.type)).toEqual(["run_started", "run_settled", "project_trust_changed"]);
 	});
 
+	it("defers MCP config reloads until settle and coalesces edits with the same trust decision", async () => {
+		const { managed, emit, reload } = await loadSession();
+		await managed.refreshProjectTrust();
+		reload.mockClear();
+		emit({ type: "agent_start" });
+		await managed.refreshProjectTrust(true);
+		await managed.refreshProjectTrust(true);
+		emit({ type: "agent_end", messages: [], willRetry: true });
+		expect(reload).not.toHaveBeenCalled();
+		emit({ type: "agent_settled", aborted: false });
+		await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+	});
 	it("publishes trust status changes without reloading when the effective trust is unchanged", async () => {
 		const { managed, events, reload, setTrustStatus } = await loadSession();
 		await managed.refreshProjectTrust();

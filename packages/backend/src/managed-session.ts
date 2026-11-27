@@ -45,7 +45,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { generateTitle, titleModel } from "./auto-title.ts";
-import { createBuiltinExtensions } from "./builtin-extensions.ts";
+import { createBuiltinExtensions, sessionMcpOptions } from "./builtin-extensions.ts";
 import { previewDiff, resultDiff } from "./diff-preview.ts";
 import { completeFile, type FileCompletion } from "./file-completion.ts";
 import { InteractionBroker } from "./interactions.ts";
@@ -151,6 +151,7 @@ export class ManagedSession {
 	private currentAssistantItemId: string | undefined;
 	private disposed = false;
 	private appliedProjectTrust: boolean | undefined;
+	private configReloadPending = false;
 	private trustRefreshPending = false;
 	private trustRefresh: Promise<void> | undefined;
 	private promptPreflights = 0;
@@ -266,7 +267,7 @@ export class ManagedSession {
 							settings: deps.settings,
 							shellPath: settingsManager.getShellPath(),
 							commandPrefix: settingsManager.getShellCommandPrefix(),
-							mode: () => self?.state.permissionMode ?? deps.settings.defaultPermissionMode,
+							mode: () => self?.state.permissionMode ?? deps.settings.permissionModeFor(cwd),
 							session: () => {
 								if (!self) throw new Error("Session not ready");
 								return { id: self.state.sessionId, broker: self.broker, allowedDomains: self.networkAllowedDomains };
@@ -274,7 +275,10 @@ export class ManagedSession {
 						}),
 						writeDiffExtension,
 						nestedDiffExtension,
-						...createBuiltinExtensions(() => (self?.appliedToolPreset ?? initialPreset).codemodeMode),
+						...createBuiltinExtensions(
+							() => (self?.appliedToolPreset ?? initialPreset).codemodeMode,
+							sessionMcpOptions(agentDir, sessionManager, deps.settings),
+						),
 						mcp.extension,
 					],
 				},
@@ -300,7 +304,7 @@ export class ManagedSession {
 			.findLast((e) => e.type === "custom" && e.customType === TOOL_PRESET_ENTRY);
 		const initialPreset = resolveToolPreset(
 			entry?.type === "custom" ? (entry.data as { preset?: unknown } | null)?.preset : undefined,
-			deps.settings.get().defaultToolPreset,
+			deps.settings.toolPresetFor(sessionManager.getCwd()),
 		);
 		const runtime = await createAgentSessionRuntime(createRuntime, {
 			cwd: sessionManager.getCwd(),
@@ -311,7 +315,7 @@ export class ManagedSession {
 			runtime,
 			mcp,
 			deps.agentDir,
-			ManagedSession.storedPermissionMode(sessionManager) ?? deps.settings.defaultPermissionMode,
+			ManagedSession.storedPermissionMode(sessionManager) ?? deps.settings.permissionModeFor(sessionManager.getCwd()),
 			initialPreset,
 			deps.resolveProjectTrust,
 			projectTrust,
@@ -399,7 +403,8 @@ export class ManagedSession {
 	// Commands
 	// -------------------------------------------------------------------------
 
-	refreshProjectTrust(): Promise<void> {
+	refreshProjectTrust(reloadConfig = false): Promise<void> {
+		this.configReloadPending ||= reloadConfig;
 		this.trustRefreshPending = true;
 		return this.applyPendingProjectTrust();
 	}
@@ -419,7 +424,8 @@ export class ManagedSession {
 						this.trust.extensions,
 						(message) => this.appendDiagnostic({ level: "error", source: "extension", message }),
 					);
-					if (next.trusted !== this.appliedProjectTrust) {
+					if (this.configReloadPending || next.trusted !== this.appliedProjectTrust) {
+						this.configReloadPending = false;
 						settings.setProjectTrusted(next.trusted);
 						this.appliedProjectTrust = undefined;
 						await this.reload();

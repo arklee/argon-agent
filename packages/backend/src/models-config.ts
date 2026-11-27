@@ -25,7 +25,7 @@ function parse(text: string) {
 	if (!object(value) || !object(value.providers)) throw new Error("Expected a providers object");
 	return { ...value, providers: { ...value.providers } };
 }
-function hash(text: string) {
+export function configVersion(text: string) {
 	return createHash("sha256").update(text).digest("hex");
 }
 function merge(existing: Entry, config: object, keys: readonly string[]) {
@@ -61,7 +61,7 @@ export class ModelsConfigStore {
 	}
 	async get() {
 		const text = (await this.read()) ?? "";
-		return { path: this.path, text, version: hash(text), error: this.runtime.getError() };
+		return { path: this.path, text, version: configVersion(text), error: this.runtime.getError() };
 	}
 	async providerConfigs() {
 		const configs = new Map<string, CustomProviderConfig>();
@@ -109,14 +109,15 @@ export class ModelsConfigStore {
 			}
 			await this.runtime.refresh();
 			this.changed();
-			return { version: hash(text) };
+			return { version: configVersion(text) };
 		});
 		this.pending = operation.catch(() => {});
 		return operation;
 	}
 	set(text: string, version: string) {
 		return this.write((current) => {
-			if (hash(current ?? "") !== version) throw new RequestError("conflict", "models.json changed since it was read");
+			if (configVersion(current ?? "") !== version)
+				throw new RequestError("conflict", "models.json changed since it was read");
 			if (typeof text !== "string") throw new RequestError("bad_request", "Expected models.json text");
 			return text;
 		});

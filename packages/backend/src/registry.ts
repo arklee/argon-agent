@@ -29,6 +29,7 @@ import { AuthFlows } from "./auth-flows.ts";
 import { log } from "./log.ts";
 import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
+import { McpConfigStore } from "./mcp-config.ts";
 import { ModelsConfigStore } from "./models-config.ts";
 import {
 	canonicalProjectPath,
@@ -78,6 +79,7 @@ export class SessionRegistry {
 	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
+	readonly mcpConfig: McpConfigStore;
 	readonly modelsConfig: ModelsConfigStore;
 	readonly auth: AuthFlows;
 
@@ -117,6 +119,20 @@ export class SessionRegistry {
 			(status) => this.broadcast({ type: "plugins_status", status }),
 			() => this.broadcast({ type: "providers_changed" }),
 		);
+		this.mcpConfig = new McpConfigStore(
+			options.agentDir,
+			(cwd) => this.isProjectTrusted(cwd),
+			async (target, reload) => {
+				this.broadcast({ type: "mcp_config_changed" });
+				if (!reload) return;
+				const path = target.scope === "project" ? canonicalProjectPath(target.cwd) : undefined;
+				await Promise.all(
+					[...this.sessions.values()]
+						.filter((s) => !path || canonicalProjectPath(s.snapshot().state.cwd) === path)
+						.map((s) => s.refreshProjectTrust(true)),
+				);
+			},
+		);
 		this.modelsConfig = new ModelsConfigStore(join(options.agentDir, "models.json"), modelRuntime, () =>
 			this.broadcast({ type: "providers_changed" }),
 		);
@@ -135,7 +151,12 @@ export class SessionRegistry {
 		return {
 			...readPiSettings(this.options.agentDir, cwd),
 			argon: this.options.settings.get(),
-			...(cwd ? { project: readProjectSettings(cwd, this.isProjectTrusted(cwd)) } : {}),
+			...(cwd
+				? {
+						argonProject: this.options.settings.getProject(cwd),
+						project: readProjectSettings(cwd, this.isProjectTrusted(cwd)),
+					}
+				: {}),
 		};
 	}
 
@@ -144,6 +165,12 @@ export class SessionRegistry {
 		if (update.argon) await this.options.settings.update(update.argon);
 	}
 
+	async updateArgonProject({ cwd, set, unset }: MethodParams<"settings.updateArgonProject">) {
+		const before = this.options.settings.getProject(cwd).mcpServers;
+		await this.options.settings.updateProject(cwd, set, unset);
+		if (JSON.stringify(before) !== JSON.stringify(this.options.settings.getProject(cwd).mcpServers))
+			this.broadcast({ type: "mcp_config_changed" });
+	}
 	updateProjectSettings(cwd: string, set?: Partial<ProjectPiSettings>, unset?: (keyof ProjectPiSettings)[]): void {
 		writeProjectSettings(cwd, set, unset);
 	}
@@ -227,11 +254,19 @@ export class SessionRegistry {
 		return loading;
 	}
 
-	async setArchived(sessionPath: string, archived: boolean): Promise<void> {
+	private async requireKnownSession(sessionPath: string) {
 		const known =
 			[...this.sessions.values()].some((s) => s.sessionPath === sessionPath) ||
 			(await this.sessionIndex.list()).some((info) => info.path === sessionPath);
 		if (!known) throw new NotFoundError(`Not a known session: ${sessionPath}`);
+	}
+	async setPinned(sessionPath: string, pinned: boolean) {
+		await this.requireKnownSession(sessionPath);
+		await this.prefs.setPinned(sessionPath, pinned);
+		this.broadcast({ type: "sessions_changed" });
+	}
+	async setArchived(sessionPath: string, archived: boolean) {
+		await this.requireKnownSession(sessionPath);
 		await this.prefs.setArchived(sessionPath, archived);
 		this.broadcast({ type: "sessions_changed" });
 	}
@@ -384,6 +419,7 @@ export class SessionRegistry {
 				modifiedAt: info.modified.getTime(),
 				loaded: Boolean(loaded),
 				running: loaded?.isRunning ?? false,
+				pinnedAt: this.prefs.pinnedAt(info.path),
 				...(this.prefs.isArchived(info.path) ? { archived: true } : {}),
 			});
 		}
@@ -403,6 +439,7 @@ export class SessionRegistry {
 				modifiedAt: session.createdAt,
 				loaded: true,
 				running: session.isRunning,
+				pinnedAt: session.sessionPath ? this.prefs.pinnedAt(session.sessionPath) : undefined,
 				...(session.sessionPath && this.prefs.isArchived(session.sessionPath) ? { archived: true } : {}),
 			});
 		}

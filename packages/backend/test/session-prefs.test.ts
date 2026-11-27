@@ -88,3 +88,22 @@ describe("SessionPrefs", () => {
 		expect(prefs.isArchived(join(home, "session.jsonl"))).toBe(false);
 	});
 });
+
+it("reads older prefs and persists pin, unpin, archive and deletion", async () => {
+	writeFileSync(join(home, "session-prefs.json"), JSON.stringify({ archived: ["old"] }));
+	const prefs = new SessionPrefs(home);
+	expect(prefs.isArchived("old")).toBe(true);
+	expect(prefs.pinnedAt("a")).toBeUndefined();
+	for (const action of ["unpin", "archive", "forget"]) {
+		await prefs.setPinned("a", true);
+		const at = new SessionPrefs(home).pinnedAt("a");
+		expect(at).toEqual(expect.any(Number));
+		await prefs.setPinned("a", true);
+		expect(prefs.pinnedAt("a")).toBe(at);
+		if (action === "archive") await prefs.setArchived("a", true);
+		else if (action === "forget") await prefs.forget("a");
+		else await prefs.setPinned("a", false);
+		expect(new SessionPrefs(home).pinnedAt("a")).toBeUndefined();
+		await prefs.setArchived("a", false);
+	}
+});

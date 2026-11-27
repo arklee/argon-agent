@@ -15,10 +15,14 @@ import {
 	createCodemodeExtension,
 	createMcpExtension,
 	createToolSearchExtension,
+	type ExtensionContext,
 	type ExtensionFactory,
 	type InlineExtension,
+	type SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { log } from "./log.ts";
+import { piMcp } from "./mcp-config.ts";
+import type { ArgonSettingsStore } from "./settings.ts";
 
 import type { ToolPreset } from "./tool-presets.ts";
 
@@ -36,7 +40,39 @@ async function loadLlamaExtension(): Promise<ExtensionFactory | undefined> {
 
 const llamaExtension = await loadLlamaExtension();
 
-export function createBuiltinExtensions(codemodeMode: () => ToolPreset["codemodeMode"]): InlineExtension[] {
+const MCP_ENTRY = "argon.mcp_servers";
+function sessionServers(manager: Pick<SessionManager, "getEntries">): Record<string, boolean> {
+	const entry = manager.getEntries().findLast((e) => e.type === "custom" && e.customType === MCP_ENTRY);
+	const servers =
+		entry?.type === "custom" ? (entry.data as { servers?: Record<string, boolean> } | null)?.servers : undefined;
+	return Object.fromEntries(Object.entries(servers ?? {}).filter(([, value]) => typeof value === "boolean"));
+}
+export function sessionMcpOptions(agentDir: string, manager: SessionManager, settings: ArgonSettingsStore) {
+	return {
+		loadConfig(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted" | "sessionManager">) {
+			const config = piMcp().loadMcpConfig({ agentDir, cwd: ctx.cwd, projectTrusted: ctx.isProjectTrusted() });
+			const defaults = { ...settings.getProject(ctx.cwd).mcpServers, ...sessionServers(ctx.sessionManager) };
+			for (const { name, config: server } of config.servers)
+				if (Object.hasOwn(defaults, name)) server.enabled = defaults[name];
+			return config;
+		},
+		updateConfig(entry, patch) {
+			if (patch.enabled !== undefined)
+				manager.appendCustomEntry(MCP_ENTRY, { servers: { ...sessionServers(manager), [entry.name]: patch.enabled } });
+			if (patch.exposure !== undefined)
+				piMcp().updateMcpServerConfig(
+					entry.override ?? entry.source,
+					entry.name,
+					{ exposure: patch.exposure },
+					{ override: entry.override !== undefined },
+				);
+		},
+	} satisfies NonNullable<Parameters<typeof createMcpExtension>[0]>;
+}
+export function createBuiltinExtensions(
+	codemodeMode: () => ToolPreset["codemodeMode"],
+	mcpOptions: Parameters<typeof createMcpExtension>[0] = {},
+): InlineExtension[] {
 	return [
 		// Same order and flags as pi's builtInExtensions (dist/extensions/index.js).
 		...(llamaExtension ? [{ name: "llama.cpp", factory: llamaExtension, builtin: true } as InlineExtension] : []),
@@ -53,6 +89,11 @@ export function createBuiltinExtensions(codemodeMode: () => ToolPreset["codemode
 		{ name: "tool-search", factory: createToolSearchExtension(), replaceable: true, builtin: true },
 		// Never open a browser on the backend machine (it may be remote): sign-in URLs go to the client
 		// as an `oauth` interaction (see mcp-bridge.ts).
-		{ name: "mcp", factory: createMcpExtension({ openUrl: () => {} }), replaceable: true, builtin: true },
+		{
+			name: "mcp",
+			factory: createMcpExtension({ ...mcpOptions, openUrl: () => {} }),
+			replaceable: true,
+			builtin: true,
+		},
 	];
 }

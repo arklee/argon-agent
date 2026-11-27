@@ -198,6 +198,12 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		}),
 		"sessions.completeFile": async (params) =>
 			(await registry.require(params.sessionId).completeFile(params.textBeforeCursor)) ?? null,
+		"sessions.setPinned": async (params) => {
+			if (typeof params.sessionPath !== "string" || typeof params.pinned !== "boolean")
+				throw new RequestError("bad_request", "sessionPath and pinned are required");
+			await registry.setPinned(params.sessionPath, params.pinned);
+			return empty;
+		},
 		"sessions.setArchived": async (params) => {
 			if (typeof params.sessionPath !== "string" || typeof params.archived !== "boolean") {
 				throw new RequestError("bad_request", "sessionPath and archived are required");
@@ -265,6 +271,29 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 				throw new RequestError("bad_request", "Plugin changes must be confirmed by the user (confirmed: true)");
 			}
 			return { message: await registry.changePlugin(params.action, params.spec) };
+		},
+		"mcp.config.get": async (p) => registry.mcpConfig.get(p.cwd),
+		"mcp.config.getText": async (p) => registry.mcpConfig.getText(p),
+		"mcp.config.setText": async (p) => registry.mcpConfig.setText(p),
+		"mcp.config.saveServer": async (p) => {
+			await registry.mcpConfig.saveServer(p);
+			return empty;
+		},
+		"mcp.config.removeServer": async (p) => {
+			await registry.mcpConfig.removeServer(p);
+			return empty;
+		},
+		"mcp.config.setEnabled": async (p) => {
+			await registry.mcpConfig.setEnabled(p);
+			return empty;
+		},
+		"settings.updateArgonProject": async (p) => {
+			try {
+				await registry.updateArgonProject(p);
+			} catch (error) {
+				throw new RequestError("bad_request", String(error));
+			}
+			return empty;
 		},
 		"settings.get": async (params) => registry.readSettings(params.cwd),
 		"settings.update": async (params) => {

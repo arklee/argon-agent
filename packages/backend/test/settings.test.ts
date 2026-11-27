@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -75,4 +75,32 @@ it("normalizes the default tool preset and persists a known choice", async () =>
 	expect(settings.get().defaultToolPreset).toBe("codemode_only");
 	await settings.update({ defaultToolPreset: "unknown" });
 	expect(settings.get().defaultToolPreset).toBe("classic");
+});
+
+it("resolves private project defaults by canonical path, replaces maps and removes empty overrides", async () => {
+	const home = mkdtempSync(join(tmpdir(), "argon-project-"));
+	try {
+		const alias = join(home, "alias");
+		symlinkSync(home, alias, "dir");
+		const support = { supported: true, mechanism: "seatbelt" } as const;
+		const s = new ArgonSettingsStore(home, undefined, support);
+		await s.update({ permissions: { defaultMode: "auto", rules: [] }, defaultToolPreset: "codemode" });
+		expect(s.permissionModeFor(alias)).toBe("auto");
+		await s.updateProject(alias, { permissionMode: "ask", toolPreset: "classic", mcpServers: { a: true, b: false } });
+		await s.updateProject(home, { mcpServers: { c: true } });
+		await s.load();
+		expect(s.getProject(home)).toEqual({ permissionMode: "ask", toolPreset: "classic", mcpServers: { c: true } });
+		expect(s.permissionModeFor(home)).toBe("ask");
+		expect(s.toolPresetFor(alias)).toBe("classic");
+		const env = new ArgonSettingsStore(home, "auto", support);
+		await env.load();
+		expect(env.permissionModeFor(alias)).toBe("auto");
+		const unsupported = new ArgonSettingsStore(home, undefined, { supported: false, reason: "unsupported" });
+		await expect(unsupported.updateProject(alias, { permissionMode: "ask" })).rejects.toThrow("unsupported");
+		await s.updateProject(alias, {}, ["permissionMode", "toolPreset", "mcpServers"]);
+		expect(s.toolPresetFor(home)).toBe("codemode");
+		expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8")).projects).toEqual({});
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
 });
