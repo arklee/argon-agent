@@ -44,6 +44,8 @@
 - [x] 自动生成会话标题（首轮结束后由后端生成标题。）
 - [x] 项目列表管理：固定、移除、"最近项目"（侧栏支持固定、隐藏和恢复项目，新建会话对话框已有最近项目。）
 - [x] 先添加项目再建会话：侧栏“Add project”选目录（`ProjectPrefs.addedAt`，没有会话的项目也列出），项目旁的 + 直接新建会话；“New session”/⌘⇧O 在当前项目新建，当前已是空会话时只聚焦输入框
+- [ ] 侧栏交互（D16）：会话行悬停时右侧显示归档按钮（归档视图里是删除），原 `...` 菜单改为在鼠标位置弹出的右键菜单；项目标题的菜单也改为右键，增加“项目设置…”；每个项目默认显示 5 条会话，其余收进“显示更多”
+- [ ] 会话置顶（D16）：右键置顶/取消置顶，侧栏顶部独立的 Pinned 分区（`sessions.setPinned`，记在 `session-prefs.json`）
 
 ### 设置与账号
 
@@ -61,6 +63,9 @@
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
+- [ ] MCP 配置入口（D16）：设置页 MCP 分区，全局 mcp.json 和项目 `.argon/mcp.json` 的服务器增删改、编辑 JSON，“新对话默认开启”开关（全局写 mcp.json，项目写私有设置）
+- [ ] 对话级 MCP 开关（D16）：输入框工具栏的 MCP 弹层，开关只作用于当前对话（会话条目 `argon.mcp_servers`），MCP 面板的启用/停用也改为对话级
+- [ ] 项目设置（D16）：设置页项目范围对应侧栏项目，可从项目菜单进入；权限模式、工具预设、MCP 默认开启存在 `$ARGON_HOME/settings.json` 的 `projects` 里，新会话按 会话 > 项目 > 全局 取值
 - [x] 项目信任（project trust）流程：信任未决的项目先按不信任加载，对话区顶部横幅询问（信任 / 信任上级目录 / 仅本次 / 不信任），顶栏盾牌图标可随时更改；`projects.setTrust` 会重新加载受影响的会话（运行中的等本轮结束）。见 decisions D11
 - [x] 在 GUI 中展示扩展加载诊断（diagnostics）和扩展错误：`SessionState.diagnostics`，顶栏警告图标显示数量，弹层列出来源、信息和路径
 - [x] 更丰富地渲染扩展 widget：`SessionState.widgets` 记录 key、行和位置（输入框上方或下方），组件型 widget 由 backend 以 100 列无头渲染成文本（剥离 ANSI，`requestRender` 时重绘）；`setWorkingMessage` 替换“正在处理”提示

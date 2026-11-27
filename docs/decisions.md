@@ -280,3 +280,27 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 - 网络代理由 sandbox-runtime 全局持有，未知主机通过 ask 回调发起 `network_access` 交互。请求无法可靠归属到会话：只有一个会话在执行沙箱命令时就问它，否则问最近启动命令的会话并记日志。允许的域名保存在 `ArgonSettings.sandbox.allowedDomains`，设置页可以移除。
 - 后端启动时初始化沙箱；失败时 `sandbox.reason` 写明原因，bash 在 "ask" 模式下拒绝执行，不降级。
 - 其他扩展提供的执行类工具（例如 `exec`）不在沙箱内，"ask" 模式下仍按其他工具询问。
+
+## D16. 项目设置、MCP 配置与会话置顶
+
+**状态**：设计于 2026-11-27。
+
+**背景**：侧栏的“项目”（`ProjectPrefs`，存 `$ARGON_HOME/projects.json`）和设置页的 “This Project”（当前会话 cwd 下的 `.argon/settings.json`）是两套概念；权限模式、工具预设只能全局设置；MCP 服务器只能手写 mcp.json，面板上的启用/停用直接改文件，影响所有对话。
+
+**决定**：
+
+1. **侧栏项目就是 Argon 的项目。** 设置页的项目范围编辑的是某个侧栏项目，可以从项目右键菜单“项目设置…”直接进入，不依赖当前打开的会话。项目路径用 `canonicalProjectPath` 规范化。
+2. **项目设置分两层，按“仓库能不能决定它”划分：**
+   - 仓库里的 `<cwd>/.argon/`（可提交、可共享，项目受信任才生效）：pi 设置（`settings.json`）和项目自带的 MCP 服务器定义（`mcp.json`）。
+   - backend 机器上的 `$ARGON_HOME/settings.json` 的 `projects[<canonical cwd>]`（私有，不需要信任）：权限模式、工具预设、新对话默认开启哪些 MCP 服务器。仓库不能把自己设成“全部执行”，这与 pi 禁止项目 mcp.json 写 `auth` 是同一个理由。
+   - 取值顺序：会话自身 > 项目 > 全局（权限模式仍是 `ARGON_PERMISSION_MODE` 最优先）。设置页的项目范围把两层放在一页，逐项可恢复为全局值，并标明存放位置。
+   - 不放进 pi 的 `agent/settings.json`：那是 pi 的文件，结构随 pi 版本变化。
+3. **MCP 配置有设置页入口。** 全局 mcp.json 可增删改服务器（stdio：command / args / env / cwd；HTTP：url / headers），也可直接编辑 JSON；项目的 `.argon/mcp.json` 在项目范围里编辑（不能写 `auth`，与 pi 一致）。读写复用 pi 的 `extensions/mcp/config.js`（`loadMcpConfig` / `addMcpServerConfig` / `removeMcpServerConfig` / `updateMcpServerConfig`），像 llama 扩展一样按文件 URL 引入，不加补丁。配置变化后，受影响的已加载会话按 `projects.setTrust` 的方式重新加载（运行中的等本轮结束）。
+4. **“默认开启”与“本对话开启”分开。** mcp.json 的 `enabled` 是全局默认，项目可在私有设置里覆盖（`projects[cwd].mcpServers[name]`）。对话里的开关只作用于该对话，存为会话自定义条目 `argon.mcp_servers`（`{ [name]: boolean }`），重新打开时恢复。实现用 `createMcpExtension` 的 SDK 参数：`loadConfig` 在 pi 的默认加载结果上依次叠加项目默认和会话条目；`updateConfig` 对 `enabled` 写会话条目，对 `exposure` 仍写文件。被关闭的服务器在该对话里不启动。改了默认值后，已在对话里手动拨过的服务器保持原样。
+5. **会话可以置顶。** 置顶记在 `$ARGON_HOME/session-prefs.json`（与 archived 同处，按置顶时间排序），协议 `sessions.setPinned`，`SessionSummary.pinnedAt`。侧栏顶部单独的 Pinned 分区，置顶的会话不再出现在项目分组里；归档会同时取消置顶，删除会清除记录。
+
+**考虑过的方案**：
+
+- 权限模式等写进仓库 `.argon/`：仓库能放宽自己的权限，否决。
+- 对话里的开关直接改 mcp.json（现状）：一个对话的选择影响所有对话。
+- 扩展补丁导出 `loadMcpConfig`：按文件 URL 引入即可，不必扩大补丁。

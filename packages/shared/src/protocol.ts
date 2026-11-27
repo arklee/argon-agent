@@ -76,6 +76,8 @@ export interface SessionSummary {
 	running: boolean;
 	/** Archived sessions are listed apart (Argon preference, per environment). */
 	archived?: boolean;
+	/** When the session was pinned (epoch ms); pinned sessions are listed apart, newest pin first (D16). */
+	pinnedAt?: number;
 }
 
 export type SessionStatus = "idle" | "running";
@@ -164,7 +166,66 @@ export interface McpStatus {
 	servers: McpServerStatus[];
 }
 
+/**
+ * "enable" / "disable" apply to this session only (stored in the session, decisions D16); the defaults
+ * for new sessions are edited with `mcp.config.*` and `settings.updateArgonProject`.
+ */
 export type McpAction = "reconnect" | "enable" | "disable" | "signin" | "signout";
+
+// --- MCP configuration (mcp.json files on the backend, decisions D16) ---
+
+/** "global": `$ARGON_HOME/agent/mcp.json`. "project": `<cwd>/.argon/mcp.json` (used only when trusted). */
+export type McpConfigScope = "global" | "project";
+
+/** The part of an mcp.json server entry Argon's form edits; other fields of an existing entry are kept. */
+export type McpServerForm =
+	| { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string }
+	| { transport: "http"; url: string; headers?: Record<string, string> };
+
+export interface McpConfigServer {
+	name: string;
+	/**
+	 * Undefined for a project entry that only overrides `enabled` / `exposure` of the global server
+	 * with the same name, and for entries the form cannot represent (shown read-only; edit as JSON).
+	 */
+	form?: McpServerForm;
+	/** A project override of a global server (see `form`). */
+	override?: boolean;
+	/** The file's `enabled` (default true): the default for new sessions, before project settings. */
+	enabled: boolean;
+	exposure?: McpExposure;
+	/** Uses `auth.provider` (a provider login's token; global file only). */
+	authProvider?: string;
+}
+
+export interface McpConfigFile {
+	scope: McpConfigScope;
+	/** Backend path. */
+	path: string;
+	exists: boolean;
+	servers: McpConfigServer[];
+	/** The file could not be read or parsed; `servers` is then empty. */
+	error?: string;
+	/** Project scope: pi ignores the file while the project is not trusted. */
+	trusted?: boolean;
+}
+
+/** A config location: the global file, or a project's (`cwd` required). */
+export type McpConfigTarget = { scope: "global" } | { scope: "project"; cwd: string };
+
+// --- Argon's private per-project settings (decisions D16) ---
+
+/**
+ * Per-project choices the repository must not make for itself, kept on the backend machine
+ * ($ARGON_HOME/settings.json `projects`, keyed by canonical project path). Unset keys fall back to
+ * the global value. They apply to sessions started afterwards.
+ */
+export interface ArgonProjectSettings {
+	permissionMode?: PermissionMode;
+	toolPreset?: ToolPresetId;
+	/** New sessions: server name → on/off, over the mcp.json `enabled` default. */
+	mcpServers?: Record<string, boolean>;
+}
 
 /** A `/command` the session accepts: an extension command, a prompt template, or a skill (`skill:<name>`). */
 export interface SlashCommand {
@@ -576,6 +637,8 @@ export type GlobalEvent =
 	| { type: "sessions_changed" }
 	| { type: "session_unloaded"; sessionId: string }
 	| { type: "projects_changed" }
+	/** An mcp.json or the MCP defaults changed (re-read with mcp.config.get / settings.get). */
+	| { type: "mcp_config_changed" }
 	/** Plugins were enabled/disabled, or the Bun runtime's preparation progressed (see plugins.enable). */
 	| { type: "plugins_status"; status: PluginsStatus }
 	/** Providers, their auth state or their models changed (login, logout, plugin changes). */
@@ -702,7 +765,9 @@ export interface Methods {
 		result: { prefix: string; items: (CompletionItem & { isDirectory: boolean })[] } | null;
 	};
 	/** Archive or restore a session (listed sessions only). Archiving does not unload it. */
+	/** Archiving also unpins. */
 	"sessions.setArchived": { params: { sessionPath: string; archived: boolean }; result: Record<string, never> };
+	"sessions.setPinned": { params: { sessionPath: string; pinned: boolean }; result: Record<string, never> };
 	/** Drop extension and model diagnostics. Resource problems stay until they are fixed (they are re-reported on reload). */
 	"sessions.clearDiagnostics": { params: { sessionId: string }; result: Record<string, never> };
 	/** Delete a session file (unloading it first). Only paths of listed sessions are accepted. */
@@ -788,7 +853,14 @@ export interface Methods {
 	/** `pi` is the global scope; with `cwd`, `project` holds what the project's settings file sets. */
 	"settings.get": {
 		params: { cwd?: string };
-		result: { pi: PiSettings; resources: ResourceSettings[]; argon: ArgonSettings; project?: ProjectSettingsInfo };
+		result: {
+			pi: PiSettings;
+			resources: ResourceSettings[];
+			argon: ArgonSettings;
+			project?: ProjectSettingsInfo;
+			/** With `cwd`: the project's private Argon settings (only the keys it sets). */
+			argonProject?: ArgonProjectSettings;
+		};
 	};
 	/** Changes apply to sessions started afterwards (loaded sessions keep their settings until reopened). */
 	"settings.update": {
@@ -802,6 +874,41 @@ export interface Methods {
 	"settings.updateProject": {
 		params: { cwd: string; set?: Partial<ProjectPiSettings>; unset?: (keyof ProjectPiSettings)[] };
 		result: Record<string, never>;
+	};
+	/**
+	 * Set (`set`) or remove (`unset`, falling back to the global value) the project's private Argon
+	 * settings. `set.mcpServers` replaces the whole map. Applies to sessions started afterwards.
+	 */
+	"settings.updateArgonProject": {
+		params: { cwd: string; set?: ArgonProjectSettings; unset?: (keyof ArgonProjectSettings)[] };
+		result: Record<string, never>;
+	};
+	/** The global mcp.json and, with `cwd`, the project's. */
+	"mcp.config.get": {
+		params: { cwd?: string };
+		result: { global: McpConfigFile; project?: McpConfigFile };
+	};
+	/**
+	 * Create (`create: true`; the name must be unused in that file) or update a server, renaming it
+	 * when `previousName` differs. Validated with pi's rules (bad_request on failure). Loaded sessions
+	 * the file affects are reloaded (running ones after their turn).
+	 */
+	"mcp.config.saveServer": {
+		params: McpConfigTarget & { name: string; previousName?: string; form: McpServerForm; create: boolean };
+		result: Record<string, never>;
+	};
+	"mcp.config.removeServer": { params: McpConfigTarget & { name: string }; result: Record<string, never> };
+	/** Global default for new sessions (the global mcp.json `enabled`). Loaded sessions are not changed. */
+	"mcp.config.setEnabled": { params: { name: string; enabled: boolean }; result: Record<string, never> };
+	/** An mcp.json as text, for the raw editor (`text` is "" when the file does not exist). */
+	"mcp.config.getText": { params: McpConfigTarget; result: { path: string; text: string; version: string } };
+	/**
+	 * Replace an mcp.json. Rejected (bad_request) when it is not valid JSON or pi reports an error for
+	 * it, and (conflict) when it changed since `version` was read. Reloads affected sessions.
+	 */
+	"mcp.config.setText": {
+		params: McpConfigTarget & { text: string; version: string };
+		result: { version: string };
 	};
 	"projects.list": { params: Record<string, never>; result: { projects: ProjectPrefs[] } };
 	"projects.update": {
