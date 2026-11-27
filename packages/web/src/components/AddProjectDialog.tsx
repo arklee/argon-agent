@@ -75,7 +75,7 @@ export function AddProjectDialog() {
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>{t("common.addProject")}</DialogTitle>
 					<DialogDescription>
@@ -133,10 +133,10 @@ export function AddProjectDialog() {
 				</div>
 
 				<DialogFooter className="items-center sm:justify-between">
-					<span className="truncate font-mono text-xs text-muted-foreground" title={path}>
+					<span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={path}>
 						{displayPath(path, environment?.homeDir)}
 					</span>
-					<Button onClick={() => void create(path)} disabled={!path || creating}>
+					<Button className="shrink-0" onClick={() => void create(path)} disabled={!path || creating}>
 						{creating && <Loader2 className="animate-spin" />}
 						{t("common.addProject")}
 					</Button>

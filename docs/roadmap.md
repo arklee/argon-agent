@@ -169,7 +169,7 @@
 ## 技术债与已知问题
 
 - [x] 压缩成功后对话里不出现压缩卡片（要重新打开会话才有）：pi 1.6.1 手动和自动压缩写入 compaction 条目时不发 `entry_appended`；改为在 `compaction_end` 带结果时补发
-- [ ] 添加项目对话框：路径很长时底部路径不换行，对话框被撑出视口，"添加项目"按钮点不到
+- [x] 添加项目对话框：路径很长时底部路径不换行，对话框被撑出视口，"添加项目"按钮点不到。对话框网格列改为 `minmax(0,1fr)`，路径可收缩并截断
 - [x] 首次 Release 三平台冒烟在备份空剪贴板时失败：Electron 可返回 `types` 为空的条目，构造 `ClipboardItem` 会报错；备份时过滤空条目，保留复制、读取权限和恢复检查。修复后仍需 GitHub 三平台重验
 
 - [x] 扩展自己注册的 MCP 服务器（`registerMcpServer`，不在 mcp.json 里）在对话里关闭只在本次运行时有效：pi 对 `scope: "extension"` 的条目不调用 `updateConfig`。已在补丁里加 `registeredServerConfig` / `updateRegisteredConfig` 两个选项解决（D16）

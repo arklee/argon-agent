@@ -62,6 +62,18 @@ npm run vendor -- check   # vendor 是否有上游更新；sync / diff / add 见
 
 环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）。dev token 保存在 `$ARGON_HOME/dev-token`。
 
+## 分工：Claude 设计与审查，Codex 实现
+
+本项目里 Claude 负责设计、规划和审查，具体的非 UI 代码实现交给 Codex（经 codex-plugin-cc 的 `codex:codex-rescue` agent）。GPT 额度更宽裕，且更擅长忠实执行明确的指令；但不擅长 UI，所以 UI 仍由 Claude 来写。
+
+- **Claude 自己做：** 需求分析、方案与架构设计、协议/接口契约（`protocol.ts` 的类型、方法签名）、拆分任务、UI 设计与实现（`packages/web` 的组件、布局、样式、交互、i18n 文案）、审查 Codex 的改动、更新 `docs/`。
+- **交给 Codex：** backend 逻辑、shared 里的 reducer/客户端实现、vendor 同步、测试、脚本、机械性重构、按已定方案修 bug。
+- **小改动不委托：** 几行就能改完、或者写 brief 比直接改还费事的，Claude 直接改。
+- **brief 要自包含：** Codex 看不到本次对话。写清目标、确切的接口契约、允许改和禁止改的文件（避免和 Claude 并行改 UI 时冲突）、要遵守的 CLAUDE.md 边界、"不要 commit"，以及验收命令（`npm run typecheck`、`npm test`、`npm run lint`）。
+- **后台运行，先审后用：** Codex 任务放后台，Claude 期间可以并行写 UI。完成后 Claude 必须读 diff、跑验收命令，确认符合设计和上面的边界规则；有问题就把具体意见发回给 Codex 修，而不是自己大段重写。
+- **大改动加一道独立审查：** 较大的 diff 可以再起一个只读的 Codex 任务做交叉审查，Claude 汇总后再判断。
+- Codex CLI 由用户自行安装管理（`~/.local/bin`），不要用 npm 安装或升级。
+
 ## 约定
 
 - TypeScript strict（开了 `noUncheckedIndexedAccess`）；ESM；包之间直接引用 TS 源码（`exports` 指向 `src/index.ts`）。
