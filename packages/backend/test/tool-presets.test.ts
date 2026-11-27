@@ -2,6 +2,7 @@ import { createCodemodeExtension } from "@earendil-works/pi-coding-agent";
 import { expect, it, vi } from "vitest";
 import { createBuiltinExtensions } from "../src/builtin-extensions.ts";
 import { createHandlers } from "../src/server.ts";
+import { ArgonSettingsStore } from "../src/settings.ts";
 import { findToolPreset, resolveToolPreset } from "../src/tool-presets.ts";
 
 vi.mock(import("@earendil-works/pi-coding-agent"), async (original) => ({
@@ -18,7 +19,7 @@ it("resolves known ids and falls back for unknown and missing ids", () => {
 
 it("reads the current mode each time pi requests it", () => {
 	let preset = resolveToolPreset("classic");
-	createBuiltinExtensions(() => preset.codemodeMode);
+	createBuiltinExtensions(new ArgonSettingsStore("/unused"), () => preset.codemodeMode);
 	const options = vi.mocked(createCodemodeExtension).mock.lastCall?.[0];
 	expect(options).toBeDefined();
 	expect(options?.mode).toBeUndefined();

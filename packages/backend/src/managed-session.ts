@@ -281,6 +281,7 @@ export class ManagedSession {
 						writeDiffExtension,
 						nestedDiffExtension,
 						...createBuiltinExtensions(
+							deps.settings,
 							() => (self?.appliedToolPreset ?? initialPreset).codemodeMode,
 							sessionMcpOptions(agentDir, sessionManager, deps.settings),
 						),
@@ -1266,7 +1267,7 @@ export class ManagedSession {
 					? !unsandboxed
 					: READ_ONLY_TOOLS.has(check.toolName)
 						? policy.canRead(safePath, check.toolName === "grep" || check.toolName === "find")
-						: (check.toolName === "write" || check.toolName === "edit") &&
+						: (check.toolName === "write" || check.toolName === "edit" || check.toolName === "codex_imagegen") &&
 							typeof path === "string" &&
 							policy.canWrite(path);
 		if (safeBuiltin || (unsandboxed ? this.unsandboxedBashAllowed : this.sessionAllowedTools.has(check.toolName))) {

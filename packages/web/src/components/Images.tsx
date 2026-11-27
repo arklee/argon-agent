@@ -45,7 +45,15 @@ function loadImages(sessionId: string, ref: { toolCallId?: string; itemId?: stri
 	return pending;
 }
 
-export function Thumbnail({ src, className }: { src: string; className?: string }) {
+export function Thumbnail({
+	src,
+	className,
+	imgClassName,
+}: {
+	src: string;
+	className?: string;
+	imgClassName?: string;
+}) {
 	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	return (
@@ -55,7 +63,7 @@ export function Thumbnail({ src, className }: { src: string; className?: string 
 				onClick={() => setOpen(true)}
 				className={cn("overflow-hidden rounded-lg border bg-muted", className)}
 			>
-				<img src={src} alt="" className="size-full object-cover" />
+				<img src={src} alt="" className={cn("size-full object-cover", imgClassName)} />
 			</button>
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent className="max-w-[90vw] p-2 sm:max-w-[90vw]">
@@ -74,12 +82,15 @@ export function SessionImages({
 	itemId,
 	count,
 	className,
+	large = false,
 }: {
 	sessionId: string;
 	toolCallId?: string;
 	itemId?: string;
 	count: number;
 	className?: string;
+	/** Natural aspect ratio at a readable size (generated images) instead of small cropped thumbnails. */
+	large?: boolean;
 }) {
 	const { t } = useTranslation();
 	const [images, setImages] = useState<ImageData[]>();
@@ -107,8 +118,13 @@ export function SessionImages({
 	return (
 		<div className={cn("flex flex-wrap gap-2", className)}>
 			{images.map((image, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: images are positional
-				<Thumbnail key={i} src={toDataUrl(image)} className="h-24 max-w-48" />
+				<Thumbnail
+					// biome-ignore lint/suspicious/noArrayIndexKey: images are positional
+					key={i}
+					src={toDataUrl(image)}
+					className={large ? "max-w-sm" : "h-24 max-w-48"}
+					imgClassName={large ? "h-auto max-h-96 object-contain" : undefined}
+				/>
 			))}
 		</div>
 	);

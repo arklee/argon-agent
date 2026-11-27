@@ -137,3 +137,13 @@ it("describes every patch path and move destination", () => {
 		summary: "",
 	});
 });
+
+it("summarizes image generation with a truncated first prompt line", () => {
+	for (const prompt of ["A cat\r\nIn watercolor", "x".repeat(130), ""]) {
+		expect(describeToolCall("codex_imagegen", { prompt, path: "out.png" })).toEqual({
+			kind: "generic",
+			title: "codex_imagegen",
+			summary: prompt.split("\r\n")[0]!.slice(0, 120),
+		});
+	}
+});

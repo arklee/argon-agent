@@ -149,6 +149,8 @@
   - 待补：Codex `codex-rs/apply-patch` 的场景用例只移植了一个（当时连不上 GitHub），其余用例待补
   - [x] opencode 的解析器改为 vendor（D18），只改一行 import，可用 `npm run vendor -- sync opencode-patch` 跟随上游
   - 已知：用户装的扩展若注册同名 `apply_patch`（如 magpie 的 codex-exec-pi、pi-codex-conversion），会替换内置实现，两阶段、审批预览和沙箱检查都不再适用
+- [x] 生图：vendor `@narumitw/pi-codex-imagegen`（D18，上游文件不改），工具 `codex_imagegen`；去掉终端菜单和 `/codex-imagegen` 命令，开关改为 Argon 设置"生成图片"（默认关，切换即时生效）；输出路径按 write 走沙箱写检查；卡片在标题下直接显示生成的图片。需要 ChatGPT 登录并消耗额度；已用 GPT-6 Astra 在干净的 `ARGON_HOME` 实测（生成、自动放行、重新加载后图片仍在）
+- [ ] Codex 远程压缩：vendor `@narumitw/pi-codex-compact`（约 3600 行）；去掉 `settings-menu.ts` 和 pi-tui-kit；压缩卡片对加密 checkpoint 显示"服务端 checkpoint"；确认 `ctx.ui.notify` / `setStatus` 经 ui-bridge 送到前端
 - [ ] 已知风险：pi-codex-conversion 的 `exec_command` / `write_stdin` / `apply_patch` 是独立 Rust 程序，不经过 `argon-sandbox`；用户在 `ARGON_HOME` 装了它时沙箱失效。至少要检测到不受沙箱覆盖的工具并在界面上标"未隔离"
 - [ ] 各类型的显示细节（按需）：read 内容语法高亮；search 结果做成列表；MCP 工具标题带上服务器名（可用 `source` 或命名空间）；按需注册第一个“来源 + 工具名”覆盖渲染器
 - [ ] pi-codex-conversion 的预设（Structured、Code、TS Notebook、VM Code）：设计上已预留，暂不实现；先按 [tool-modes-comparison.md](tool-modes-comparison.md) 的计划与 pi 传统模式、codemode 做对比

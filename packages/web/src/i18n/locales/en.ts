@@ -495,6 +495,9 @@ export const en = {
 			gptApplyPatch: "apply_patch for GPT models",
 			gptApplyPatchDescription:
 				"GPT-5 and later edit files with one patch tool instead of edit and write. Takes effect from the next turn.",
+			imageGeneration: "Image generation",
+			imageGenerationDescription:
+				"Let the model generate images with codex_imagegen. Needs a ChatGPT login and uses its quota; works with any model.",
 			toolPreset: "Default tool preset",
 			add: "Add",
 			allModels: "All models",
@@ -700,6 +703,7 @@ export const en = {
 	},
 	tools: {
 		fileOp: { add: "New", delete: "Deleted" },
+		imagegen: { generating: "Generating image…", savedTo: "Saves to" },
 		nestedCount_one: "{{count, number}} call",
 		nestedCount_other: "{{count, number}} calls",
 		waitingApproval: "Waiting for approval",

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -115,4 +115,26 @@ it("defaults GPT patches on, persists disabling, and rejects non-booleans", asyn
 		"Invalid gptApplyPatch",
 	);
 	expect(suggestRule("apply_patch", {})).toEqual({ tool: "apply_patch" });
+});
+
+it("defaults image generation off, validates updates and loads persisted booleans", async () => {
+	const settings = await store();
+	try {
+		expect(settings.get().imageGeneration).toBe(false);
+		for (const imageGeneration of [true, false]) {
+			await settings.update({ imageGeneration });
+			await settings.load();
+			expect(settings.get().imageGeneration).toBe(imageGeneration);
+		}
+		await expect(settings.update({ imageGeneration: "true" as unknown as boolean })).rejects.toThrow(
+			"Invalid imageGeneration",
+		);
+		for (const data of [{}, { imageGeneration: "true" }]) {
+			writeFileSync(join(settings.argonHome, "settings.json"), JSON.stringify(data));
+			await settings.load();
+			expect(settings.get().imageGeneration).toBe(false);
+		}
+	} finally {
+		rmSync(settings.argonHome, { recursive: true, force: true });
+	}
 });

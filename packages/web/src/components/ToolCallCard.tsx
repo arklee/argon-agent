@@ -126,6 +126,7 @@ export function ToolCallCard({
 					className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")}
 				/>
 			</button>
+			{renderer.Inline && <renderer.Inline view={view} />}
 			{open && (
 				<div className="space-y-2 border-t bg-muted/30 px-3 py-2">
 					<renderer.Body view={view} />

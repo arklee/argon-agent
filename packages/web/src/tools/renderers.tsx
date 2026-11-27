@@ -1,16 +1,17 @@
 /**
- * Default renderers, one per display kind (decisions D13). Per-tool overrides can be registered with
- * registerToolRenderer; none exist yet.
+ * Default renderers, one per display kind (decisions D13), plus per-tool overrides registered with
+ * registerToolRenderer (codex_imagegen).
  */
 
 import type { FileDiff, ToolDisplay } from "@argon/shared";
+import { ImageIcon, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DiffStat, DiffView } from "@/components/DiffView";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
-import { registerKindRenderer, type ToolView } from "./registry";
+import { registerKindRenderer, registerToolRenderer, type ToolView } from "./registry";
 
 type DisplayOf<K extends ToolDisplay["kind"]> = Extract<ToolDisplay, { kind: K }>;
 
@@ -166,4 +167,66 @@ registerKindRenderer("generic", {
 		</>
 	),
 	Preview: ({ view, diffs }) => (diffs?.length ? <Diffs diffs={diffs} view={view} /> : <ArgsJson args={view.args} />),
+});
+
+function imagegenArgs(view: ToolView): { prompt?: string; path?: string } {
+	const args = view.args as { prompt?: unknown; path?: unknown } | undefined;
+	return {
+		prompt: typeof args?.prompt === "string" ? args.prompt : undefined,
+		path: typeof args?.path === "string" ? args.path : undefined,
+	};
+}
+
+function ImagegenPrompt({ view }: { view: ToolView }) {
+	const { t } = useTranslation();
+	const { prompt, path } = imagegenArgs(view);
+	if (prompt === undefined) return <ArgsJson args={view.args} />;
+	return (
+		<div className="space-y-1 text-xs">
+			<p className="whitespace-pre-wrap break-words">{prompt}</p>
+			{path && (
+				<p className="text-muted-foreground">
+					{t("tools.imagegen.savedTo")} <span className="font-mono break-all">{path}</span>
+				</p>
+			)}
+		</div>
+	);
+}
+
+/** The generated image stays visible below the header, like an image in a chat reply. */
+function ImagegenInline({ view }: { view: ToolView }) {
+	const { t } = useTranslation();
+	const sessionId = useApp((s) => s.activeSessionId);
+	const tool = view.tool;
+	if (tool?.status === "running") {
+		return (
+			<div className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+				<Loader2 className="size-3.5 animate-spin" />
+				{t("tools.imagegen.generating")}
+			</div>
+		);
+	}
+	if (tool?.status !== "done" || !tool.imageCount || !sessionId) return null;
+	return (
+		<div className="border-t px-3 py-2">
+			<SessionImages sessionId={sessionId} toolCallId={tool.toolCallId} count={tool.imageCount} large />
+		</div>
+	);
+}
+
+registerToolRenderer("codex_imagegen", {
+	summary: (view) => imagegenArgs(view).prompt?.split(/\r\n?|\n/, 1)[0] ?? view.display.summary ?? "",
+	Inline: ImagegenInline,
+	Body: ({ view }) => (
+		<>
+			<ImagegenPrompt view={view} />
+			{view.tool?.status !== "done" && <Output view={view} />}
+		</>
+	),
+	Preview: ({ view }) => (
+		<div className="flex gap-2">
+			<ImageIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+			<ImagegenPrompt view={view} />
+		</div>
+	),
 });

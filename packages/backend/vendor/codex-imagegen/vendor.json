@@ -1,0 +1,11 @@
+{
+	"source": "npm:@narumitw/pi-codex-imagegen",
+	"version": "0.2.4",
+	"license": "LICENSE",
+	"files": {
+		"src/codex-imagegen.ts": "src/codex-imagegen.ts",
+		"src/image-client.ts": "src/image-client.ts",
+		"src/artifacts.ts": "src/artifacts.ts"
+	},
+	"notes": "codex_imagegen tool (image generation through the ChatGPT Codex image endpoint). Upstream files are unchanged. Dropped: the TUI (menu.ts, settings-screen.ts, prompt-editor.ts, output-path-input.ts, safe-input-render.ts), @narumitw/pi-tui-kit and the /codex-imagegen command (Argon's wrapper in src/codex-imagegen.ts filters it out). src/settings.ts and src/menu.ts are Argon's stand-ins: settings come from ArgonSettings.imageGeneration instead of pi-codex-imagegen.json; menu.ts only satisfies a type import."
+}

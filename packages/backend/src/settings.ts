@@ -277,6 +277,7 @@ export function writeProjectSettings(
 const DEFAULT_ARGON: ArgonSettings = {
 	defaultToolPreset: "classic",
 	gptApplyPatch: true,
+	imageGeneration: false,
 	permissions: { defaultMode: "ask", rules: [] },
 	sandbox: { allowedDomains: [] },
 };
@@ -325,6 +326,7 @@ export class ArgonSettingsStore {
 			this.current = {
 				defaultToolPreset: resolveToolPreset(data.defaultToolPreset).id,
 				gptApplyPatch: typeof data.gptApplyPatch === "boolean" ? data.gptApplyPatch : true,
+				imageGeneration: typeof data.imageGeneration === "boolean" ? data.imageGeneration : false,
 				sandbox: {
 					allowedDomains: validateAllowedDomains(data.sandbox?.allowedDomains) ? data.sandbox.allowedDomains : [],
 				},
@@ -352,6 +354,8 @@ export class ArgonSettingsStore {
 	}
 
 	async update(patch: Partial<ArgonSettings>): Promise<void> {
+		if (patch.imageGeneration !== undefined && typeof patch.imageGeneration !== "boolean")
+			throw new Error("Invalid imageGeneration");
 		if (patch.gptApplyPatch !== undefined && typeof patch.gptApplyPatch !== "boolean")
 			throw new Error("Invalid gptApplyPatch");
 		if (patch.permissions?.defaultMode === "ask" && !this.support.supported) throw new Error(this.support.reason);

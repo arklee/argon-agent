@@ -679,6 +679,18 @@ describe("sandbox permission boundary", () => {
 		}
 	});
 
+	it("allows image output in the workspace and asks for unsafe or missing paths", async () => {
+		const { managed } = await loadSession();
+		await expect(check(managed, { prompt: "A cat", path: "/project/cat.png" }, "codex_imagegen")).resolves.toEqual({
+			allow: true,
+		});
+		for (const path of ["/outside/cat.png", "/project/.git/cat.png", undefined, 42]) {
+			const pending = check(managed, { prompt: "A cat", path }, "codex_imagegen");
+			await answer(managed, "deny");
+			await expect(pending).resolves.toMatchObject({ allow: false });
+		}
+	});
+
 	it("checks all patch paths including move destinations and asks on invalid syntax", async () => {
 		const { managed } = await loadSession();
 		const input = (body: string) => ({ input: `*** Begin Patch\n${body}\n*** End Patch` });

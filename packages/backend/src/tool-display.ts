@@ -30,6 +30,12 @@ function describeKnownTool(title: string, args: Record<string, unknown>): ToolDi
 			if (command) return { kind: "shell", title, command, summary: command.split(/\r\n?|\n/, 1)[0] };
 			break;
 		}
+		case "codex_imagegen": {
+			const prompt = stringArg(args.prompt);
+			if (prompt !== undefined)
+				return { kind: "generic", title, summary: (prompt.split(/\r\n?|\n/, 1)[0] ?? "").slice(0, 120) };
+			break;
+		}
 		case "read": {
 			const path = stringArg(args.path);
 			if (!path) break;

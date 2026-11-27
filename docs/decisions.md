@@ -341,6 +341,8 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 
 第一个例子是 `vendor/opencode-patch`：opencode 的 `patch.ts` 原样引入，只改了一行 import，把 `effect` 换成 Argon 的 `effect-lite.ts`（只实现了它用到的 `Result` 和 `Schema.TaggedError`）。
 
+第二个例子是 `vendor/codex-imagegen`（`@narumitw/pi-codex-imagegen`）：上游文件一行不改，终端菜单用替身 `menu.ts` 占位，设置用替身 `settings.ts` 改读 Argon 设置，`/codex-imagegen` 命令由 `backend/src/codex-imagegen.ts` 包一层 ExtensionAPI 过滤掉。
+
 **考虑过的方案**：
 
 - 整包依赖 + patch-package：仍然要带上全部依赖，打包版也装不了用户包。

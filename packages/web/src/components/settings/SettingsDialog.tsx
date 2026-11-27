@@ -510,6 +510,17 @@ function GeneralDefaults() {
 							/>
 						</Row>
 					)}
+					{global && (
+						<Row
+							label={t("settings.general.imageGeneration")}
+							description={t("settings.general.imageGenerationDescription")}
+						>
+							<Switch
+								checked={argon.imageGeneration}
+								onCheckedChange={(imageGeneration) => void updateArgon({ imageGeneration })}
+							/>
+						</Row>
+					)}
 					<OverrideRow
 						label={t("settings.permissions.defaultMode")}
 						description={

@@ -28,6 +28,8 @@ export interface ToolRenderer {
 	summary?: (view: ToolView) => string;
 	/** Expanded card content. */
 	Body: ComponentType<{ view: ToolView }>;
+	/** Shown below the header whether or not the card is expanded (e.g. a generated image). */
+	Inline?: ComponentType<{ view: ToolView }>;
 	/** What the approval card shows before the call runs. `diffs` is the backend's preview, if any. */
 	Preview?: ComponentType<{ view: ToolView; diffs?: FileDiff[] }>;
 	/** Body places the nested calls itself (via view.renderChildren); otherwise the card appends them. */
