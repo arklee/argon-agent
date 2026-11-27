@@ -92,6 +92,7 @@
 - [x] 窗口标题栏：macOS 隐藏系统标题栏，红绿灯融入侧栏顶行；Windows 使用原生 Window Controls Overlay，按钮融入应用右上角并跟随系统主题；应用顶栏可拖拽，交互控件排除拖拽，Windows 控件区留白
 - [ ] 窗口：多窗口；Windows 标题栏覆盖、DPI 缩放和系统贴靠行为实机验证
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
+- [x] GitHub Actions 自动发版：普通推送和 PR 只运行 CI；推送版本 tag 后通过 CI，再打包 Windows x64 / macOS arm64、x64，通过冒烟后发布 Release，预发布 tag 标记为 prerelease（工作流已配置，待 GitHub 实跑验收）
 - [x] 安全：renderer 开启 sandbox + contextIsolation，禁用 Node integration；没有 preload API，外链交给系统浏览器
 
 ## 沙箱（权限控制的主要手段）
