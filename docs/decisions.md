@@ -297,6 +297,7 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
    - 不放进 pi 的 `agent/settings.json`：那是 pi 的文件，结构随 pi 版本变化。
 3. **MCP 配置有设置页入口。** 全局 mcp.json 可增删改服务器（stdio：command / args / env / cwd；HTTP：url / headers），也可直接编辑 JSON；项目的 `.argon/mcp.json` 在项目范围里编辑（不能写 `auth`，与 pi 一致）。读写复用 pi 的 `extensions/mcp/config.js`（`loadMcpConfig` / `addMcpServerConfig` / `removeMcpServerConfig` / `updateMcpServerConfig`），像 llama 扩展一样按文件 URL 引入，不加补丁。配置变化后，受影响的已加载会话按 `projects.setTrust` 的方式重新加载（运行中的等本轮结束）。
 4. **“默认开启”与“本对话开启”分开。** mcp.json 的 `enabled` 是全局默认，项目可在私有设置里覆盖（`projects[cwd].mcpServers[name]`）。对话里的开关只作用于该对话，存为会话自定义条目 `argon.mcp_servers`（`{ [name]: boolean }`），重新打开时恢复。实现用 `createMcpExtension` 的 SDK 参数：`loadConfig` 在 pi 的默认加载结果上依次叠加项目默认和会话条目；`updateConfig` 对 `enabled` 写会话条目，对 `exposure` 仍写文件。被关闭的服务器在该对话里不启动。改了默认值后，已在对话里手动拨过的服务器保持原样。
+   扩展用 `pi.registerMcpServer` 注册的服务器不经过 `loadConfig`，pi 切换它们时也不调用 `updateConfig`。现有补丁因此多加两个选项：`registeredServerConfig(name, config)` 在创建这类服务器时让宿主叠加会话条目和项目默认，`updateRegisteredConfig(entry, patch)` 在切换时通知宿主写会话条目（2026-11-27）。考虑过不打补丁、在会话启动后由 Argon 再发一次“停用”：服务器会先启动再关闭（白起子进程、可能闪出登录提示），还要处理竞态，否决。
 5. **会话可以置顶。** 置顶记在 `$ARGON_HOME/session-prefs.json`（与 archived 同处，按置顶时间排序），协议 `sessions.setPinned`，`SessionSummary.pinnedAt`。侧栏顶部单独的 Pinned 分区，置顶的会话不再出现在项目分组里；归档会同时取消置顶，删除会清除记录。
 
 **考虑过的方案**：

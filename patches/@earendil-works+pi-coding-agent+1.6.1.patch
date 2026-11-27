@@ -1,5 +1,5 @@
 diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
-index 073dcb0..a5d3e52 100644
+index 073dcb0..0a3deed 100644
 --- a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
 +++ b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.js
 @@ -233,6 +233,43 @@ export function createMcpExtension(options = {}) {
@@ -46,7 +46,28 @@ index 073dcb0..a5d3e52 100644
          };
          const subscribe = (listener) => {
              listeners.add(listener);
-@@ -974,6 +1011,7 @@ export function createMcpExtension(options = {}) {
+@@ -253,7 +290,9 @@ export function createMcpExtension(options = {}) {
+                     continue;
+                 }
+                 registered.push({
+-                    entry: { name, config, source: extensionPath, scope: "extension" },
++                    // [argon patch] The host may adjust a registered server's settings (Argon: per-session
++                    // enabled); `registeredConfig` keeps the extension's own config to detect re-registration.
++                    entry: { name, config: options.registeredServerConfig?.(name, config) ?? config, source: extensionPath, scope: "extension" },
+                     registeredConfig: JSON.stringify(config),
+                 });
+             }
+@@ -552,6 +591,9 @@ export function createMcpExtension(options = {}) {
+                     return `Could not update ${entry.override ?? entry.source}: ${errorMessage(error)}`;
+                 }
+             }
++            // [argon patch] Changes to registered servers have no file; the host may remember them.
++            else
++                options.updateRegisteredConfig?.(entry, patch);
+             server.entry = { ...entry, config: { ...entry.config, ...patch } };
+             return undefined;
+         };
+@@ -974,6 +1016,7 @@ export function createMcpExtension(options = {}) {
              warnedUnreachable = false;
              waitedForStartup = false;
              sessionCwd = ctx.cwd;
@@ -54,7 +75,7 @@ index 073dcb0..a5d3e52 100644
              modelRegistry = ctx.modelRegistry;
              session = new AbortController();
              const { signal } = session;
-@@ -1116,6 +1154,25 @@ export function createMcpExtension(options = {}) {
+@@ -1116,6 +1159,25 @@ export function createMcpExtension(options = {}) {
              emitChange();
              await Promise.all([...backgroundActions, ...closing.map((connection) => connection.close())]);
          });
@@ -80,6 +101,21 @@ index 073dcb0..a5d3e52 100644
          pi.registerCommand("mcp", {
              description: "Manage MCP servers: sign in, reconnect, enable or disable, and change exposure",
              getArgumentCompletions: (prefix) => {
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.d.ts b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.d.ts
+index 2ee96fa..1850569 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.d.ts
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/extensions/mcp/index.d.ts
+@@ -46,6 +46,10 @@ export interface McpExtensionOptions {
+      * `source`. Defaults to editing that `mcp.json`.
+      */
+     updateConfig?: (entry: McpServerEntry, patch: McpServerConfigPatch) => void;
++    /** [argon patch] Adjusts the config of a server an extension registered, before it is used. */
++    registeredServerConfig?: (name: string, config: McpServerEntry["config"]) => McpServerEntry["config"];
++    /** [argon patch] Receives `/mcp` changes to servers extensions registered (they have no file to save to). */
++    updateRegisteredConfig?: (entry: McpServerEntry, patch: McpServerConfigPatch) => void;
+     /**
+      * How long the first prompt waits for servers with `direct` tools that are still connecting at
+      * startup, in milliseconds. Their tools become available when they connect. Other servers are
 diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/config.js b/node_modules/@earendil-works/pi-coding-agent/dist/config.js
 index 8566260..c661ba0 100644
 --- a/node_modules/@earendil-works/pi-coding-agent/dist/config.js

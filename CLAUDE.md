@@ -40,7 +40,7 @@ packages/web      React 19 + Vite + Tailwind v4 + shadcn/ui（radix-nova）+ zus
 - UI 里的历史从 `sessionManager.getBranch()` 投影得到（包含压缩之前的条目），不能用 `session.messages`，因为那是模型实际看到的、可能已被压缩的上下文。
 - pi 默认不审批任何工具调用。Argon 用 `argon-permissions` inline extension 拦截 `tool_call`：只读工具（read/grep/find/ls）直接放行，其他都要询问。codemode 的嵌套调用（带 `parentToolCallId`）随父调用一起审批。
 - 所有会话共用同一个 `ModelRuntime`（由 `SessionRegistry` 创建），它读写 `$ARGON_HOME/agent/auth.json`，配置、登录状态、会话均与 pi CLI 隔离。项目配置使用 `.argon/`。
-- `patches/` 里有 patch-package 补丁（`postinstall` 自动应用）：给内置 MCP 扩展加了 `argon:mcp:*` 事件通道，由 `backend/src/mcp-bridge.ts` 使用。改 pi 文件后补丁要手动用 `git diff --no-index` 重新生成（patch-package 自己生成会失败）。
+- `patches/` 里有 patch-package 补丁（`postinstall` 自动应用）：给内置 MCP 扩展加了 `argon:mcp:*` 事件通道（由 `backend/src/mcp-bridge.ts` 使用），以及 `registeredServerConfig` / `updateRegisteredConfig` 两个选项（扩展注册的服务器也能按会话启停，见 D16）。改 pi 文件后补丁要手动用 `git diff --no-index` 重新生成（patch-package 自己生成会失败）。
 - MCP 扩展通过 `loadConfig` / `updateConfig` 实现会话级启停（见 D16）；MCP 配置辅助函数按文件 URL 导入，升级 pi 时需核对路径和接口。
 - 升级 pi 时：先看 CHANGELOG，确认补丁还能应用（或官方已提供等价接口，可以删掉补丁），再检查 `translate.ts` / `managed-session.ts` 依赖的事件结构，跑一遍真实会话冒烟（发消息、工具审批、重连）。
 

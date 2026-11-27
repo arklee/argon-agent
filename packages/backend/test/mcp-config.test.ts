@@ -157,3 +157,20 @@ it("imports pasted servers all-or-nothing, keeping their fields", async () => {
 	});
 	expect(entries().ok).toBeUndefined();
 });
+
+it("keeps session choices for servers extensions register", async () => {
+	const manager = SessionManager.inMemory(dir);
+	const settings = new ArgonSettingsStore(dir);
+	await settings.updateProject(dir, { mcpServers: { jira: false } });
+	const options = sessionMcpOptions(dir, manager, settings);
+	const registered = { url: "https://mcp.example.com/jira" };
+	expect(options.registeredServerConfig("jira", registered)).toEqual({ ...registered, enabled: false });
+	expect(options.registeredServerConfig("wiki", registered)).toBe(registered);
+
+	const entry = { name: "jira", config: registered, source: "/ext.ts", scope: "extension" } as const;
+	options.updateRegisteredConfig(entry, { enabled: true });
+	options.updateRegisteredConfig(entry, { exposure: "direct" });
+	expect(options.registeredServerConfig("jira", registered)).toEqual({ ...registered, enabled: true });
+	// Nothing is written to any file for them.
+	expect(store.getText(global).text).toBe("");
+});

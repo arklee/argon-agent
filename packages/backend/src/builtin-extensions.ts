@@ -47,18 +47,26 @@ function sessionServers(manager: Pick<SessionManager, "getEntries">): Record<str
 		entry?.type === "custom" ? (entry.data as { servers?: Record<string, boolean> } | null)?.servers : undefined;
 	return Object.fromEntries(Object.entries(servers ?? {}).filter(([, value]) => typeof value === "boolean"));
 }
+/**
+ * Per-session MCP enable/disable (decisions D16): the `argon.mcp_servers` session entry, then the
+ * project's private defaults, override each server's `enabled`. Servers from mcp.json go through pi's
+ * `loadConfig` / `updateConfig`; servers extensions register go through the two hooks Argon's patch adds
+ * (pi has no file to save their changes to).
+ */
 export function sessionMcpOptions(agentDir: string, manager: SessionManager, settings: ArgonSettingsStore) {
+	const overrides = (cwd: string) => ({ ...settings.getProject(cwd).mcpServers, ...sessionServers(manager) });
+	const remember = (name: string, enabled: boolean) =>
+		manager.appendCustomEntry(MCP_ENTRY, { servers: { ...sessionServers(manager), [name]: enabled } });
 	return {
 		loadConfig(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted" | "sessionManager">) {
 			const config = piMcp().loadMcpConfig({ agentDir, cwd: ctx.cwd, projectTrusted: ctx.isProjectTrusted() });
-			const defaults = { ...settings.getProject(ctx.cwd).mcpServers, ...sessionServers(ctx.sessionManager) };
+			const enabled = overrides(ctx.cwd);
 			for (const { name, config: server } of config.servers)
-				if (Object.hasOwn(defaults, name)) server.enabled = defaults[name];
+				if (Object.hasOwn(enabled, name)) server.enabled = enabled[name];
 			return config;
 		},
 		updateConfig(entry, patch) {
-			if (patch.enabled !== undefined)
-				manager.appendCustomEntry(MCP_ENTRY, { servers: { ...sessionServers(manager), [entry.name]: patch.enabled } });
+			if (patch.enabled !== undefined) remember(entry.name, patch.enabled);
 			if (patch.exposure !== undefined)
 				piMcp().updateMcpServerConfig(
 					entry.override ?? entry.source,
@@ -66,6 +74,14 @@ export function sessionMcpOptions(agentDir: string, manager: SessionManager, set
 					{ exposure: patch.exposure },
 					{ override: entry.override !== undefined },
 				);
+		},
+		registeredServerConfig(name, config) {
+			const enabled = overrides(manager.getCwd());
+			return Object.hasOwn(enabled, name) ? { ...config, enabled: enabled[name] } : config;
+		},
+		updateRegisteredConfig(entry, patch) {
+			// Exposure changes of registered servers last for this runtime, as in pi.
+			if (patch.enabled !== undefined) remember(entry.name, patch.enabled);
 		},
 	} satisfies NonNullable<Parameters<typeof createMcpExtension>[0]>;
 }
