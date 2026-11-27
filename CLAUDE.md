@@ -57,7 +57,7 @@ npm run smoke        # 端到端冒烟（真实 backend 和模型）
 npm run lint         # biome；npm run format 自动修复
 ```
 
-环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`。dev token 保存在 `$ARGON_HOME/dev-token`。
+环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）。dev token 保存在 `$ARGON_HOME/dev-token`。
 
 ## 约定
 

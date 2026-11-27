@@ -79,3 +79,36 @@ macOS 和 Windows 使用 `titleBarStyle: hidden`，去掉独立系统标题栏�
 main 通过页面查询参数 `windowChrome` 传递纯显示提示，不暴露原生能力。普通浏览器没有该参数，布局保持原样。顶栏使用 CSS 拖拽区域，按钮、链接和输入框标记 no-drag；连接页顶部也保留拖拽带。实现参考 [Electron 自定义标题栏](https://www.electronjs.org/docs/latest/tutorial/custom-title-bar)。
 
 修改窗口创建选项后需重启桌面应用，单独刷新前端不会更新原生窗口配置。macOS 打包冒烟和内容截图已验证，Windows 原生按钮、DPI 与贴靠行为仍需 Windows CI / 实机验收。
+
+### 社区插件与 Bun 下载源
+
+社区插件（magpie）默认关闭，在 设置 → 插件 里启用。插件宿主需要 Bun：第一次启用时，
+backend 在**它所在的机器**上下载 Bun（约 30 MB），面板显示进度；下载失败会显示失败的 URL，
+可以换下载源后重试。关闭后 backend 不启动插件宿主，插件提供的模型也会消失。
+开关和所选下载源保存在 `$ARGON_HOME/plugins.json`。升级前就装过插件的用户没有这个文件，
+此时视为已启用。
+
+下载源（面板里选择，或用环境变量 `ARGON_BUN_MIRROR` 在 backend 上固定，后者优先，
+面板只显示不可改）：
+
+| 值               | 下载源                                                       |
+| ---------------- | ------------------------------------------------------------ |
+| `github`（默认） | GitHub 官方 releases                                         |
+| `npmmirror`      | npmmirror 二进制镜像入口                                     |
+| `npmmirror-cdn`  | npmmirror CDN 直连（与上一项为同一镜像服务，不是独立备用源） |
+| 自定义 HTTPS URL | 自建或可信镜像的基础地址                                     |
+
+PowerShell 持久化设置环境变量（设置后彻底退出并重新启动 Argon）：
+
+```powershell
+[Environment]::SetEnvironmentVariable("ARGON_BUN_MIRROR", "npmmirror", "User")
+```
+
+自定义地址会拼接 `/bun-v1.4.2/<平台文件名>.zip`；不要填写压缩包完整地址。
+地址不能包含凭证、query 或 fragment。无自动回退，不会静默访问其他第三方源。
+所有来源均使用 magpie-pi 内置的固定 SHA-256 校验，镜像不能替换二进制。
+已有缓存或设置了 `MAGPIE_PI_BUN` 时不会重新下载；magpie 升级 Bun 版本后，已启用的用户会在
+backend 启动时自动重新下载（同样显示在面板里）。
+npmmirror 两个入口已检查 Windows x64 baseline 1.4.2 文件的 HEAD 可访问性，
+不代表所有版本和平台均可用，也不代表已验证 Windows 运行。
+实现依赖 magpie-pi ≥ 0.3.1 的嵌入接口 `prepareBun` / `bunReady`（`backend/src/magpie-host.ts`）。

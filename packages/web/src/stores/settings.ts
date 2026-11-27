@@ -11,6 +11,7 @@ import type {
 	GlobalEvent,
 	PiSettings,
 	PluginInfo,
+	PluginsStatus,
 	ProjectPiSettings,
 	ProjectSettingsInfo,
 	ProviderInfo,
@@ -35,6 +36,8 @@ interface PluginsData {
 	plugins: PluginInfo[];
 	errors: string[];
 	available: boolean;
+	/** Absent when the backend could not be reached. */
+	status?: PluginsStatus;
 }
 
 interface SettingsState {
@@ -72,6 +75,9 @@ interface SettingsState {
 
 	searchPlugins(query: string): Promise<{ name: string; version: string; description?: string }[]>;
 	changePlugin(action: "install" | "remove", spec: string): Promise<boolean>;
+	/** Enable plugins (first time: Bun is downloaded in the background) or retry with another mirror. */
+	enablePlugins(bunMirror?: string): Promise<void>;
+	disablePlugins(): Promise<void>;
 }
 
 function errorMessage(error: unknown): string {
@@ -117,6 +123,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			set((s) => ({ flows: { ...s.flows, [event.flow.flowId]: event.flow } }));
 			if (event.flow.status === "succeeded")
 				toast.success(t("notifications.signedIn", { provider: event.flow.providerName }));
+		}
+		if (event.type === "plugins_status") {
+			const plugins = get().plugins;
+			if (plugins) set({ plugins: { ...plugins, status: event.status } });
 		}
 		if (event.type === "providers_changed" && get().open) {
 			void get().refreshProviders();
@@ -243,7 +253,6 @@ export const useSettings = create<SettingsState>((set, get) => ({
 	},
 	async changePlugin(action, spec) {
 		try {
-			// The first install downloads Bun (~25–40 MB) before `bun add` and a host restart.
 			const { message } = await getClient().request(
 				"plugins.change",
 				{ action, spec, confirmed: true },
@@ -258,6 +267,25 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		} catch (e) {
 			toast.error(errorMessage(e));
 			return false;
+		}
+	},
+	async enablePlugins(bunMirror) {
+		try {
+			const { status } = await getClient().request("plugins.enable", { bunMirror, confirmed: true });
+			const plugins = get().plugins;
+			if (plugins) set({ plugins: { ...plugins, status } });
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async disablePlugins() {
+		try {
+			const { status } = await getClient().request("plugins.disable", {});
+			const plugins = get().plugins;
+			if (plugins) set({ plugins: { ...plugins, status } });
+			await get().refreshPlugins();
+		} catch (e) {
+			toast.error(errorMessage(e));
 		}
 	},
 }));

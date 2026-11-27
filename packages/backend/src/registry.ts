@@ -111,7 +111,12 @@ export class SessionRegistry {
 		// Before any session loads: a magpie-pi extension from the user's pi packages must stay
 		// inactive in this process (magpie runs once, backend-wide; see magpie-host.ts).
 		process.env.MAGPIE_PI_EMBEDDED = "1";
-		this.magpie = new MagpieHost(modelRuntime);
+		this.magpie = new MagpieHost(
+			modelRuntime,
+			options.argonHome,
+			(status) => this.broadcast({ type: "plugins_status", status }),
+			() => this.broadcast({ type: "providers_changed" }),
+		);
 		this.modelsConfig = new ModelsConfigStore(join(options.agentDir, "models.json"), modelRuntime, () =>
 			this.broadcast({ type: "providers_changed" }),
 		);
@@ -123,7 +128,7 @@ export class SessionRegistry {
 			this.modelsConfig,
 		);
 		// Plugin hosts can take a few seconds; sessions do not wait for them.
-		void this.magpie.start().then(() => this.broadcast({ type: "providers_changed" }));
+		void this.magpie.start().catch((error) => log.warn(String(error)));
 	}
 
 	readSettings(cwd: string | undefined): MethodResult<"settings.get"> {
@@ -176,9 +181,7 @@ export class SessionRegistry {
 
 	/** Restart magpie after plugin changes; providers appear/disappear for all sessions. */
 	async changePlugin(action: "install" | "remove", spec: string): Promise<string> {
-		const message = await this.magpie.change(action, spec);
-		this.broadcast({ type: "providers_changed" });
-		return message;
+		return this.magpie.change(action, spec);
 	}
 
 	static async create(options: RegistryOptions): Promise<SessionRegistry> {

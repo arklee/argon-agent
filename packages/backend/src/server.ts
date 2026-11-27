@@ -252,6 +252,12 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 			await registry.auth.logout(params.providerId);
 			return empty;
 		},
+		"plugins.enable": async (params) => {
+			if (params.confirmed !== true)
+				throw new RequestError("bad_request", "Enabling plugins requires user confirmation");
+			return { status: await registry.magpie.enable(params.bunMirror) };
+		},
+		"plugins.disable": async () => ({ status: await registry.magpie.disable() }),
 		"plugins.list": async () => ({ ...(await registry.magpie.list()), available: true }),
 		"plugins.search": async (params) => ({ results: await registry.magpie.search(params.query) }),
 		"plugins.change": async (params) => {

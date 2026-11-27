@@ -295,6 +295,25 @@ export interface AuthFlow {
 	startedAt: number;
 }
 
+/** Bun runtime the plugin host needs, on the backend machine. */
+export interface PluginRuntimeStatus {
+	state: "missing" | "preparing" | "ready" | "failed";
+	/** While preparing: bytes received and total (total absent when unknown). */
+	received?: number;
+	total?: number;
+	/** When failed: the error (includes the failed URL). */
+	error?: string;
+}
+export interface PluginsStatus {
+	enabled: boolean;
+	/** Bun download source: "github" | "npmmirror" | "npmmirror-cdn" | an HTTPS base URL. */
+	bunMirror: string;
+	/** Set when ARGON_BUN_MIRROR overrides the stored mirror. */
+	bunMirrorEnv?: string;
+	bunVersion: string;
+	runtime: PluginRuntimeStatus;
+}
+
 /** magpie community plugins (installed into magpie's own state directory on the backend machine). */
 export interface PluginInfo {
 	spec: string;
@@ -542,6 +561,8 @@ export type GlobalEvent =
 	| { type: "sessions_changed" }
 	| { type: "session_unloaded"; sessionId: string }
 	| { type: "projects_changed" }
+	/** Plugins were enabled/disabled, or the Bun runtime's preparation progressed (see plugins.enable). */
+	| { type: "plugins_status"; status: PluginsStatus }
 	/** Providers, their auth state or their models changed (login, logout, plugin changes). */
 	| { type: "providers_changed" }
 	| { type: "auth_flow"; flow: AuthFlow }
@@ -724,8 +745,16 @@ export interface Methods {
 	};
 	"plugins.list": {
 		params: Record<string, never>;
-		result: { plugins: PluginInfo[]; errors: string[]; available: boolean };
+		result: { plugins: PluginInfo[]; status: PluginsStatus; errors: string[]; available: boolean };
 	};
+	/**
+	 * Enable plugins and prepare Bun in the background (downloaded on first enable); progress arrives as
+	 * `plugins_status` events. Also retries a failed preparation, optionally with another mirror.
+	 * `confirmed` must be true: plugins run with the backend user's privileges.
+	 */
+	"plugins.enable": { params: { bunMirror?: string; confirmed: boolean }; result: { status: PluginsStatus } };
+	/** Stop the plugin host and unregister its providers. A running Bun download finishes and stays cached. */
+	"plugins.disable": { params: Record<string, never>; result: { status: PluginsStatus } };
 	"plugins.search": {
 		params: { query: string };
 		result: { results: { name: string; version: string; description?: string }[] };
