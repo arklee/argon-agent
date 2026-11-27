@@ -94,3 +94,21 @@ it("flushes pending preference writes before disposal completes", async () => {
 	expect(new SessionPrefs(home).isArchived("session")).toBe(true);
 	registry = undefined;
 });
+
+it("leaves blank new sessions out of the list until something happens in them", async () => {
+	await setup();
+	const fake = (sessionId: string, items: unknown[], isRunning = false) => ({
+		sessionId,
+		isRunning,
+		createdAt: 1,
+		snapshot: () => ({ state: { cwd: home, items } }),
+	});
+	const sessions = (registry as unknown as { sessions: Map<string, unknown> }).sessions;
+	sessions.set("blank", fake("blank", []));
+	sessions.set("starting", fake("starting", [], true));
+	sessions.set("asked", fake("asked", [{ kind: "user", text: "hi" }]));
+	const listed = await registry!.list();
+	expect(listed.map((s) => s.sessionId).sort()).toEqual(["asked", "starting"]);
+	expect(listed.find((s) => s.sessionId === "asked")?.firstMessage).toBe("hi");
+	sessions.clear();
+});

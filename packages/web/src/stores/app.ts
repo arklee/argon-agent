@@ -166,6 +166,21 @@ export const useApp = create<AppState>((set, get) => ({
 			document.querySelector<HTMLTextAreaElement>("#argon-composer")?.focus();
 			return;
 		}
+		// A blank session left there earlier is not listed in the sidebar; go back to it rather than make another.
+		const blank = Object.values(s.sessionStates).find(
+			(state) =>
+				state.cwd === target &&
+				state.items.length === 0 &&
+				state.status === "idle" &&
+				!mirror?.isUnloaded(state.sessionId),
+		);
+		if (target && blank && mirror) {
+			const state = await mirror.attach(blank.sessionId).catch(() => undefined);
+			if (state) {
+				set({ activeSessionId: state.sessionId });
+				return;
+			}
+		}
 		if (target) await s.createSession(target).catch(() => undefined);
 		else s.setAddProjectOpen(true);
 	},

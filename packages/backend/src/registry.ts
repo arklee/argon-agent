@@ -423,11 +423,13 @@ export class SessionRegistry {
 				...(this.prefs.isArchived(info.path) ? { archived: true } : {}),
 			});
 		}
-		// New sessions have no file until their first message; still show them.
+		// New sessions have no file until their first reply; show them once something happened in them
+		// (a blank, idle session is not a conversation yet and stays out of the list).
 		for (const session of this.sessions.values()) {
 			if (byId.has(session.sessionId)) continue;
 			const state = session.snapshot().state;
 			if (cwd && state.cwd !== cwd) continue;
+			if (state.items.length === 0 && !session.isRunning) continue;
 			byId.set(session.sessionId, {
 				sessionId: session.sessionId,
 				sessionPath: session.sessionPath ?? "",
