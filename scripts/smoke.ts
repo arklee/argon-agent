@@ -26,6 +26,8 @@ function parseModel(ref: string): { provider: string; id: string } {
 const MARKER = "SMOKE-OK";
 const COMMAND = "echo argon > smoke.txt";
 const SANDBOXED = process.platform === "darwin";
+// "ask" needs the OS sandbox (decisions D15), which only exists on macOS; elsewhere sessions run in "auto".
+const SESSION_MODE = SANDBOXED ? "ask" : "auto";
 const ARGON_HOME = process.env.ARGON_HOME ?? join(homedir(), ".argon");
 const AUTH_PATH = join(ARGON_HOME, "agent", "auth.json");
 
@@ -217,8 +219,7 @@ function assertSettings(state: SessionState) {
 	assert.equal(state.model?.provider, MODEL.provider, "Unexpected model provider");
 	assert.equal(state.model?.id, MODEL.id, "Unexpected model ID");
 	assert.equal(state.thinkingLevel, "low", "Unexpected thinking level");
-	// "ask" needs the OS sandbox (decisions D15), which only exists on macOS; elsewhere sessions run in "auto".
-	assert.equal(state.permissionMode, SANDBOXED ? "ask" : "auto", "Unexpected permission mode");
+	assert.equal(state.permissionMode, SESSION_MODE, "Unexpected permission mode");
 }
 
 async function snapshot(client: WebSocketAgentClient, sessionId: string) {
@@ -309,7 +310,7 @@ async function main() {
 			signal.throwIfAborted();
 			await client().request("sessions.setThinkingLevel", { sessionId, level: "low" });
 			signal.throwIfAborted();
-			await client().request("sessions.setPermissionMode", { sessionId, mode: "ask" });
+			await client().request("sessions.setPermissionMode", { sessionId, mode: SESSION_MODE });
 			assertSettings(await snapshot(client(), sessionId));
 		});
 
@@ -393,7 +394,7 @@ async function main() {
 					signal,
 				);
 			} finally {
-				await client().request("sessions.setPermissionMode", { sessionId, mode: "ask" });
+				await client().request("sessions.setPermissionMode", { sessionId, mode: SESSION_MODE });
 			}
 			assert.match(await readFile(join(cwd, "notes.txt"), "utf8"), /hello argon/);
 			const state = await snapshot(client(), sessionId);
