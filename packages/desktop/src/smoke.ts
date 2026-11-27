@@ -67,10 +67,25 @@ export async function smoke(
 			else clipboard.clear();
 		}
 		console.error("DESKTOP_CLIPBOARD_OK: text copy succeeds, clipboard read denied");
-		await getWindow()!.webContents.executeJavaScript("window.argonDesktop.setTheme('dark')");
-		await delay(100);
-		assert.equal(nativeTheme.themeSource, "dark", "Renderer theme reaches native chrome");
-		await getWindow()!.webContents.executeJavaScript("window.argonDesktop.setTheme('system')");
+		// Exercise the renderer's storage synchronization path so its preference and native chrome agree.
+		// Calling the native bridge alone leaves the renderer on system, which can reset the native theme.
+		for (const theme of ["light", "dark", "system"] as const) {
+			await getWindow()!.webContents.executeJavaScript(`
+				localStorage.setItem('argon.theme', ${JSON.stringify(theme)});
+				window.dispatchEvent(new StorageEvent('storage', { key: 'argon.theme' }));
+			`);
+			const themeDeadline = Date.now() + 5_000;
+			while (nativeTheme.themeSource !== theme && Date.now() < themeDeadline) await delay(50);
+			assert.equal(nativeTheme.themeSource, theme, "Renderer theme reaches native chrome");
+			// Allow the media-query feedback to settle before checking both sides again.
+			await delay(200);
+			assert.equal(nativeTheme.themeSource, theme, "Native theme remains synchronized");
+			const rendererDark = await getWindow()!.webContents.executeJavaScript(
+				"document.documentElement.classList.contains('dark')",
+			);
+			assert.equal(rendererDark, nativeTheme.shouldUseDarkColors, "Renderer and native colors agree");
+		}
+		console.error("DESKTOP_THEME_OK: light, dark and system stay synchronized");
 		if (process.platform === "darwin" || process.platform === "win32") {
 			const window = getWindow()!;
 			focusWindow();

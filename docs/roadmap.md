@@ -198,7 +198,7 @@
 
 - [x] Windows 桌面基础适配：按平台/架构定位冒烟可执行文件，动态 ESM 导入使用 file URL；fd 补全支持 Windows PATH 与 .exe；Web dev runner 通过 Node 启动 npm JS 入口，避免直接 spawn npm.cmd；NSIS 按用户安装；补充 PowerShell 使用说明和 Windows 打包冒烟 CI
 - [x] Windows 桌面冒烟剪贴板换行兼容：读回文本将 CRLF 归一化为 LF 后比较，修复 v0.1.1 发布中复制断言失败；待 Windows CI 复验
-- [ ] 桌面主题冒烟存在反馈竞争：直接设置原生深色主题时，前端 system 偏好的媒体查询监听可能将其重置；macOS x64 发布日志已出现，需改用真实主题设置流程并等待同步
+- [x] 桌面主题冒烟反馈竞争：Windows / macOS x64 发布日志中直接设置原生深色主题被前端 system 偏好重置；改经前端 storage 同步路径更新偏好，等待原生同步并验证 light / dark / system 与页面颜色一致（Windows CI 待复验）
 - [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出、安装/卸载、托盘点击切换及关机/注销时不阻塞（`session-end`）；Windows CI 尚未在本轮运行
 
 - [x] 社区插件开关：设置 → 插件 里启用/停用，首次启用时下载 Bun（进度、失败 URL、换源重试）；下载源可选 GitHub / npmmirror / npmmirror CDN / 自定义 HTTPS 地址，`ARGON_BUN_MIRROR` 可在 backend 固定；保留 SHA-256 校验。可选用 backend 机器上已安装的兼容 Bun（≥ 1.3.14）而不下载。依赖 magpie-pi 0.3.2（`prepareBun` / `bunReady` / `findBun`）。
