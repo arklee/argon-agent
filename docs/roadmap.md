@@ -155,6 +155,7 @@
 
 - [x] 扩展自己注册的 MCP 服务器（`registerMcpServer`，不在 mcp.json 里）在对话里关闭只在本次运行时有效：pi 对 `scope: "extension"` 的条目不调用 `updateConfig`。已在补丁里加 `registeredServerConfig` / `updateRegisteredConfig` 两个选项解决（D16）
 - [x] Windows 安装 Magpie 插件报 `spawn npm ENOENT`：根因是 magpie-pi 抽取时去掉了上游的 Bun 下载，改成依赖系统 npm 和 Bun。magpie-pi 0.3.0 改为首次使用时下载钉住的 Bun 1.4.2 并用 `bun add` 安装，backend 已升级；`plugins.change` 请求超时放宽到 10 分钟以容纳首次下载。Linux 端到端已验证，Windows 打包版仍待实机验收安装和运行插件
+- [x] Windows 打包版安装社区插件后弹出关不掉的终端窗口：magpie-pi 启动插件 supervisor（控制台程序）时没加 `windowsHide`，而 backend 所在的 utilityProcess 没有控制台，Windows 就给它新建了可见窗口，插件启用期间一直存在。magpie-pi 0.3.3 修复，backend 已升级；仅影响 Windows，尚待实机验证
 - [x] backend 的 fetch 不认 `HTTP(S)_PROXY`：SDK 嵌入不经过 pi CLI 的 `configureHttpDispatcher`，`http-proxy.ts` 按 pi 的参数装全局 `EnvHttpProxyAgent`
 - [ ] 只认环境变量代理：Windows / macOS 的系统代理设置（不导出环境变量的代理客户端）目前不生效，可在 desktop 里用 `session.resolveProxy` 查到后传给 backend
 - [ ] Windows backend 全量测试适配：本机运行发现 models-config 的 POSIX mode 断言、sandbox / uploads-gc 的 symlink 权限、session-prefs 的 ENOTDIR 预期失败，并出现文件替换 rename EPERM 日志；需区分平台语义、权限前提和实际文件替换问题

@@ -115,3 +115,4 @@ backend 启动时自动重新下载（同样显示在面板里）。
 npmmirror 两个入口已检查 Windows x64 baseline 1.4.2 文件的 HEAD 可访问性，
 不代表所有版本和平台均可用，也不代表已验证 Windows 运行。
 实现依赖 magpie-pi ≥ 0.3.2 的嵌入接口 `prepareBun` / `bunReady` / `findBun`（`backend/src/magpie-host.ts`）。
+Windows 上需要 ≥ 0.3.3：更早的版本启动插件宿主时会弹出一个控制台窗口。
