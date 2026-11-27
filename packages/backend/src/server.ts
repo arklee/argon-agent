@@ -255,7 +255,7 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 		"plugins.enable": async (params) => {
 			if (params.confirmed !== true)
 				throw new RequestError("bad_request", "Enabling plugins requires user confirmation");
-			return { status: await registry.magpie.enable(params.bunMirror) };
+			return { status: await registry.magpie.enable(params) };
 		},
 		"plugins.disable": async () => ({ status: await registry.magpie.disable() }),
 		"plugins.list": async () => ({ ...(await registry.magpie.list()), available: true }),

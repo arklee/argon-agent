@@ -1,4 +1,4 @@
-import type { PluginsStatus } from "@argon/shared";
+import type { BunSource, PluginsStatus } from "@argon/shared";
 import { Loader2, Search, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -83,34 +83,112 @@ function MirrorPicker({
 	);
 }
 
+/** Installed Bun (when one was found) or magpie's pinned download. */
+function SourcePicker({
+	status,
+	value,
+	onChange,
+}: {
+	status: PluginsStatus;
+	value: BunSource;
+	onChange: (value: BunSource) => void;
+}) {
+	const { t } = useTranslation();
+	const system = status.systemBun;
+	let description: string;
+	if (value === "system" && system) description = system.path;
+	else if (system && !system.compatible)
+		description = t("settings.plugins.sourceIncompatible", {
+			version: system.version,
+			path: system.path,
+			min: status.minSystemBunVersion,
+		});
+	else description = t("settings.plugins.sourceManagedDescription");
+	return (
+		<Row label={t("settings.plugins.source")} description={<span className="break-all">{description}</span>}>
+			<Select value={value} onValueChange={(next) => onChange(next as BunSource)}>
+				<SelectTrigger size="sm" className="w-52" aria-label={t("settings.plugins.source")}>
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent position="popper" align="end">
+					{system && (
+						<SelectItem value="system" disabled={!system.compatible}>
+							{t("settings.plugins.sourceSystem", { version: system.version })}
+						</SelectItem>
+					)}
+					<SelectItem value="managed">{t("settings.plugins.sourceManaged", { version: status.bunVersion })}</SelectItem>
+				</SelectContent>
+			</Select>
+		</Row>
+	);
+}
+
+function initialSource(status: PluginsStatus): BunSource {
+	if (status.enabled) return status.bunSource;
+	// Keep a Bun magpie already downloaded; otherwise prefer the one the user has.
+	if (status.bunSource === "managed" && status.runtime.state === "ready") return "managed";
+	return status.systemBun?.compatible ? "system" : "managed";
+}
+
 /**
- * The on/off switch for community plugins. Turning them on the first time downloads Bun, which the
- * plugin host needs, on the backend machine; progress and failures arrive as `plugins_status` events.
+ * The on/off switch for community plugins. The plugin host needs Bun on the backend machine: an
+ * installed one (when compatible) or magpie's pinned download, prepared when plugins are turned on;
+ * progress and failures arrive as `plugins_status` events. Never switches source on its own.
  */
 function RuntimeGroup({ status }: { status: PluginsStatus }) {
 	const { t } = useTranslation();
 	const enablePlugins = useSettings((s) => s.enablePlugins);
 	const disablePlugins = useSettings((s) => s.disablePlugins);
 	const [mirror, setMirror] = useState(status.bunMirror);
+	const [source, setSource] = useState<BunSource>(() => initialSource(status));
 	const [busy, setBusy] = useState(false);
 	const { runtime, enabled } = status;
-	const version = status.bunVersion;
+	const pinned = status.bunPathEnv !== undefined;
 	const preparing = runtime.state === "preparing";
-	const needsDownload = runtime.state === "missing" || runtime.state === "failed";
+	const failed = runtime.state === "failed";
+	const choosing = !pinned && !preparing && (!enabled || failed);
+	// The managed Bun may still need downloading (runtime describes the saved source, not the picked one).
+	const download = source === "managed" && !(status.bunSource === "managed" && runtime.state === "ready");
+	const mirrorOk = status.bunMirrorEnv !== undefined || mirror.trim() !== "";
+	const canEnable = pinned || (source === "system" ? status.systemBun?.compatible === true : !download || mirrorOk);
 	const act = async (action: () => Promise<void>) => {
 		setBusy(true);
 		await action();
 		setBusy(false);
 	};
-	const enable = () => act(() => enablePlugins(status.bunMirrorEnv === undefined ? mirror.trim() : undefined));
+	const enable = () =>
+		act(() =>
+			enablePlugins(
+				pinned
+					? {}
+					: {
+							bunSource: source,
+							bunMirror: source === "managed" && status.bunMirrorEnv === undefined ? mirror.trim() : undefined,
+						},
+			),
+		);
 
+	const version = status.bunVersion;
 	let description: string;
-	if (preparing) description = t("settings.plugins.statusPreparing", { version });
-	else if (runtime.state === "failed") description = t("settings.plugins.statusFailed", { version });
-	else if (!enabled)
-		description = needsDownload
-			? t("settings.plugins.statusOffDownload", { version })
+	if (pinned && !failed) {
+		description = enabled
+			? t("settings.plugins.statusPinned", { path: status.bunPathEnv ?? "" })
 			: t("settings.plugins.statusOff");
+	} else if (preparing) description = t("settings.plugins.statusPreparing", { version });
+	else if (failed)
+		description =
+			status.bunSource === "system"
+				? t("settings.plugins.statusSystemFailed")
+				: t("settings.plugins.statusFailed", { version });
+	else if (!enabled)
+		description =
+			source === "system"
+				? t("settings.plugins.statusOffSystem")
+				: download
+					? t("settings.plugins.statusOffDownload", { version })
+					: t("settings.plugins.statusOff");
+	else if (status.bunSource === "system")
+		description = t("settings.plugins.statusReadySystem", { version: status.systemBun?.version ?? "" });
 	else description = t("settings.plugins.statusReady", { version });
 
 	return (
@@ -121,11 +199,7 @@ function RuntimeGroup({ status }: { status: PluginsStatus }) {
 						{t("settings.plugins.disable")}
 					</Button>
 				) : (
-					<Button
-						size="xs"
-						disabled={busy || preparing || (needsDownload && !mirror.trim() && !status.bunMirrorEnv)}
-						onClick={() => void enable()}
-					>
+					<Button size="xs" disabled={busy || preparing || !canEnable} onClick={() => void enable()}>
 						{busy && <Loader2 className="animate-spin" />}
 						{t("settings.plugins.enable")}
 					</Button>
@@ -153,15 +227,18 @@ function RuntimeGroup({ status }: { status: PluginsStatus }) {
 					</div>
 				</div>
 			)}
-			{runtime.state === "failed" && runtime.error && (
+			{failed && runtime.error && (
 				<pre className="my-3 rounded-md bg-destructive/10 p-2 font-mono text-xs break-all whitespace-pre-wrap text-destructive">
 					{runtime.error}
 				</pre>
 			)}
-			{needsDownload && !preparing && <MirrorPicker status={status} value={mirror} onChange={setMirror} />}
-			{enabled && runtime.state === "failed" && (
+			{choosing && (status.systemBun || source === "system") && (
+				<SourcePicker status={status} value={source} onChange={setSource} />
+			)}
+			{choosing && download && <MirrorPicker status={status} value={mirror} onChange={setMirror} />}
+			{enabled && failed && (
 				<div className="flex justify-end py-3">
-					<Button size="xs" disabled={busy || (!mirror.trim() && !status.bunMirrorEnv)} onClick={() => void enable()}>
+					<Button size="xs" disabled={busy || !canEnable} onClick={() => void enable()}>
 						{busy && <Loader2 className="animate-spin" />}
 						{t("settings.plugins.retry")}
 					</Button>

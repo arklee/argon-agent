@@ -85,7 +85,10 @@ main 通过页面查询参数 `windowChrome` 传递纯显示提示，不暴露�
 社区插件（magpie）默认关闭，在 设置 → 插件 里启用。插件宿主需要 Bun：第一次启用时，
 backend 在**它所在的机器**上下载 Bun（约 30–40 MB），面板显示进度；下载失败会显示失败的 URL，
 可以换下载源后重试。关闭后 backend 不启动插件宿主，插件提供的模型也会消失。
-开关和所选下载源保存在 `$ARGON_HOME/plugins.json`。升级前就装过插件的用户没有这个文件，
+如果 backend 机器上已经装了 Bun（在 PATH、`$BUN_INSTALL/bin` 或 `~/.bun/bin` 里找到，且版本为
+1.x、不低于 1.3.14），启用时可以选择直接使用它，不必下载。选择不会自动切换：已安装的 Bun 之后被删掉或
+降级到不兼容的版本时，面板显示原因，由用户决定改为下载。backend 设置了 `MAGPIE_PI_BUN` 时以它为准。
+开关、Bun 来源和下载源保存在 `$ARGON_HOME/plugins.json`。升级前就装过插件的用户没有这个文件，
 此时视为已启用。
 
 下载源（面板里选择，或用环境变量 `ARGON_BUN_MIRROR` 在 backend 上固定，后者优先，
@@ -111,4 +114,4 @@ PowerShell 持久化设置环境变量（设置后彻底退出并重新启动 Ar
 backend 启动时自动重新下载（同样显示在面板里）。
 npmmirror 两个入口已检查 Windows x64 baseline 1.4.2 文件的 HEAD 可访问性，
 不代表所有版本和平台均可用，也不代表已验证 Windows 运行。
-实现依赖 magpie-pi ≥ 0.3.1 的嵌入接口 `prepareBun` / `bunReady`（`backend/src/magpie-host.ts`）。
+实现依赖 magpie-pi ≥ 0.3.2 的嵌入接口 `prepareBun` / `bunReady` / `findBun`（`backend/src/magpie-host.ts`）。

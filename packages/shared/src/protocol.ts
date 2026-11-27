@@ -304,12 +304,27 @@ export interface PluginRuntimeStatus {
 	/** When failed: the error (includes the failed URL). */
 	error?: string;
 }
+export type BunSource = "system" | "managed";
+export interface SystemBunInfo {
+	path: string;
+	version: string;
+	compatible: boolean;
+}
 export interface PluginsStatus {
+	/** Installed backend Bun or magpie's managed download. */
+	bunSource: BunSource;
+	/** First Bun found in PATH, $BUN_INSTALL/bin or ~/.bun/bin. */
+	systemBun?: SystemBunInfo;
+	/** Minimum compatible installed Bun version. */
+	minSystemBunVersion: string;
+	/** MAGPIE_PI_BUN overrides the source and mirror. */
+	bunPathEnv?: string;
 	enabled: boolean;
 	/** Bun download source: "github" | "npmmirror" | "npmmirror-cdn" | an HTTPS base URL. */
 	bunMirror: string;
 	/** Set when ARGON_BUN_MIRROR overrides the stored mirror. */
 	bunMirrorEnv?: string;
+	/** Version of the managed download. */
 	bunVersion: string;
 	runtime: PluginRuntimeStatus;
 }
@@ -752,7 +767,10 @@ export interface Methods {
 	 * `plugins_status` events. Also retries a failed preparation, optionally with another mirror.
 	 * `confirmed` must be true: plugins run with the backend user's privileges.
 	 */
-	"plugins.enable": { params: { bunMirror?: string; confirmed: boolean }; result: { status: PluginsStatus } };
+	"plugins.enable": {
+		params: { bunMirror?: string; bunSource?: BunSource; confirmed: boolean };
+		result: { status: PluginsStatus };
+	};
 	/** Stop the plugin host and unregister its providers. A running Bun download finishes and stays cached. */
 	"plugins.disable": { params: Record<string, never>; result: { status: PluginsStatus } };
 	"plugins.search": {

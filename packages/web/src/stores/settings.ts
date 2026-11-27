@@ -8,6 +8,7 @@ import type {
 	ArgonSettings,
 	AuthFlow,
 	AuthType,
+	BunSource,
 	GlobalEvent,
 	PiSettings,
 	PluginInfo,
@@ -75,8 +76,11 @@ interface SettingsState {
 
 	searchPlugins(query: string): Promise<{ name: string; version: string; description?: string }[]>;
 	changePlugin(action: "install" | "remove", spec: string): Promise<boolean>;
-	/** Enable plugins (first time: Bun is downloaded in the background) or retry with another mirror. */
-	enablePlugins(bunMirror?: string): Promise<void>;
+	/**
+	 * Enable plugins with an installed Bun or magpie's download (prepared in the background), or retry a
+	 * failed setup with another source or mirror.
+	 */
+	enablePlugins(options: { bunMirror?: string; bunSource?: BunSource }): Promise<void>;
 	disablePlugins(): Promise<void>;
 }
 
@@ -269,9 +273,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			return false;
 		}
 	},
-	async enablePlugins(bunMirror) {
+	async enablePlugins({ bunMirror, bunSource }) {
 		try {
-			const { status } = await getClient().request("plugins.enable", { bunMirror, confirmed: true });
+			const { status } = await getClient().request("plugins.enable", { bunMirror, bunSource, confirmed: true });
 			const plugins = get().plugins;
 			if (plugins) set({ plugins: { ...plugins, status } });
 		} catch (e) {

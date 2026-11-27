@@ -189,4 +189,4 @@
 - [x] Windows 桌面基础适配：按平台/架构定位冒烟可执行文件，动态 ESM 导入使用 file URL；fd 补全支持 Windows PATH 与 .exe；Web dev runner 通过 Node 启动 npm JS 入口，避免直接 spawn npm.cmd；NSIS 按用户安装；补充 PowerShell 使用说明和 Windows 打包冒烟 CI
 - [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出、安装/卸载、托盘点击切换及关机/注销时不阻塞（`session-end`）；Windows CI 尚未在本轮运行
 
-- [x] 社区插件开关：设置 → 插件 里启用/停用，首次启用时下载 Bun（进度、失败 URL、换源重试）；下载源可选 GitHub / npmmirror / npmmirror CDN / 自定义 HTTPS 地址，`ARGON_BUN_MIRROR` 可在 backend 固定；保留 SHA-256 校验。依赖 magpie-pi 0.3.1（`prepareBun` / `bunReady`）。
+- [x] 社区插件开关：设置 → 插件 里启用/停用，首次启用时下载 Bun（进度、失败 URL、换源重试）；下载源可选 GitHub / npmmirror / npmmirror CDN / 自定义 HTTPS 地址，`ARGON_BUN_MIRROR` 可在 backend 固定；保留 SHA-256 校验。可选用 backend 机器上已安装的兼容 Bun（≥ 1.3.14）而不下载。依赖 magpie-pi 0.3.2（`prepareBun` / `bunReady` / `findBun`）。
