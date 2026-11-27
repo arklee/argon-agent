@@ -154,6 +154,8 @@
 
 ## 技术债与已知问题
 
+- [x] 首次 Release 三平台冒烟在备份空剪贴板时失败：Electron 可返回 `types` 为空的条目，构造 `ClipboardItem` 会报错；备份时过滤空条目，保留复制、读取权限和恢复检查。修复后仍需 GitHub 三平台重验
+
 - [x] 扩展自己注册的 MCP 服务器（`registerMcpServer`，不在 mcp.json 里）在对话里关闭只在本次运行时有效：pi 对 `scope: "extension"` 的条目不调用 `updateConfig`。已在补丁里加 `registeredServerConfig` / `updateRegisteredConfig` 两个选项解决（D16）
 - [x] Windows 安装 Magpie 插件报 `spawn npm ENOENT`：根因是 magpie-pi 抽取时去掉了上游的 Bun 下载，改成依赖系统 npm 和 Bun。magpie-pi 0.3.0 改为首次使用时下载钉住的 Bun 1.4.2 并用 `bun add` 安装，backend 已升级；`plugins.change` 请求超时放宽到 10 分钟以容纳首次下载。Linux 端到端已验证，Windows 打包版仍待实机验收安装和运行插件
 - [x] Windows 打包版安装社区插件后弹出关不掉的终端窗口：magpie-pi 启动插件 supervisor（控制台程序）时没加 `windowsHide`，而 backend 所在的 utilityProcess 没有控制台，Windows 就给它新建了可见窗口，插件启用期间一直存在。magpie-pi 0.3.3 修复，backend 已升级；仅影响 Windows，尚待实机验证

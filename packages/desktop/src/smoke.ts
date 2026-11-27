@@ -39,10 +39,14 @@ export async function smoke(
 		focusWindow();
 		await delay(200);
 		const clipboardItems = await Promise.all(
-			(await clipboard.read()).map(async (item) => {
-				const entries = await Promise.all(item.types.map(async (type) => [type, await item.getType(type)] as const));
-				return new ClipboardItem(Object.fromEntries(entries));
-			}),
+			// A fresh desktop (including CI runners) can return an item with no formats.
+			// ClipboardItem rejects empty data; there is nothing to preserve for that item.
+			(await clipboard.read())
+				.filter((item) => item.types.length > 0)
+				.map(async (item) => {
+					const entries = await Promise.all(item.types.map(async (type) => [type, await item.getType(type)] as const));
+					return new ClipboardItem(Object.fromEntries(entries));
+				}),
 		);
 		try {
 			await getWindow()!.webContents.executeJavaScript(
