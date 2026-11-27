@@ -898,6 +898,15 @@ export interface Methods {
 		result: Record<string, never>;
 	};
 	"mcp.config.removeServer": { params: McpConfigTarget & { name: string }; result: Record<string, never> };
+	/**
+	 * Add pasted server entries (`mcpServers` values, as JSON) to a file. Each is validated with pi's
+	 * rules; nothing is written when any fails (bad_request listing them). Names already in the file
+	 * are a conflict unless `replace`. Reloads affected sessions.
+	 */
+	"mcp.config.importServers": {
+		params: McpConfigTarget & { servers: Record<string, unknown>; replace?: boolean };
+		result: { added: string[]; replaced: string[] };
+	};
 	/** Global default for new sessions (the global mcp.json `enabled`). Loaded sessions are not changed. */
 	"mcp.config.setEnabled": { params: { name: string; enabled: boolean }; result: Record<string, never> };
 	/** An mcp.json as text, for the raw editor (`text` is "" when the file does not exist). */

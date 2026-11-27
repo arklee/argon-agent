@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { displayPath } from "@/lib/format";
 import { describeForm, formatPairs, parseLines, parsePairs } from "@/lib/mcp-form";
+import { parseMcpImport, sseServers } from "@/lib/mcp-import";
 import { cn } from "@/lib/utils";
 import { getClient, useApp } from "@/stores/app";
 import { useSettings } from "@/stores/settings";
@@ -44,7 +45,8 @@ export function McpSection() {
 	const cwd = useSettings((s) => s.cwd);
 	const mcp = useSettings((s) => s.mcp);
 	const settings = useSettings((s) => s.settings);
-	const [editing, setEditing] = useState<{ target: McpConfigTarget; server?: McpConfigServer }>();
+	// Adding starts with pasting a snippet; `manual` switches to the form.
+	const [editing, setEditing] = useState<{ target: McpConfigTarget; server?: McpConfigServer; manual?: boolean }>();
 	const [json, setJson] = useState<McpConfigTarget>();
 	const [removing, setRemoving] = useState<{ file: McpConfigFile; target: McpConfigTarget; name: string }>();
 
@@ -64,14 +66,22 @@ export function McpSection() {
 			) : (
 				<GlobalView file={mcp.global} {...actions} onJson={setJson} />
 			)}
-			{editing && (
-				<ServerDialog
-					target={editing.target}
-					server={editing.server}
-					names={namesIn(editing.target.scope === "global" ? mcp.global : mcp.project)}
-					onClose={() => setEditing(undefined)}
-				/>
-			)}
+			{editing &&
+				(editing.server || editing.manual ? (
+					<ServerDialog
+						target={editing.target}
+						server={editing.server}
+						names={namesIn(editing.target.scope === "global" ? mcp.global : mcp.project)}
+						onClose={() => setEditing(undefined)}
+					/>
+				) : (
+					<ImportDialog
+						target={editing.target}
+						names={namesIn(editing.target.scope === "global" ? mcp.global : mcp.project)}
+						onManual={() => setEditing({ target: editing.target, manual: true })}
+						onClose={() => setEditing(undefined)}
+					/>
+				))}
 			<JsonFileEditor
 				open={json !== undefined}
 				onOpenChange={(open) => !open && setJson(undefined)}
@@ -603,6 +613,146 @@ function ServerDialog({
 						</Button>
 					</DialogFooter>
 				</form>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+/** Add servers by pasting the JSON a provider's docs give (decisions D16); the form is one click away. */
+function ImportDialog({
+	target,
+	names,
+	onManual,
+	onClose,
+}: {
+	target: McpConfigTarget;
+	/** Names already used in the file. */
+	names: string[];
+	onManual(): void;
+	onClose(): void;
+}) {
+	const { t } = useTranslation();
+	const [text, setText] = useState("");
+	const [name, setName] = useState<string>();
+	const [replace, setReplace] = useState(false);
+	const [error, setError] = useState<string>();
+	const [busy, setBusy] = useState(false);
+
+	const parsed = text.trim() ? parseMcpImport(text) : undefined;
+	const single = parsed?.kind === "single" ? parsed : undefined;
+	const singleName = (name ?? single?.suggestedName ?? "").trim();
+	const servers =
+		parsed?.kind === "servers" ? parsed.servers : single && singleName ? { [singleName]: single.server } : undefined;
+	const sse = servers ? sseServers(servers) : [];
+	const taken = servers ? Object.keys(servers).filter((n) => names.includes(n)) : [];
+	const problem =
+		parsed?.kind === "error"
+			? parsed.error === "json"
+				? t("settings.mcp.import.badJson", { error: parsed.detail })
+				: t("settings.mcp.import.badShape")
+			: sse.length > 0
+				? t("settings.mcp.import.sse", { names: sse.join(", ") })
+				: undefined;
+
+	const submit = async () => {
+		if (!servers || problem) return;
+		if (taken.length > 0 && !replace) return setError(t("settings.mcp.import.taken", { names: taken.join(", ") }));
+		setBusy(true);
+		setError(undefined);
+		try {
+			await getClient().request("mcp.config.importServers", { ...target, servers, replace });
+			await useSettings.getState().refreshMcp();
+			onClose();
+		} catch (err) {
+			setError(errorMessage(err));
+			setBusy(false);
+		}
+	};
+
+	return (
+		<Dialog open onOpenChange={(open) => !open && onClose()}>
+			<DialogContent className="sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle>{t("settings.mcp.editor.titleAdd")}</DialogTitle>
+					<DialogDescription>
+						{target.scope === "global" ? t("settings.mcp.editor.scopeGlobal") : t("settings.mcp.editor.scopeProject")}
+					</DialogDescription>
+				</DialogHeader>
+				<div className="min-w-0 space-y-3">
+					<Textarea
+						value={text}
+						onChange={(e) => {
+							setText(e.target.value);
+							setName(undefined);
+							setError(undefined);
+						}}
+						aria-label={t("settings.mcp.import.label")}
+						placeholder={'{\n  "mcpServers": {\n    "linear": { "url": "https://mcp.linear.app/mcp" }\n  }\n}'}
+						rows={8}
+						autoFocus
+						spellCheck={false}
+						className="field-sizing-fixed w-full min-w-0 font-mono text-xs [overflow-wrap:anywhere] md:text-xs"
+					/>
+					<p className="text-xs text-muted-foreground">{t("settings.mcp.import.hint")}</p>
+					{single && (
+						// biome-ignore lint/a11y/noLabelWithoutControl: the input is the label's child
+						<label className="block space-y-1.5">
+							<span className="text-sm">{t("settings.mcp.editor.name")}</span>
+							<Input
+								value={name ?? single.suggestedName}
+								onChange={(e) => setName(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && !e.nativeEvent.isComposing) void submit();
+								}}
+								spellCheck={false}
+							/>
+						</label>
+					)}
+					{servers && !problem && (
+						<ul className="min-w-0 divide-y rounded-lg border px-3 text-sm">
+							{Object.entries(servers).map(([serverName, server]) => (
+								<li key={serverName} className="flex items-center gap-2 py-2">
+									<span className="shrink-0 font-medium">{serverName}</span>
+									<Badge variant="secondary" className="font-normal">
+										{typeof server.command === "string" ? "stdio" : "HTTP"}
+									</Badge>
+									<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+										{typeof server.command === "string"
+											? [server.command, ...(Array.isArray(server.args) ? server.args : [])].join(" ")
+											: String(server.url)}
+									</span>
+									{taken.includes(serverName) && (
+										<span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">
+											{t("settings.mcp.import.exists")}
+										</span>
+									)}
+								</li>
+							))}
+						</ul>
+					)}
+					{taken.length > 0 && !problem && (
+						// biome-ignore lint/a11y/noLabelWithoutControl: the switch is the label's child
+						<label className="flex items-center gap-2 text-sm">
+							<Switch checked={replace} onCheckedChange={setReplace} />
+							{t("settings.mcp.import.replace")}
+						</label>
+					)}
+					{(problem || error) && <p className="text-sm whitespace-pre-wrap text-destructive">{problem ?? error}</p>}
+				</div>
+				<DialogFooter className="sm:justify-between">
+					<Button type="button" variant="ghost" onClick={onManual}>
+						{t("settings.mcp.import.manual")}
+					</Button>
+					<div className="flex gap-2">
+						<Button type="button" variant="outline" onClick={onClose}>
+							{t("common.cancel")}
+						</Button>
+						<Button type="button" disabled={busy || !servers || Boolean(problem)} onClick={() => void submit()}>
+							{busy && <Loader2 className="animate-spin" />}
+							{t("settings.mcp.import.add")}
+						</Button>
+					</div>
+				</DialogFooter>
 			</DialogContent>
 		</Dialog>
 	);

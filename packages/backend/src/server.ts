@@ -279,6 +279,7 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 			await registry.mcpConfig.saveServer(p);
 			return empty;
 		},
+		"mcp.config.importServers": async (p) => registry.mcpConfig.importServers(p),
 		"mcp.config.removeServer": async (p) => {
 			await registry.mcpConfig.removeServer(p);
 			return empty;

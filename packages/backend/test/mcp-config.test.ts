@@ -131,3 +131,29 @@ it("accepts only one raw write based on the same version", async () => {
 	expect(changed).toHaveBeenCalledTimes(1);
 	expect(entries()).toEqual({ one: { command: "tool" } });
 });
+
+it("imports pasted servers all-or-nothing, keeping their fields", async () => {
+	const servers = {
+		fs: { command: "npx", args: ["-y", "srv"], description: "files", timeout: 9 },
+		docs: { type: "http", url: "https://docs.test/mcp" },
+	};
+	expect(await store.importServers({ ...global, servers })).toEqual({ added: ["fs", "docs"], replaced: [] });
+	expect(entries().fs).toEqual(servers.fs);
+	expect(changed).toHaveBeenCalledWith(expect.objectContaining(global), true);
+
+	await expect(store.importServers({ ...global, servers: { fs: servers.fs } })).rejects.toMatchObject({
+		code: "conflict",
+	});
+	expect(await store.importServers({ ...global, servers: { fs: { command: "uvx" } }, replace: true })).toEqual({
+		added: [],
+		replaced: ["fs"],
+	});
+
+	// One bad entry (legacy SSE) rejects the whole import.
+	const sse = { type: "sse", url: "http://127.0.0.1:64342/sse" };
+	await expect(store.importServers({ ...global, servers: { ok: { command: "x" }, ide: sse } })).rejects.toMatchObject({
+		code: "bad_request",
+		message: expect.stringContaining("SSE"),
+	});
+	expect(entries().ok).toBeUndefined();
+});

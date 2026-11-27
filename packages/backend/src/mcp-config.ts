@@ -209,6 +209,30 @@ export class McpConfigStore {
 				bad(`pi could not save "${name}" with the form editor. Use the JSON editor for this name.`);
 		});
 	}
+	async importServers(params: MethodParams<"mcp.config.importServers">) {
+		if (!record(params.servers) || Object.keys(params.servers).length === 0) bad("Expected servers to import");
+		const added: string[] = [];
+		const replaced: string[] = [];
+		await this.edit(params, true, (path, current) => {
+			const existing = servers(current ?? "{}");
+			const taken = Object.keys(params.servers).filter((name) => Object.hasOwn(existing, name));
+			if (taken.length > 0 && !params.replace)
+				throw new RequestError("conflict", `Already in ${path}: ${taken.join(", ")}`);
+			const errors: string[] = [];
+			for (const [name, value] of Object.entries(params.servers)) {
+				const valid = piMcp().validateMcpServerConfig(name, value);
+				if (typeof valid === "string") errors.push(valid);
+				else if (params.scope === "project" && record(value) && Object.hasOwn(value, "auth"))
+					errors.push(`${name}: auth is only allowed in global mcp.json`);
+			}
+			if (errors.length > 0) bad(errors.join("\n"));
+			for (const [name, value] of Object.entries(params.servers)) {
+				if (piMcp().addMcpServerConfig(path, name, value as Record<string, unknown>)) replaced.push(name);
+				else added.push(name);
+			}
+		});
+		return { added, replaced };
+	}
 	removeServer(params: MethodParams<"mcp.config.removeServer">) {
 		return this.edit(params, true, (path, current) => {
 			if (!Object.hasOwn(servers(current ?? "{}"), params.name))
