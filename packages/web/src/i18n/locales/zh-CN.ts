@@ -520,7 +520,7 @@ export const zhCN = {
 			runtime: "插件运行环境",
 			statusFailed: "Bun {{version}} 下载失败，可以换一个下载源重试。",
 			statusOff: "已关闭，不加载插件提供的模型。",
-			statusOffDownload: "已关闭。启用时会下载 Bun {{version}}（约 30 MB）用来运行插件。",
+			statusOffDownload: "已关闭。启用时会下载 Bun {{version}}（约 30–40 MB）用来运行插件。",
 			statusPreparing: "正在下载 Bun {{version}}…",
 			statusReady: "已启用，Bun {{version}} 已就绪。",
 			find: "查找插件",

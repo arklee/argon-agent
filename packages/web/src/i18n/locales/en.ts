@@ -525,7 +525,7 @@ export const en = {
 			runtime: "Plugin runtime",
 			statusFailed: "Bun {{version}} could not be downloaded. Try another download source.",
 			statusOff: "Off. Plugin providers are not loaded.",
-			statusOffDownload: "Off. Turning plugins on downloads Bun {{version}} (about 30 MB) to run them.",
+			statusOffDownload: "Off. Turning plugins on downloads Bun {{version}} (about 30–40 MB) to run them.",
 			statusPreparing: "Downloading Bun {{version}}…",
 			statusReady: "On. Bun {{version}} is ready.",
 			find: "Find plugins",
