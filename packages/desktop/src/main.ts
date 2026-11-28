@@ -15,7 +15,7 @@ import {
 	Tray,
 	utilityProcess,
 } from "electron";
-
+import { desktopShellEnvironment } from "../../backend/src/shell-environment.ts";
 import { en } from "../../web/src/i18n/locales/en.ts";
 import { zhCN } from "../../web/src/i18n/locales/zh-CN.ts";
 
@@ -31,6 +31,7 @@ let quitting = false;
 let stopped = false;
 let backendUrl: string | undefined;
 let restarts = 0;
+let backendEnvironment: NodeJS.ProcessEnv = process.env;
 // Electron keys the lock on userData; the smoke run uses its own so it can run beside a real instance.
 if (process.env.ARGON_DESKTOP_SMOKE) app.setPath("userData", resolve(process.env.ARGON_DESKTOP_SMOKE, "electron"));
 // A second instance would start a second backend on the same ARGON_HOME (concurrent package installs, auth writes).
@@ -127,7 +128,7 @@ function startBackend(): void {
 		{
 			cwd: app.getPath("home"),
 			env: {
-				...process.env,
+				...backendEnvironment,
 				...(app.isPackaged ? { ARGON_BUNDLED_TOOLS: join(process.resourcesPath, "search-tools") } : {}),
 				ARGON_HOST: "127.0.0.1",
 				ARGON_PORT: backendUrl ? new URL(backendUrl).port : "0",
@@ -203,7 +204,7 @@ app.on("activate", () => focusWindow());
 
 void app
 	.whenReady()
-	.then(() => {
+	.then(async () => {
 		if (!primary) return;
 		// Packaged builds get the icon from the bundle; in dev the Dock would show Electron's.
 		if (!app.isPackaged) app.dock?.setIcon(resolve(directory, "../../build/icon.png"));
@@ -261,7 +262,8 @@ void app
 				return new Response(null, { status: 403 });
 			return net.fetch(pathToFileURL(path).toString());
 		});
-		startBackend();
+		backendEnvironment = await desktopShellEnvironment();
+		if (!quitRequested) startBackend();
 	})
 	.catch((error) => {
 		console.error(error);
