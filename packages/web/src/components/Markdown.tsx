@@ -1,12 +1,17 @@
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
+import { createMathPlugin } from "@streamdown/math";
+import "katex/dist/katex.min.css";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { type Components, defaultComponents, defaultRehypePlugins, Streamdown } from "streamdown";
 import { openFileInPanel } from "@/components/FileLink";
 import { fileLinkTarget, rehypeFileLinks } from "@/lib/file-links";
+import { normalizeMath } from "@/lib/math-delimiters";
+import { useSmoothText } from "@/lib/smooth-text";
 
-const plugins = { code, cjk };
+// Single-dollar inline math is on; normalizeMath escapes dollars that do not pair (currency) before parsing.
+const plugins = { code, cjk, math: createMathPlugin({ singleDollarTextMath: true }) };
 // Code blocks are flat cards without line numbers; copying is enough (see .argon-markdown in index.css).
 const controls = { code: { copy: true, download: false } } as const;
 
@@ -49,6 +54,8 @@ export const Markdown = memo(function Markdown({
 	cwd?: string;
 }) {
 	const { t } = useTranslation();
+	const smooth = useSmoothText(text, Boolean(streaming));
+	const source = useMemo(() => normalizeMath(smooth.text), [smooth.text]);
 	const translations = useMemo(
 		() => ({
 			...t("markdown", { returnObjects: true }),
@@ -66,7 +73,8 @@ export const Markdown = memo(function Markdown({
 	return (
 		<Streamdown
 			plugins={plugins}
-			isAnimating={streaming}
+			// Keep the incomplete-markdown handling on while the paced text is still catching up.
+			isAnimating={Boolean(streaming) || smooth.pending}
 			className="argon-markdown"
 			translations={translations}
 			controls={controls}
@@ -74,7 +82,7 @@ export const Markdown = memo(function Markdown({
 			rehypePlugins={rehypePlugins}
 			components={components}
 		>
-			{text}
+			{source}
 		</Streamdown>
 	);
 });
