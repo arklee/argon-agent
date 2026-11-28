@@ -26,7 +26,7 @@ import { getClient, useApp } from "@/stores/app";
 
 const PLUGIN_CHANGE_TIMEOUT_MS = 10 * 60_000;
 
-export type SettingsSection = "general" | "accounts" | "mcp" | "permissions" | "plugins" | "resources";
+export type SettingsSection = "general" | "accounts" | "mcp" | "permissions" | "plugins" | "resources" | "archived";
 
 interface SettingsData {
 	project?: ProjectSettingsInfo;

@@ -1,5 +1,6 @@
 import type { PermissionRule, PiSettings, ProjectPiSettings, ResourceSettings } from "@argon/shared";
 import {
+	Archive,
 	FolderTree,
 	KeyRound,
 	type LucideIcon,
@@ -14,6 +15,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
+import { ArchivedSection } from "@/components/settings/ArchivedSection";
 import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings/EnabledModelsEditor";
 import { McpSection } from "@/components/settings/McpSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
@@ -48,6 +50,7 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
 	{ id: "permissions", icon: ShieldCheck },
 	{ id: "plugins", icon: Puzzle },
 	{ id: "resources", icon: FolderTree },
+	{ id: "archived", icon: Archive },
 ];
 
 export function SettingsDialog() {
@@ -97,6 +100,7 @@ export function SettingsDialog() {
 						{section === "permissions" && <PermissionsSection />}
 						{section === "plugins" && <PluginsSection />}
 						{section === "resources" && <ResourcesSection />}
+						{section === "archived" && <ArchivedSection />}
 					</div>
 				</div>
 			</DialogContent>

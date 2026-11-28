@@ -46,7 +46,6 @@ interface AppState {
 	projects: ProjectPrefs[];
 	search: string;
 	showHidden: boolean;
-	showArchived: boolean;
 	unloadedSessions: Record<string, true>;
 	modelScopes: Record<string, { scoped: (ModelRef & { thinkingLevel?: ThinkingLevel })[]; warnings: string[] } | null>;
 	refreshModelScope(cwd: string): Promise<void>;
@@ -190,7 +189,6 @@ export const useApp = create<AppState>((set, get) => ({
 	projects: [],
 	search: "",
 	showHidden: false,
-	showArchived: false,
 	unloadedSessions: {},
 	modelScopes: {},
 	composerDrafts: {},
@@ -287,7 +285,6 @@ export const useApp = create<AppState>((set, get) => ({
 			projects: [],
 			search: "",
 			showHidden: false,
-			showArchived: false,
 			unloadedSessions: {},
 			modelScopes: {},
 			composerDrafts: {},

@@ -321,6 +321,14 @@ export const en = {
 		unpin: "Unpin",
 	},
 	settings: {
+		archived: {
+			description: "Sessions you archived. They stay on the backend machine but are not listed in the sidebar.",
+			empty: "No archived sessions",
+			noMatch: "No matching sessions",
+			open: "Open session",
+			search: "Search archived sessions",
+			title: "Archived sessions",
+		},
 		accounts: {
 			addProvider: "Add provider",
 			confirmDelete: "Delete {{name}}?",
@@ -700,11 +708,6 @@ export const en = {
 		showHidden_other: "Show {{count, number}} hidden projects",
 		unhide: "Unhide",
 		unpin: "Unpin",
-		archived_one: "Archived ({{count, number}})",
-		archived_other: "Archived ({{count, number}})",
-		archivedTitle: "Archived sessions",
-		backToSessions: "Back to sessions",
-		noArchived: "No archived sessions",
 		newSession: "New session",
 		pinnedTitle: "Pinned",
 		projectSettings: "Project settings…",

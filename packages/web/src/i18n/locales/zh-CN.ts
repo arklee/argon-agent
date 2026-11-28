@@ -321,6 +321,14 @@ export const zhCN = {
 		unpin: "取消置顶",
 	},
 	settings: {
+		archived: {
+			description: "你归档的会话。它们仍保存在 backend 所在机器上，但不会出现在侧边栏。",
+			empty: "没有已归档的会话",
+			noMatch: "没有匹配的会话",
+			open: "打开会话",
+			search: "搜索已归档的会话",
+			title: "已归档的会话",
+		},
 		accounts: {
 			addProvider: "添加提供方",
 			confirmDelete: "删除 {{name}}？",
@@ -687,11 +695,6 @@ export const zhCN = {
 		showHidden_other: "显示 {{count, number}} 个隐藏项目",
 		unhide: "取消隐藏",
 		unpin: "取消置顶",
-		archived_one: "已归档（{{count, number}}）",
-		archived_other: "已归档（{{count, number}}）",
-		archivedTitle: "已归档的会话",
-		backToSessions: "返回会话列表",
-		noArchived: "没有已归档的会话",
 		newSession: "新建会话",
 		pinnedTitle: "置顶",
 		projectSettings: "项目设置…",
