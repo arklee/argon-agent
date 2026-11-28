@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { pluginSearchState } from "@/lib/plugin-update";
 import { useSettings } from "@/stores/settings";
 
 /** Bun download source: a preset or a custom HTTPS base URL (validated by the backend). */
@@ -187,11 +188,11 @@ type SearchResult = { name: string; version: string; description?: string };
  * Install / remove with a second click to confirm: plugins run on the backend machine with the
  * backend user's privileges, so `plugins.change` requires the user to have confirmed.
  */
-function ChangeButton({ action, spec }: { action: "install" | "remove"; spec: string }) {
+function ChangeButton({ action, spec }: { action: "install" | "update" | "remove"; spec: string }) {
 	const { t } = useTranslation();
 	const changePlugin = useSettings((s) => s.changePlugin);
 	const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
-	const label = action === "install" ? t("settings.plugins.install") : t("settings.plugins.remove");
+	const label = t(`settings.plugins.${action}`);
 	if (state === "confirm") {
 		return (
 			<div className="flex items-center gap-1.5">
@@ -199,15 +200,19 @@ function ChangeButton({ action, spec }: { action: "install" | "remove"; spec: st
 					{t("common.cancel")}
 				</Button>
 				<Button
-					variant={action === "install" ? "default" : "destructive"}
+					variant={action === "remove" ? "destructive" : "default"}
 					size="xs"
 					onClick={async () => {
 						setState("busy");
-						await changePlugin(action, spec);
+						await changePlugin(action === "update" ? "install" : action, spec);
 						setState("idle");
 					}}
 				>
-					{action === "install" ? t("settings.plugins.confirmInstall") : t("settings.plugins.confirmRemove")}
+					{action === "update"
+						? t("settings.plugins.confirmUpdate")
+						: action === "install"
+							? t("settings.plugins.confirmInstall")
+							: t("settings.plugins.confirmRemove")}
 				</Button>
 			</div>
 		);
@@ -231,8 +236,6 @@ export function PluginsSection() {
 	if (!plugins.available) {
 		return <p className="py-8 text-center text-sm text-muted-foreground">{t("settings.plugins.unavailable")}</p>;
 	}
-	const isInstalled = (name: string) =>
-		plugins.plugins.some((p) => p.spec === name || p.spec.startsWith(`${name}@`) || p.spec.startsWith(`npm:${name}`));
 	const search = async () => {
 		if (!query.trim()) return;
 		setSearching(true);
@@ -317,26 +320,33 @@ export function PluginsSection() {
 				{results?.length === 0 && (
 					<p className="pb-3 text-sm text-muted-foreground">{t("settings.plugins.noResults")}</p>
 				)}
-				{results?.map((result) => (
-					<div key={result.name} className="flex items-center gap-3 py-2.5">
-						<div className="min-w-0 flex-1">
-							<div className="truncate text-sm">
-								<span className="font-mono">{result.name}</span>
-								<span className="ml-2 text-xs text-muted-foreground">{result.version}</span>
-							</div>
-							{result.description && (
-								<div className="truncate text-xs text-muted-foreground" title={result.description}>
-									{result.description}
+				{results?.map((result) => {
+					const action = pluginSearchState(plugins.plugins, result.name, result.version);
+					return (
+						<div key={result.name} className="flex items-center gap-3 py-2.5">
+							<div className="min-w-0 flex-1">
+								<div className="truncate text-sm">
+									<span className="font-mono">{result.name}</span>
+									<span className="ml-2 text-xs text-muted-foreground">{result.version}</span>
 								</div>
+								{result.description && (
+									<div className="truncate text-xs text-muted-foreground" title={result.description}>
+										{result.description}
+									</div>
+								)}
+							</div>
+							{action === "installed" ? (
+								<Badge variant="secondary">{t("settings.plugins.installed")}</Badge>
+							) : (
+								<ChangeButton
+									key={`${action}:${result.version}`}
+									action={action}
+									spec={`${result.name}@${result.version}`}
+								/>
 							)}
 						</div>
-						{isInstalled(result.name) ? (
-							<Badge variant="secondary">{t("settings.plugins.installed")}</Badge>
-						) : (
-							<ChangeButton action="install" spec={result.name} />
-						)}
-					</div>
-				))}
+					);
+				})}
 			</Group>
 		</>
 	);

@@ -652,6 +652,8 @@ export const en = {
 			title: "Permissions",
 		},
 		plugins: {
+			update: "Update",
+			confirmUpdate: "Confirm update",
 			confirmInstall: "Confirm install",
 			confirmRemove: "Confirm removal",
 			description: "Third-party model provider plugins, installed through magpie on the backend machine.",

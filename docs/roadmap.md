@@ -53,6 +53,7 @@
 - [x] 设置页：侧栏齿轮或 ⌘/Ctrl+, 打开，分 General / Providers / Permissions / Plugins / Resources。pi settings 只编辑全局一级的常用子集；资源列表（全局 + 当前项目）只读
 - [x] 设置页：项目级 settings 编辑（通用页顶部切换“所有项目 / 当前项目”，`settings.updateProject` 在 pi 的文件锁下改写 `<cwd>/.argon/settings.json`，可逐项恢复为全局值；项目未信任时提示设置不生效）；`enabledModels` 编辑器（勾选模型或填写匹配模式），模型选择器优先列出已启用的模型（`models.list { cwd }` 返回 `scoped`），模式里的思考级别（如 `:high`）选模型时一并应用
 - [x] Provider 与登录：`auth.*` 协议，登录流程由 backend 持有（`AuthFlows`），任何客户端可应答；设置页里加/换/删 API key、OAuth 登录登出，模型选择器里有“Manage providers…”入口；magpie 社区插件的安装/移除（需二次确认）
+- [x] 社区提供方插件更新：搜索结果版本高于已安装版本时显示“更新”，二次确认后安装指定版本；不覆盖手动配置的插件。
 - [x] 自定义 provider / 模型：设置页“提供方”可添加兼容 OpenAI / Anthropic / Google 的端点（模板：Ollama、LM Studio、vLLM），填写 Base URL、API 协议、密钥（字面量 / `$ENV` / `!command`）、请求头和模型列表，OpenAI 兼容端点可一键获取模型列表；内置 provider 可设自定义端点（Base URL、请求头）。都写入 `$ARGON_HOME/agent/models.json`（`ModelsConfigStore`：先用临时 ModelRuntime 按 pi 的 schema 校验，再原子写入并 `refresh`；表单只改它管的字段，其余字段保留）。另有“编辑 JSON”直接编辑整个 models.json（带版本号防覆盖）。结构化保存会丢掉文件里的注释
 - [ ] 用真实浏览器 OAuth（auth_url 回调、device code）完整走一遍登录；目前只验证了 select 提示和取消
 - [x] 权限设置持久化：默认权限模式、"总是允许"的规则（`$ARGON_HOME/settings.json`；bash 规则按命令前缀，含管道/重定向等的命令永远询问），审批卡片上可直接添加，设置页里可删除
@@ -62,7 +63,7 @@
 ### pi 能力接入
 
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
-- [x] 全局扩展管理：设置 → 扩展，内置功能只能启停，用户扩展可启停或安全移除（保留源文件）；加载前策略覆盖项目设置，自动／延迟重载、失败重试和多客户端通知。权限与沙箱等宿主组件不开放普通开关，见 D24 和 [扩展管理](extensions.md)。Argon 自带扩展的设置跟着扩展走：apply-patch 行下有“GPT 模型使用 apply_patch”，三个 codex-* 扩展归入“OpenAI 专属”组，组头是三态设置；扩展停用时对应设置置灰。用户扩展的移除确认在该行内展开
+- [x] 全局扩展管理：设置 → 扩展，内置功能只能启停，用户扩展可启停或安全移除（保留源文件）；加载前策略覆盖项目设置，自动／延迟重载、失败重试和多客户端通知。权限与沙箱等宿主组件不开放普通开关，见 D24 和 [扩展管理](extensions.md)。Argon 自带扩展的设置跟着扩展走：apply-patch 与三个 codex-* 扩展归入“OpenAI 专属”组；apply-patch 行下保留独立的“GPT 模型使用 apply_patch”，组头三态设置仅控制三个 codex-* 扩展；扩展停用时对应设置置灰。用户扩展的移除确认在该行内展开
 - [ ] 扩展管理后续：整包卸载及磁盘清理、图形化恢复已移除条目；当前“移除”仅持久禁止加载并隐藏，不删除文件
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）

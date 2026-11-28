@@ -641,6 +641,8 @@ export const zhCN = {
 			title: "权限",
 		},
 		plugins: {
+			update: "更新",
+			confirmUpdate: "确认更新",
 			confirmInstall: "确认安装",
 			confirmRemove: "确认移除",
 			description: "通过 magpie 安装在后端机器上的第三方模型提供方插件。",

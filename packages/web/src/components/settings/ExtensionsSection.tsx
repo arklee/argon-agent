@@ -10,8 +10,9 @@ import { cn } from "@/lib/utils";
 import { getClient, useApp } from "@/stores/app";
 import { useSettings } from "@/stores/settings";
 
-/** Built-in extensions the "OpenAI features" setting turns on and off (backend openai-features.ts). */
-const OPENAI_EXTENSIONS = ["builtin:codex-compact", "builtin:codex-web-run", "builtin:codex-imagegen"];
+/** These extensions share the OpenAI features policy; apply_patch keeps its own GPT model policy. */
+const OPENAI_FEATURE_EXTENSIONS = ["builtin:codex-compact", "builtin:codex-web-run", "builtin:codex-imagegen"];
+const OPENAI_EXTENSIONS = ["builtin:apply-patch", ...OPENAI_FEATURE_EXTENSIONS];
 
 export function ExtensionsSection() {
 	const { t } = useTranslation();
@@ -140,6 +141,7 @@ export function ExtensionsSection() {
 
 	const builtins = status?.items.filter((i) => i.builtin) ?? [];
 	const openai = builtins.filter((i) => OPENAI_EXTENSIONS.includes(i.id));
+	const openaiFeaturesEnabled = openai.some((i) => i.enabled && OPENAI_FEATURE_EXTENSIONS.includes(i.id));
 	const users = status?.items.filter((i) => !i.builtin) ?? [];
 
 	return (
@@ -186,7 +188,7 @@ export function ExtensionsSection() {
 								<Row
 									label={t("settings.general.openaiFeatures")}
 									description={
-										openai.some((i) => i.enabled)
+										openaiFeaturesEnabled
 											? t("settings.general.openaiFeaturesDescription")
 											: t("settings.extensions.openaiAllDisabled")
 									}
@@ -194,7 +196,7 @@ export function ExtensionsSection() {
 									<Choice
 										value={argon.openaiFeatures}
 										ariaLabel={t("settings.general.openaiFeatures")}
-										disabled={!openai.some((i) => i.enabled)}
+										disabled={!openaiFeaturesEnabled}
 										options={[
 											{ value: "off", label: t("settings.general.openaiFeaturesOff") },
 											{ value: "on", label: t("settings.general.openaiFeaturesOn") },
