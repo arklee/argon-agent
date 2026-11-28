@@ -19,14 +19,25 @@ import type {
 	ProjectSettingsInfo,
 	ProviderInfo,
 	ResourceSettings,
+	SearchToolName,
+	SearchToolsStatus,
 } from "@argon/shared";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { readFileAsBase64 } from "@/components/Images";
 import { getClient, useApp } from "@/stores/app";
 
 const PLUGIN_CHANGE_TIMEOUT_MS = 10 * 60_000;
 
-export type SettingsSection = "general" | "accounts" | "mcp" | "permissions" | "plugins" | "resources" | "archived";
+export type SettingsSection =
+	| "general"
+	| "accounts"
+	| "mcp"
+	| "permissions"
+	| "plugins"
+	| "tools"
+	| "resources"
+	| "archived";
 
 interface SettingsData {
 	project?: ProjectSettingsInfo;
@@ -57,6 +68,8 @@ interface SettingsState {
 	flows: Record<string, AuthFlow>;
 	settings: SettingsData | undefined;
 	plugins: PluginsData | undefined;
+	/** rg / fd on the backend machine; kept current by `tools_status` events once fetched. */
+	tools: SearchToolsStatus | undefined;
 
 	/** `scope` defaults to the last one used (global when there is no `cwd`). */
 	show(section?: SettingsSection, cwd?: string, scope?: "global" | "project"): void;
@@ -91,6 +104,13 @@ interface SettingsState {
 	 */
 	enablePlugins(options: { bunMirror?: string; bunSource?: BunSource }): Promise<void>;
 	disablePlugins(): Promise<void>;
+
+	/** Fetch rg / fd status; with `notify`, toast once about a tool that failed to download. */
+	refreshTools(notify?: boolean): Promise<void>;
+	/** Download missing or failed tools in the background (progress arrives as events). */
+	installTools(mirror?: string): Promise<void>;
+	/** Install a file the user fetched elsewhere (archive or binary, checked against pinned checksums). */
+	uploadTool(tool: SearchToolName, file: File): Promise<boolean>;
 }
 
 function errorMessage(error: unknown): string {
@@ -104,6 +124,7 @@ const initial = {
 	settings: undefined,
 	plugins: undefined,
 	mcp: undefined,
+	tools: undefined,
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -119,6 +140,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		void get().refreshFlows();
 		void get().refreshPlugins();
 		void get().refreshMcp();
+		void get().refreshTools();
 	},
 	setScope(scope) {
 		set({ scope });
@@ -142,6 +164,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
 		if (event.type === "plugins_status") {
 			const plugins = get().plugins;
 			if (plugins) set({ plugins: { ...plugins, status: event.status } });
+		}
+		if (event.type === "tools_status") {
+			set({ tools: event.status });
+			notifyToolFailures(event.status);
 		}
 		if (event.type === "mcp_config_changed" && get().open) {
 			void get().refreshMcp();
@@ -330,7 +356,56 @@ export const useSettings = create<SettingsState>((set, get) => ({
 			toast.error(errorMessage(e));
 		}
 	},
+
+	async refreshTools(notify) {
+		try {
+			const { status } = await getClient().request("tools.status", {});
+			set({ tools: status });
+			if (notify) notifyToolFailures(status);
+		} catch {
+			// Older backends have no tools.* methods; the section then shows nothing to manage.
+		}
+	},
+	async installTools(mirror) {
+		try {
+			const { status } = await getClient().request("tools.install", { mirror });
+			set({ tools: status });
+		} catch (e) {
+			toast.error(errorMessage(e));
+		}
+	},
+	async uploadTool(tool, file) {
+		try {
+			const data = await readFileAsBase64(file);
+			const { status } = await getClient().request("tools.upload", { tool, name: file.name, data });
+			set({ tools: status });
+			toast.success(t("settings.tools.uploaded", { tool, name: file.name }));
+			return true;
+		} catch (e) {
+			toast.error(t("settings.tools.uploadFailed", { error: errorMessage(e) }));
+			return false;
+		}
+	},
 }));
+
+/** Each failure (tool + error) is announced once per page; the settings section shows it in full. */
+const announcedFailures = new Set<string>();
+function notifyToolFailures(status: SearchToolsStatus): void {
+	const fresh = status.tools.filter((tool) => {
+		if (tool.state !== "failed") return false;
+		const key = `${tool.tool}\n${tool.error ?? ""}`;
+		if (announcedFailures.has(key)) return false;
+		announcedFailures.add(key);
+		return true;
+	});
+	if (!fresh.length) return;
+	toast.warning(t("settings.tools.failedToast", { tools: fresh.map((tool) => tool.tool).join(", ") }), {
+		id: "search-tools-failed",
+		description: t("settings.tools.failedToastDescription"),
+		duration: 15_000,
+		action: { label: t("settings.tools.openSettings"), onClick: () => openSettings("tools") },
+	});
+}
 
 /** Open settings for the active session's project, or (with `cwd`) for that project, in project scope. */
 export function openSettings(section?: SettingsSection, cwd?: string): void {

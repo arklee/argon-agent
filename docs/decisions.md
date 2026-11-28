@@ -390,3 +390,16 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 3. **链接来源**：结构化路径优先（读取、单文件修改的工具行，多文件 diff 的文件名，轮次页脚的改动文件列表），再加上回答里的 Markdown 链接。Markdown 的 sanitize/harden 会丢掉 `a.ts:42`、`file://` 和不带 `./` 的相对路径，所以先用一个 rehype 插件把文件链接包成哨兵 https URL，再在 `a` 组件里拆开，打开面板而不是外部链接对话框。不从普通文字或行内代码里猜路径。
 4. **面板**：在对话区右侧（会话标题栏之下，避开 Windows 的窗口按钮），按会话保存。行号、跳到并高亮锚点行、Shiki 高亮（超过 30 万字符不高亮）、虚拟列表；Markdown 可在预览和源码间切换，预览里的相对链接按该文件所在目录解析；从改动处打开时多一个"更改"标签显示 diff。
 5. **不做的**：不用 `shell.openPath`（会执行 `.command`、`.app` 等文件）。"在编辑器中打开 / 在访达中显示"留给桌面版，并且只在 backend 是本机时提供，编辑器走 URL scheme 白名单。提示词里约定链接格式也留到后面再定。
+
+## D23. rg / fd：桌面版内置，其他情况固定版本下载或手动上传
+
+**背景**：pi 的 grep / find 工具依赖 ripgrep 和 fd，Argon 自己的 `@文件` 补全（fd）和沙箱（rg）也用它们。pi 的 `ensureTool` 在第一次调用时悄悄从 GitHub 下载最新版：没有进度，版本不固定，国内经常很慢或超时，远程机器也可能连不上外网。两个工具每个平台压缩后合计约 3 MB。
+
+**决定**：
+
+1. **装进 `$ARGON_HOME/agent/bin`，不改 pi**：pi 的 `getToolPath` 先找 agent/bin 再找 PATH，Argon 只要把文件放到位，pi 自己的下载就不会触发（仍作为最后的后备，不设 `PI_OFFLINE`，它影响的范围太大）。
+2. **固定版本和校验值**：`backend/src/search-tools-manifest.json` 按“平台 × 来源”记录下载地址和**解压后二进制**的 SHA-256，用 `scripts/search-tools-manifest.mjs` 重新生成。来源有 GitHub 官方和 npmmirror（rg 用微软 ripgrep-prebuilt 的二进制镜像，是另一份构建，哈希不同；fd 用 `@prebuilt-binary/fd-*` npm 包，六个平台里有 npm 包的五个都与官方二进制一致；darwin-x64 跟随 pi 固定在 fd 10.3.0，只有 GitHub 来源）。rg 15.0.0 官方没有 linux-arm64 的 musl 构建，GitHub 来源用 `aarch64-unknown-linux-gnu`（依赖 glibc）。不管文件从哪来都按这份清单核对，镜像和上传都不能换掉二进制。
+3. **桌面版内置**：打包时按本机平台取好放进 `Resources/search-tools`，main 用 `ARGON_BUNDLED_TOOLS` 告诉 backend，backend 启动时校验后复制进 agent/bin。本地不需要联网。
+4. **其他情况（远程、独立运行的 backend）**：backend 启动时在后台检查，缺了就从设置的下载源下载（`ARGON_TOOLS_MIRROR` 或设置页选择，做法同 Bun 的下载源），进度和失败经 `tools_status` 推给前端。
+5. **手动上传**：远程机器连不上外网时，用户在客户端这边（比如通过代理）下载设置页列出的文件，用 `tools.upload` 传给 backend 校验后安装。平台不同由 backend 报告自己的 `platform-arch`，设置页只列出对应平台的文件。
+6. **不做的**：不在运行时由桌面端自动推送二进制（平台可能不同，协议里也不该有“写可执行文件”的通用口子）；以后做 SSH 部署时，rg / fd 随远端运行时一起上传。

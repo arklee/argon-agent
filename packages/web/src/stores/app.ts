@@ -245,6 +245,7 @@ export const useApp = create<AppState>((set, get) => ({
 					refreshActiveModelScope();
 					void get().refreshToolPresets();
 					void get().refreshProjects();
+					void useSettings.getState().refreshTools(true);
 					void restoreLastSession(connection.environment.id);
 				}
 				if (connection.status === "failed" && connection.error.code === "unauthorized") {

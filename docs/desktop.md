@@ -33,6 +33,8 @@ main 与 renderer 在 app.asar 内。backend 入口、动态 chunk 与 node_modu
 
 2026-11-26 验证：macOS arm64 `.app` / DMG、离线打包冒烟、`openai-codex/gpt-6-luna` 真实回复和 bash 审批均通过；typecheck、178 个测试及 lint 通过（lint 保留既有警告）。
 
+rg / fd（D23）：`pack` / `dist` 先运行 `scripts/fetch-search-tools.mjs`，按本机平台从 GitHub（`ARGON_TOOLS_MIRROR=npmmirror` 时用 npmmirror）下载清单里固定的版本，校验 SHA-256 后放进 `packages/desktop/.search-tools/`，再由 `extraResources` 打进 `Resources/search-tools`（解压后约 7 MB）。backend 启动时校验并复制进 `$ARGON_HOME/agent/bin`；已有的文件不覆盖。打包冒烟断言两者都是 managed 且就绪。CI 每个平台在本机架构上打包，交叉打包时用 `--platform` / `--arch` 先取对应平台的文件。签名公证时这两个 Mach-O 也要一起签（尚未验证）。
+
 当前只验证 macOS arm64。签名、公证、自动更新和 Windows/Linux 实机验证仍待完成。
 
 应用图标（氩原子 2·8·8 电子壳层画成霓虹分段环，薰衣草紫）由 `packages/desktop/scripts/icons.mjs` 参数化生成：`npm run icons -w @argon/desktop` 会重写 `build/Argon.icon`、`build/icon.{svg,icns,ico,png}`、`resources/tray*.png` 以及 web 的 `favicon.svg` / `apple-touch-icon.png`。不要手改这些产物，改脚本里的 `themes` 等参数后重新生成。≤32px 用只保留最外层 8 个电子的简化版。

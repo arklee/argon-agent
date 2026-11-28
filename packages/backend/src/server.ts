@@ -112,6 +112,11 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 	const empty = {} as Record<string, never>;
 	return {
 		"environment.info": async () => config.environment,
+		"tools.status": async () => ({ status: await registry.searchTools.status() }),
+		"tools.install": async (params) => ({ status: await registry.searchTools.install(params) }),
+		"tools.upload": async (params) => ({
+			status: await registry.searchTools.upload(params.tool, params.name, params.data),
+		}),
 		"fs.listDir": async (params) => listDir(params.path, params.dirsOnly ?? true),
 		"fs.readFile": async (params) => readFileForDisplay(params.target, params.cwd),
 		"files.upload": async (params) => saveUpload(config.argonHome, params.name, params.data),

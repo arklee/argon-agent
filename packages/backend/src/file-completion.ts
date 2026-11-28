@@ -11,6 +11,10 @@ import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 
 const fdCache = new Map<string, string | null>();
 
+export function resetFdCache(agentDir: string): void {
+	fdCache.delete(agentDir);
+}
+
 /** Platform-aware lookup; a Windows PATH entry can contain a drive colon and spaces. */
 export function findFd(
 	agentDir: string,

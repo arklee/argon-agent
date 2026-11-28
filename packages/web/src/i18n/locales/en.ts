@@ -684,6 +684,38 @@ export const en = {
 			warning:
 				"Plugins are third-party code. They run on the backend machine with your user's privileges and can read your files and credentials. Only install plugins you trust.",
 		},
+		tools: {
+			badgeFailed: "Failed",
+			badgeMissing: "Missing",
+			badgeReady: "Ready",
+			badgeSystem: "From PATH",
+			description: "ripgrep and fd on the backend machine, used by the grep and find tools and @file completion.",
+			download: "Download",
+			downloadButton: "Download",
+			downloading: "Downloading {{version}}…",
+			failed: "{{version}} could not be downloaded. Try another source, or download it here and upload it.",
+			failedToast: "Could not install {{tools}} on the backend",
+			failedToastDescription:
+				"Searching files may fail. Choose another download source or upload the file in Settings.",
+			manual: "Install manually",
+			manualDescription:
+				"If the backend machine can't reach these sources, download the file for {{platform}} on this computer and upload it. The backend checks it against a pinned checksum.",
+			mirror: "Download source",
+			mirrorDescription:
+				"Where the backend machine downloads from. A custom URL replaces https://github.com. Every source is checked against a pinned checksum.",
+			missing: "Not installed. The grep and find tools need it.",
+			openSettings: "Settings",
+			readyManaged: "{{version}}, installed by Argon",
+			readySystem: "Found in PATH: {{path}}",
+			retry: "Retry",
+			status: "Backend machine · {{platform}}",
+			title: "Search tools",
+			unsupported:
+				"No prebuilt builds for {{platform}}. Install ripgrep and fd with the system package manager on the backend machine.",
+			upload: "Upload",
+			uploaded: "Installed {{tool}} from {{name}}",
+			uploadFailed: "Could not install the file: {{error}}",
+		},
 		resources: {
 			description: "Packages, extensions, skills and prompt templates loaded into sessions.",
 			extensions: "Extensions",

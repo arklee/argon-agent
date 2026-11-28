@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
 	app,
@@ -128,6 +128,7 @@ function startBackend(): void {
 			cwd: app.getPath("home"),
 			env: {
 				...process.env,
+				...(app.isPackaged ? { ARGON_BUNDLED_TOOLS: join(process.resourcesPath, "search-tools") } : {}),
 				ARGON_HOST: "127.0.0.1",
 				ARGON_PORT: backendUrl ? new URL(backendUrl).port : "0",
 				ARGON_TOKEN: token,

@@ -95,6 +95,7 @@
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
 - [x] GitHub Actions 自动发版：普通推送和 PR 只运行 CI；推送版本 tag 后通过 CI，再打包 Windows x64 / macOS arm64，通过冒烟后发布 Release，预发布 tag 标记为 prerelease（工作流已配置，待 GitHub 实跑验收）
 - [x] 安全：renderer 开启 sandbox + contextIsolation，禁用 Node integration；没有 preload API，外链交给系统浏览器
+- [x] 内置 rg / fd（D23）：打包时按平台取固定版本，backend 启动时校验后放进 `agent/bin`；设置页“搜索工具”显示状态，可换下载源或手动上传
 
 ## 沙箱（权限控制的主要手段）
 
@@ -122,6 +123,7 @@
 - [ ] 常驻 daemon 模式：可配置监听地址、token 管理、TLS 或建议放在 Tailscale 后面
 - [ ] 多环境 UI：环境切换和状态指示；项目、会话 id 带上环境作用域；断线后不能悄悄回退到本机
 - [ ] 远端运行时的安装、升级和版本兼容检查
+- [ ] 远端运行时随包上传 rg / fd（按远端 `uname` 选平台，D23），远端完全不能联网时也能用
 - [ ] 按环境区分的设置和凭证
 - [ ] 多客户端并发：同一会话的占用、接管、只读旁观
 - [ ] 托管纯 web 客户端（浏览器或手机直接访问 daemon）

@@ -1,6 +1,7 @@
 import type { PermissionRule, PiSettings, ProjectPiSettings, ResourceSettings } from "@argon/shared";
 import {
 	Archive,
+	FileSearch,
 	FolderTree,
 	KeyRound,
 	type LucideIcon,
@@ -20,6 +21,7 @@ import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings
 import { McpSection } from "@/components/settings/McpSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
 import { Group, Loading, Row, ScopeSwitch } from "@/components/settings/parts";
+import { SearchToolsSection } from "@/components/settings/SearchToolsSection";
 import { presetLabel } from "@/components/ToolPresetPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -49,6 +51,7 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
 	{ id: "mcp", icon: Plug },
 	{ id: "permissions", icon: ShieldCheck },
 	{ id: "plugins", icon: Puzzle },
+	{ id: "tools", icon: FileSearch },
 	{ id: "resources", icon: FolderTree },
 	{ id: "archived", icon: Archive },
 ];
@@ -99,6 +102,7 @@ export function SettingsDialog() {
 						{section === "mcp" && <McpSection />}
 						{section === "permissions" && <PermissionsSection />}
 						{section === "plugins" && <PluginsSection />}
+						{section === "tools" && <SearchToolsSection />}
 						{section === "resources" && <ResourcesSection />}
 						{section === "archived" && <ArchivedSection />}
 					</div>

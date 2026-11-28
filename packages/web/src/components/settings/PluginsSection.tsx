@@ -2,22 +2,15 @@ import type { BunSource, PluginsStatus } from "@argon/shared";
 import { Loader2, Search, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Group, Loading, Row } from "@/components/settings/parts";
+import { DownloadProgress, Group, Loading, MirrorPicker, Row } from "@/components/settings/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSettings } from "@/stores/settings";
 
-const MIRROR_PRESETS = ["github", "npmmirror", "npmmirror-cdn"] as const;
-type MirrorChoice = (typeof MIRROR_PRESETS)[number] | "custom";
-
-function megabytes(bytes: number): string {
-	return (bytes / 1024 / 1024).toFixed(1);
-}
-
 /** Bun download source: a preset or a custom HTTPS base URL (validated by the backend). */
-function MirrorPicker({
+function BunMirrorPicker({
 	status,
 	value,
 	onChange,
@@ -27,59 +20,20 @@ function MirrorPicker({
 	onChange: (value: string) => void;
 }) {
 	const { t } = useTranslation();
-	const preset = (MIRROR_PRESETS as readonly string[]).includes(value);
-	const [choice, setChoice] = useState<MirrorChoice>(preset ? (value as MirrorChoice) : "custom");
-	const labels: Record<MirrorChoice, string> = {
-		github: t("settings.plugins.mirrorGithub"),
-		npmmirror: t("settings.plugins.mirrorNpmmirror"),
-		"npmmirror-cdn": t("settings.plugins.mirrorNpmmirrorCdn"),
-		custom: t("settings.plugins.mirrorCustom"),
-	};
-	if (status.bunMirrorEnv !== undefined) {
-		return (
-			<Row label={t("settings.plugins.mirror")} description={t("settings.plugins.mirrorDescription")}>
-				<span className="font-mono text-xs text-muted-foreground" title={t("settings.plugins.mirrorEnv")}>
-					ARGON_BUN_MIRROR={status.bunMirrorEnv}
-				</span>
-			</Row>
-		);
-	}
 	return (
-		<div className="py-3">
-			<div className="flex items-center justify-between gap-6">
-				<div className="min-w-0">
-					<div className="text-sm">{t("settings.plugins.mirror")}</div>
-					<div className="mt-0.5 text-xs text-muted-foreground">{t("settings.plugins.mirrorDescription")}</div>
-				</div>
-				<Select
-					value={choice}
-					onValueChange={(next) => {
-						setChoice(next as MirrorChoice);
-						onChange(next === "custom" ? "" : next);
-					}}
-				>
-					<SelectTrigger size="sm" className="w-40 shrink-0" aria-label={t("settings.plugins.mirror")}>
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent position="popper" align="end">
-						{([...MIRROR_PRESETS, "custom"] as const).map((id) => (
-							<SelectItem key={id} value={id}>
-								{labels[id]}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</div>
-			{choice === "custom" && (
-				<Input
-					value={value}
-					onChange={(e) => onChange(e.target.value)}
-					placeholder="https://mirror.example.com/bun"
-					className="mt-2 h-8 font-mono text-xs"
-					spellCheck={false}
-				/>
-			)}
-		</div>
+		<MirrorPicker
+			label={t("settings.plugins.mirror")}
+			description={t("settings.plugins.mirrorDescription")}
+			presets={[
+				{ id: "github", label: t("settings.plugins.mirrorGithub") },
+				{ id: "npmmirror", label: t("settings.plugins.mirrorNpmmirror") },
+				{ id: "npmmirror-cdn", label: t("settings.plugins.mirrorNpmmirrorCdn") },
+			]}
+			env={status.bunMirrorEnv === undefined ? undefined : { name: "ARGON_BUN_MIRROR", value: status.bunMirrorEnv }}
+			placeholder="https://mirror.example.com/bun"
+			value={value}
+			onChange={onChange}
+		/>
 	);
 }
 
@@ -205,28 +159,7 @@ function RuntimeGroup({ status }: { status: PluginsStatus }) {
 					</Button>
 				)}
 			</Row>
-			{preparing && (
-				<div className="py-3">
-					<div className="h-1.5 overflow-hidden rounded-full bg-muted">
-						{runtime.total ? (
-							<div
-								className="h-full rounded-full bg-primary transition-[width]"
-								style={{ width: `${Math.min(100, ((runtime.received ?? 0) / runtime.total) * 100)}%` }}
-							/>
-						) : (
-							<div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
-						)}
-					</div>
-					<div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-						{runtime.total
-							? t("settings.plugins.progress", {
-									received: megabytes(runtime.received ?? 0),
-									total: megabytes(runtime.total),
-								})
-							: t("settings.plugins.progressUnknown", { received: megabytes(runtime.received ?? 0) })}
-					</div>
-				</div>
-			)}
+			{preparing && <DownloadProgress received={runtime.received} total={runtime.total} />}
 			{failed && runtime.error && (
 				<pre className="my-3 rounded-md bg-destructive/10 p-2 font-mono text-xs break-all whitespace-pre-wrap text-destructive">
 					{runtime.error}
@@ -235,7 +168,7 @@ function RuntimeGroup({ status }: { status: PluginsStatus }) {
 			{choosing && (status.systemBun || source === "system") && (
 				<SourcePicker status={status} value={source} onChange={setSource} />
 			)}
-			{choosing && download && <MirrorPicker status={status} value={mirror} onChange={setMirror} />}
+			{choosing && download && <BunMirrorPicker status={status} value={mirror} onChange={setMirror} />}
 			{enabled && failed && (
 				<div className="flex justify-end py-3">
 					<Button size="xs" disabled={busy || !canEnable} onClick={() => void enable()}>

@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { basename } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/stores/settings";
@@ -62,5 +64,104 @@ export function ScopeSwitch() {
 				</button>
 			))}
 		</fieldset>
+	);
+}
+
+/**
+ * A download source: one of `presets` or a custom HTTPS base URL (validated by the backend). With
+ * `env`, the backend pins the source by environment variable and the picker only shows it.
+ */
+export function MirrorPicker({
+	label,
+	description,
+	presets,
+	env,
+	placeholder,
+	value,
+	onChange,
+}: {
+	label: string;
+	description: ReactNode;
+	presets: { id: string; label: string }[];
+	env?: { name: string; value: string };
+	placeholder: string;
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	const { t } = useTranslation();
+	const [choice, setChoice] = useState(() => (presets.some((p) => p.id === value) ? value : "custom"));
+	if (env) {
+		return (
+			<Row label={label} description={description}>
+				<span className="font-mono text-xs text-muted-foreground" title={t("settings.plugins.mirrorEnv")}>
+					{env.name}={env.value}
+				</span>
+			</Row>
+		);
+	}
+	return (
+		<div className="py-3">
+			<div className="flex items-center justify-between gap-6">
+				<div className="min-w-0">
+					<div className="text-sm">{label}</div>
+					<div className="mt-0.5 text-xs text-muted-foreground">{description}</div>
+				</div>
+				<Select
+					value={choice}
+					onValueChange={(next) => {
+						setChoice(next);
+						onChange(next === "custom" ? "" : next);
+					}}
+				>
+					<SelectTrigger size="sm" className="w-40 shrink-0" aria-label={label}>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent position="popper" align="end">
+						{[...presets, { id: "custom", label: t("settings.plugins.mirrorCustom") }].map((preset) => (
+							<SelectItem key={preset.id} value={preset.id}>
+								{preset.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+			{choice === "custom" && (
+				<Input
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					placeholder={placeholder}
+					className="mt-2 h-8 font-mono text-xs"
+					spellCheck={false}
+				/>
+			)}
+		</div>
+	);
+}
+
+function megabytes(bytes: number): string {
+	return (bytes / 1024 / 1024).toFixed(1);
+}
+
+/** Progress of a backend download; indeterminate when the total size is unknown. */
+export function DownloadProgress({ received = 0, total }: { received?: number; total?: number }) {
+	const { t } = useTranslation();
+	return (
+		<div className="py-3">
+			<div className="h-1.5 overflow-hidden rounded-full bg-muted">
+				{total ? (
+					<div
+						className="h-full rounded-full bg-primary transition-[width]"
+						style={{ width: `${Math.min(100, (received / total) * 100)}%` }}
+					/>
+				) : (
+					<div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+				)}
+			</div>
+			<div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
+				{total
+					? t("settings.plugins.progress", { received: megabytes(received), total: megabytes(total) })
+					: t("settings.plugins.progressUnknown", { received: megabytes(received) })}
+			</div>
+		</div>
 	);
 }

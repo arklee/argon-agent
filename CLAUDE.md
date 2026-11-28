@@ -60,7 +60,7 @@ npm run lint         # biome；npm run format 自动修复
 npm run vendor -- check   # vendor 是否有上游更新；sync / diff / add 见 packages/backend/vendor/README.md
 ```
 
-环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）。dev token 保存在 `$ARGON_HOME/dev-token`。
+环境变量（backend）：`ARGON_HOME`（默认 `~/.argon`）、`ARGON_PORT`、`ARGON_HOST`、`ARGON_TOKEN`、`ARGON_ALLOWED_ORIGINS`、`ARGON_PERMISSION_MODE=ask|auto`、`ARGON_LOG_LEVEL`、`ARGON_BUN_MIRROR`（magpie 下载 Bun 的来源，见 docs/desktop.md）、`ARGON_TOOLS_MIRROR`（rg / fd 的下载源，见 D23）、`ARGON_BUNDLED_TOOLS`（桌面版内置 rg / fd 的目录，由 main 设置）。dev token 保存在 `$ARGON_HOME/dev-token`。
 
 ## 分工：Claude 设计与审查，Codex 实现
 

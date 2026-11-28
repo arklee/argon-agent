@@ -39,6 +39,7 @@ import {
 	resolveProjectTrust,
 	resolveProjectTrustWithExtensions,
 } from "./project-trust.ts";
+import { SearchTools } from "./search-tools.ts";
 import { SessionIndex } from "./session-index.ts";
 import { SessionPrefs } from "./session-prefs.ts";
 import {
@@ -81,6 +82,7 @@ export class SessionRegistry {
 	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
+	readonly searchTools: SearchTools;
 	readonly mcpConfig: McpConfigStore;
 	readonly modelsConfig: ModelsConfigStore;
 	readonly auth: AuthFlows;
@@ -89,6 +91,10 @@ export class SessionRegistry {
 		private readonly options: RegistryOptions,
 		readonly modelRuntime: ModelRuntime,
 	) {
+		this.searchTools = new SearchTools(options.argonHome, options.agentDir, (status) =>
+			this.broadcast({ type: "tools_status", status }),
+		);
+		void this.searchTools.start().catch((error) => log.warn("Search tool startup", error));
 		this.projectTrustStore = new ProjectTrustStore(options.agentDir);
 		this.prefs = new SessionPrefs(options.argonHome);
 		const sessions = this.sessions;

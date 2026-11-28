@@ -8,8 +8,8 @@
 	"scripts": {
 		"dev": "electron-vite dev",
 		"build": "electron-vite build",
-		"pack": "npm run build && electron-builder --dir",
-		"dist": "npm run build && electron-builder",
+		"pack": "npm run build && node scripts/fetch-search-tools.mjs && electron-builder --dir",
+		"dist": "npm run build && node scripts/fetch-search-tools.mjs && electron-builder",
 		"typecheck": "tsc -p tsconfig.json",
 		"icons": "electron scripts/icons.mjs"
 	},
@@ -64,6 +64,12 @@
 			"perMachine": false,
 			"allowToChangeInstallationDirectory": true,
 			"createDesktopShortcut": true
-		}
+		},
+		"extraResources": [
+			{
+				"from": ".search-tools",
+				"to": "search-tools"
+			}
+		]
 	}
 }

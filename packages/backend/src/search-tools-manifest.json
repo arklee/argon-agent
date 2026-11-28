@@ -1,0 +1,158 @@
+{
+	"rg": {
+		"darwin-arm64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-aarch64-apple-darwin.tar.gz",
+					"sha256": "ec39d6010fbb27989a6f7be3e4edabd12ef4bafb5a6222834e540ff72c3c0e8b"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-aarch64-apple-darwin.tar.gz",
+					"sha256": "6ef40346bf31fcce79d9614c7745c198542925a0c7d4911e1ffe794c53392ac1"
+				}
+			}
+		},
+		"darwin-x64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-x86_64-apple-darwin.tar.gz",
+					"sha256": "671b4f261df432e60bc40eec830b682febd5f6edbdb325d194fcf148875049b1"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-x86_64-apple-darwin.tar.gz",
+					"sha256": "f999495980a5e6f1e7d26461ef5768b4013a62df610ed7d77a8b2de247a5b228"
+				}
+			}
+		},
+		"linux-x64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-x86_64-unknown-linux-musl.tar.gz",
+					"sha256": "0ba0eb29936b942e281d2745cd0cfff2c7e1eca84c165f01ee2666f238e56399"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-x86_64-unknown-linux-musl.tar.gz",
+					"sha256": "f2ee496a39139b8d9ad9408081217a55f1382cef4950100565d147d247364856"
+				}
+			}
+		},
+		"linux-arm64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-aarch64-unknown-linux-gnu.tar.gz",
+					"sha256": "c24b2d314fabb4b4c5ae4413d1cbc663b2410e8478781a03afdcc5d9ec77bc35"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-aarch64-unknown-linux-musl.tar.gz",
+					"sha256": "204c5d433e275ee8f29f1a22a5fb9c32a667f280f003a2e0a5011af122d8d6f2"
+				}
+			}
+		},
+		"win32-x64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-x86_64-pc-windows-msvc.zip",
+					"sha256": "a286ea6f4d0d8c1c6c2234728cf2d96afcf371c550086c11e1ea28730dcfb418"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-x86_64-pc-windows-msvc.zip",
+					"sha256": "331303d50b7cb4abe04ee549e57b04f65550ce936da1eeba4d4b05909c96eb29"
+				}
+			}
+		},
+		"win32-arm64": {
+			"version": "15.0.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/BurntSushi/ripgrep/releases/download/15.0.0/ripgrep-15.0.0-aarch64-pc-windows-msvc.zip",
+					"sha256": "85807e3c3af7c59c5086ac496100036f3a2b3ad54a5569b3c46925cd441d4c15"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/-/binary/ripgrep-prebuilt/v15.0.0/ripgrep-v15.0.0-aarch64-pc-windows-msvc.zip",
+					"sha256": "5b606de49d467dbbdaa255a6c14cdb70230fd396295860c9e0c144d0068ec224"
+				}
+			}
+		}
+	},
+	"fd": {
+		"darwin-arm64": {
+			"version": "10.4.2",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-aarch64-apple-darwin.tar.gz",
+					"sha256": "bbd98b652be41796406f9d793a2909a717fd871d0e0b824f72fb85c645ad5366"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/@prebuilt-binary/fd-darwin-arm64/-/fd-darwin-arm64-10.4.2.tgz",
+					"sha256": "bbd98b652be41796406f9d793a2909a717fd871d0e0b824f72fb85c645ad5366"
+				}
+			}
+		},
+		"darwin-x64": {
+			"version": "10.3.0",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.3.0/fd-v10.3.0-x86_64-apple-darwin.tar.gz",
+					"sha256": "e3936d70c47bf8439797aa2c6c1ddff868424ff6bc418fc8501e819a2d58ccad"
+				}
+			}
+		},
+		"linux-x64": {
+			"version": "10.4.2",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-x86_64-unknown-linux-musl.tar.gz",
+					"sha256": "78d315b3ed7bb8cc42052880c7be02454ad5324c7c853c291c53b0aaf6f4367b"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/@prebuilt-binary/fd-linux-x64/-/fd-linux-x64-10.4.2.tgz",
+					"sha256": "78d315b3ed7bb8cc42052880c7be02454ad5324c7c853c291c53b0aaf6f4367b"
+				}
+			}
+		},
+		"linux-arm64": {
+			"version": "10.4.2",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-aarch64-unknown-linux-musl.tar.gz",
+					"sha256": "4e1d705572dc91d88347d53f0ae49d10ba6f3961a27efaf1a8100a233d530621"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/@prebuilt-binary/fd-linux-arm64/-/fd-linux-arm64-10.4.2.tgz",
+					"sha256": "4e1d705572dc91d88347d53f0ae49d10ba6f3961a27efaf1a8100a233d530621"
+				}
+			}
+		},
+		"win32-x64": {
+			"version": "10.4.2",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-x86_64-pc-windows-msvc.zip",
+					"sha256": "4c9d082ee20f0d9e44881ac4e92adf765efc314d82103c53d7f576bd78dc5761"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/@prebuilt-binary/fd-win32-x64/-/fd-win32-x64-10.4.2.tgz",
+					"sha256": "4c9d082ee20f0d9e44881ac4e92adf765efc314d82103c53d7f576bd78dc5761"
+				}
+			}
+		},
+		"win32-arm64": {
+			"version": "10.4.2",
+			"sources": {
+				"github": {
+					"url": "https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-aarch64-pc-windows-msvc.zip",
+					"sha256": "e5f456004d0f550b5a67a0e33415e6d40520c57d1d3860dafca9bd0e24a8f977"
+				},
+				"npmmirror": {
+					"url": "https://registry.npmmirror.com/@prebuilt-binary/fd-win32-arm64/-/fd-win32-arm64-10.4.2.tgz",
+					"sha256": "e5f456004d0f550b5a67a0e33415e6d40520c57d1d3860dafca9bd0e24a8f977"
+				}
+			}
+		}
+	}
+}

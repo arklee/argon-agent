@@ -19,6 +19,12 @@ export async function smoke(
 			assert(Date.now() < deadline, "Backend connection timed out");
 			await delay(100);
 		}
+		let searchTools = (await client.request("tools.status", {})).status;
+		while (!searchTools.tools.every((tool) => tool.state === "ready" && tool.source === "managed")) {
+			assert(Date.now() < deadline, `Bundled search tools not ready: ${JSON.stringify(searchTools)}`);
+			await delay(100);
+			searchTools = (await client.request("tools.status", {})).status;
+		}
 		const environment = await client.request("environment.info", {});
 		assert(environment.piVersion, "pi SDK loaded");
 		const snapshot = await client.request("sessions.create", { cwd: process.env.ARGON_DESKTOP_SMOKE! });

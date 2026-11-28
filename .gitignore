@@ -12,3 +12,6 @@ coverage/
 
 # Agent worktrees (Claude Code / Codex)
 .claude/worktrees/
+
+# Downloaded desktop search binaries
+packages/desktop/.search-tools/

@@ -390,6 +390,41 @@ export interface PluginsStatus {
 	runtime: PluginRuntimeStatus;
 }
 
+/** Search tools pi's grep / find (and Argon's @file completion and sandbox) run on the backend machine. */
+export type SearchToolName = "rg" | "fd";
+/** Download sources: "github" | "npmmirror" | an HTTPS base URL that replaces `https://github.com`. */
+export type ToolsMirror = string;
+export interface SearchToolStatus {
+	tool: SearchToolName;
+	/** Pinned version Argon installs (may differ per platform). */
+	version: string;
+	state: "ready" | "missing" | "downloading" | "failed";
+	/** When ready: "managed" = in `$ARGON_HOME/agent/bin` (bundled, downloaded or uploaded); "system" = found in PATH. */
+	source?: "managed" | "system";
+	/** When ready: the path pi will run (opaque, display only). */
+	path?: string;
+	/** While downloading: bytes received and total (total absent when unknown). */
+	received?: number;
+	total?: number;
+	/** When failed: the error (includes the failed URL). */
+	error?: string;
+	/**
+	 * Files that can be fetched by hand on another machine and uploaded with tools.upload, for the
+	 * backend's platform. Empty when the platform has no pinned build.
+	 */
+	downloads: { source: "github" | "npmmirror"; url: string; fileName: string }[];
+}
+export interface SearchToolsStatus {
+	/** Backend machine as `<platform>-<arch>`, e.g. "linux-x64"; tells the user which file to fetch. */
+	platform: string;
+	/** False when no pinned builds exist for this platform (install with the system package manager). */
+	supported: boolean;
+	mirror: ToolsMirror;
+	/** Set when ARGON_TOOLS_MIRROR overrides the stored mirror. */
+	mirrorEnv?: string;
+	tools: SearchToolStatus[];
+}
+
 /** magpie community plugins (installed into magpie's own state directory on the backend machine). */
 export interface PluginInfo {
 	spec: string;
@@ -645,6 +680,8 @@ export type GlobalEvent =
 	| { type: "mcp_config_changed" }
 	/** Plugins were enabled/disabled, or the Bun runtime's preparation progressed (see plugins.enable). */
 	| { type: "plugins_status"; status: PluginsStatus }
+	/** rg / fd availability or download progress changed (see tools.install / tools.upload). */
+	| { type: "tools_status"; status: SearchToolsStatus }
 	/** Providers, their auth state or their models changed (login, logout, plugin changes). */
 	| { type: "providers_changed" }
 	| { type: "auth_flow"; flow: AuthFlow }
@@ -743,6 +780,24 @@ export interface Methods {
 	 * for referencing it in a prompt as @"path".
 	 */
 	"files.upload": { params: { name: string; data: string }; result: { path: string } };
+	"tools.status": { params: Record<string, never>; result: { status: SearchToolsStatus } };
+	/**
+	 * Download missing (or failed) tools in the background from `mirror` (persisted unless
+	 * ARGON_TOOLS_MIRROR is set); progress arrives as `tools_status` events. Never replaces a ready tool.
+	 */
+	"tools.install": {
+		params: { mirror?: ToolsMirror; tools?: SearchToolName[] };
+		result: { status: SearchToolsStatus };
+	};
+	/**
+	 * Install a file the user fetched elsewhere: one of `downloads` (archive) or the bare binary, base64.
+	 * The extracted binary must match a pinned SHA-256 for the backend's platform, else bad_request.
+	 * Replaces a managed copy; a managed copy takes precedence over PATH (pi checks agent/bin first).
+	 */
+	"tools.upload": {
+		params: { tool: SearchToolName; name: string; data: string };
+		result: { status: SearchToolsStatus };
+	};
 	/**
 	 * Read a file for the in-app viewer. `target` is a path as a model or tool wrote it: absolute,
 	 * relative to `cwd`, `~/…` or `file://…`, possibly wrapped in quotes / backticks / brackets, with an
