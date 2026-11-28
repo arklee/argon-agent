@@ -716,17 +716,19 @@ export class ManagedSession {
 		this.emit({ type: "reset", state: this.state });
 	}
 
-	private titleRequested = false;
+	private titleInFlight = false;
+	private titleAttempts = 0;
 
-	/** Name an unnamed session after its first completed turn (once per load). */
+	/** Retry unnamed sessions on subsequent completed turns, at most three times per load. */
 	private async maybeNameSession(): Promise<void> {
-		if (this.titleRequested || this.state.name || this.disposed || !this.modelRuntime) return;
+		if (this.titleInFlight || this.titleAttempts >= 3 || this.state.name || this.disposed || !this.modelRuntime) return;
 		const firstUser = this.state.items.find((item) => item.kind === "user");
 		const firstReply = this.state.items.find((item) => item.kind === "assistant" && !item.errorMessage);
 		if (firstUser?.kind !== "user" || firstReply?.kind !== "assistant" || !firstUser.text.trim()) return;
 		const model = titleModel(this.modelRuntime, this.session.model);
 		if (!model) return;
-		this.titleRequested = true;
+		this.titleInFlight = true;
+		this.titleAttempts++;
 		try {
 			const replyText = firstReply.blocks.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
 			const title = await generateTitle(
@@ -738,8 +740,13 @@ export class ManagedSession {
 			);
 			// The user may have named it meanwhile.
 			if (title && !this.state.name && !this.disposed) this.session.setSessionName(title);
+			if (!title) log.warn(`auto title attempt ${this.titleAttempts}/3 returned no usable title`);
 		} catch (error) {
-			log.debug(`auto title failed: ${error instanceof Error ? error.message : String(error)}`);
+			log.warn(
+				`auto title attempt ${this.titleAttempts}/3 failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		} finally {
+			this.titleInFlight = false;
 		}
 	}
 
