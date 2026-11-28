@@ -194,6 +194,7 @@
 
 ## 技术债与已知问题
 
+- [x] v0.1.4 的 CI / Release 被 Markdown 格式检查阻断：修正 decisions D21 列表段落缩进；Release 的打包任务此前尚未执行。
 - [ ] 排查 `apply-patch.test.ts` 的 mutation queue 用例偶发失败：扩展管理回归时一次全量运行报 `Failed to find expected lines in a: two`，单独重跑及随后两次全量均通过；尚未确定触发条件。
 
 - [x] v0.1.2 macOS Release 的主题冒烟偶发失败：原生主题更新后固定等待 200ms，未等待 Chromium 媒体查询和页面颜色同步；改为在 5 秒内等待三者持续一致 200ms，覆盖从浅色/深色返回系统主题，超时输出完整状态
