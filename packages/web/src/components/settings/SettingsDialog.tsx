@@ -18,6 +18,7 @@ import { ModelCombobox } from "@/components/ModelCombobox";
 import { AccountsSection } from "@/components/settings/AccountsSection";
 import { ArchivedSection } from "@/components/settings/ArchivedSection";
 import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings/EnabledModelsEditor";
+import { ExtensionsSection } from "@/components/settings/ExtensionsSection";
 import { McpSection } from "@/components/settings/McpSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
 import { Group, Loading, Row, ScopeSwitch } from "@/components/settings/parts";
@@ -51,6 +52,7 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
 	{ id: "mcp", icon: Plug },
 	{ id: "permissions", icon: ShieldCheck },
 	{ id: "plugins", icon: Puzzle },
+	{ id: "extensions", icon: Puzzle },
 	{ id: "tools", icon: FileSearch },
 	{ id: "resources", icon: FolderTree },
 	{ id: "archived", icon: Archive },
@@ -102,6 +104,7 @@ export function SettingsDialog() {
 						{section === "mcp" && <McpSection />}
 						{section === "permissions" && <PermissionsSection />}
 						{section === "plugins" && <PluginsSection />}
+						{section === "extensions" && <ExtensionsSection />}
 						{section === "tools" && <SearchToolsSection />}
 						{section === "resources" && <ResourcesSection />}
 						{section === "archived" && <ArchivedSection />}

@@ -701,6 +701,26 @@ export const zhCN = {
 			uploaded: "已用 {{name}} 安装 {{tool}}",
 			uploadFailed: "无法安装该文件：{{error}}",
 		},
+		extensions: {
+			title: "扩展",
+			description: "管理内置功能和全局安装的扩展。",
+			scope:
+				"全局设置，作用于所有项目和对话。开关控制是否加载，不代表工具已向模型开放。空闲对话自动重载，运行中的对话将在当前任务结束后应用。",
+			builtin: "内置扩展",
+			user: "用户扩展",
+			enable: "启用 {{name}}",
+			removeName: "移除 {{name}}",
+			empty: "暂无全局安装的用户扩展。",
+			reload: "重载 / 重试",
+			refresh: "刷新列表",
+			pending: "{{count}} 个对话等待重载。若重载失败，请点击“重载 / 重试”。",
+			confirmRemove: "从 Argon 移除 {{name}}？",
+			removeDescription: "将持久禁止此扩展加载，并从列表中隐藏。源文件和软件包中的其他资源会保留，不会卸载整个软件包。",
+			remove: "从 Argon 移除",
+			cancel: "取消",
+			protected:
+				"权限、沙箱、diff 持久化及 GUI 桥接由 Argon 管理，不受这些开关控制。加载错误会显示在各对话的问题面板中。",
+		},
 		resources: {
 			description: "会话加载的软件包、扩展、技能和提示词模板。",
 			extensions: "扩展",

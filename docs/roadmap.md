@@ -62,6 +62,8 @@
 ### pi 能力接入
 
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
+- [x] 全局扩展管理：设置 → 扩展，内置功能只能启停，用户扩展可启停或安全移除（保留源文件）；加载前策略覆盖项目设置，自动／延迟重载、失败重试和多客户端通知。权限与沙箱等宿主组件不开放普通开关，见 D24 和 [扩展管理](extensions.md)
+- [ ] 扩展管理后续：整包卸载及磁盘清理、图形化恢复已移除条目；当前“移除”仅持久禁止加载并隐藏，不删除文件
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
 - [x] MCP 配置入口（D16）：设置页 MCP 分区，全局 mcp.json 和项目 `.argon/mcp.json` 的服务器增删改、编辑 JSON，“新对话默认开启”开关（全局写 mcp.json，项目写私有设置）
@@ -190,6 +192,8 @@
 - [ ] Argon 专属工具（customTools）：例如在 GUI 中预览文件、打开浏览器预览
 
 ## 技术债与已知问题
+
+- [ ] 排查 `apply-patch.test.ts` 的 mutation queue 用例偶发失败：扩展管理回归时一次全量运行报 `Failed to find expected lines in a: two`，单独重跑及随后两次全量均通过；尚未确定触发条件。
 
 - [x] v0.1.2 macOS Release 的主题冒烟偶发失败：原生主题更新后固定等待 200ms，未等待 Chromium 媒体查询和页面颜色同步；改为在 5 秒内等待三者持续一致 200ms，覆盖从浅色/深色返回系统主题，超时输出完整状态
 - [ ] 本地桌面冒烟偶发在剪贴板检查前未获得焦点（`Document is not focused`，重跑通过）；应等待页面实际获得焦点，避免依赖固定 200ms 延迟

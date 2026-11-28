@@ -49,6 +49,7 @@ import { patchedPaths, patchFileDiffs, planPatch } from "./apply-patch.ts";
 import { generateTitle, titleModel } from "./auto-title.ts";
 import { createBuiltinExtensions, sessionMcpOptions } from "./builtin-extensions.ts";
 import { previewDiff, resultDiff } from "./diff-preview.ts";
+import type { ExtensionConfigStore } from "./extension-config.ts";
 import { completeFile, type FileCompletion } from "./file-completion.ts";
 import { InteractionBroker } from "./interactions.ts";
 import { log } from "./log.ts";
@@ -97,6 +98,7 @@ export interface ManagedSessionDeps {
 	modelRuntime: ModelRuntime;
 	/** Default permission mode and persisted "always allow" rules. */
 	settings: ArgonSettingsStore;
+	extensionConfig?: ExtensionConfigStore;
 	/** `extensions`: the user-level extensions pi loads before trust is known (for the `project_trust` event). */
 	resolveProjectTrust(
 		cwd: string,
@@ -173,7 +175,7 @@ export class ManagedSession {
 	private settingsDiagnostics: ResourceDiagnostic[] = [];
 	private diagnosticCounter = 0;
 	private hasReloaded = false;
-	private readonly trust: { extensions?: LoadExtensionsResult };
+	private readonly trust: { extensions?: LoadExtensionsResult; decision?: ResolvedProjectTrust };
 
 	private constructor(
 		private readonly runtime: AgentSessionRuntime,
@@ -186,7 +188,7 @@ export class ManagedSession {
 		private readonly sessionHost?: ExtensionSessionHost,
 		private readonly modelRuntime?: ModelRuntime,
 		private readonly settings?: ArgonSettingsStore,
-		trust: { extensions?: LoadExtensionsResult } = {},
+		trust: { extensions?: LoadExtensionsResult; decision?: ResolvedProjectTrust } = {},
 	) {
 		const session = runtime.session;
 		this.trust = trust;
@@ -238,7 +240,7 @@ export class ManagedSession {
 		});
 		const mcp = createMcpBridge();
 		let projectTrust: ResolvedProjectTrust | undefined;
-		const trust: { extensions?: LoadExtensionsResult } = {};
+		const trust: { extensions?: LoadExtensionsResult; decision?: ResolvedProjectTrust } = {};
 		const trustErrors: string[] = [];
 		const onTrustError = (message: string) => {
 			log.warn(message);
@@ -253,26 +255,28 @@ export class ManagedSession {
 			sessionStartEvent,
 		}) => {
 			const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
+			const resolveReloadTrust = async ({ extensionsResult }: { extensionsResult: LoadExtensionsResult }) => {
+				trust.extensions = extensionsResult;
+				projectTrust = await deps.resolveProjectTrust(
+					cwd,
+					settingsManager.getDefaultProjectTrust(),
+					extensionsResult,
+					onTrustError,
+				);
+				trust.decision = projectTrust;
+				return projectTrust.trusted;
+			};
 			const services = await createAgentSessionServices({
 				cwd,
 				agentDir,
 				modelRuntime: deps.modelRuntime,
 				settingsManager,
 				resourceLoaderReloadOptions: {
-					// Argon owns the decision and banner. Skip pi's project_trust extension event.
-					resolveProjectTrust: async ({ extensionsResult }) => {
-						trust.extensions = extensionsResult;
-						projectTrust = await deps.resolveProjectTrust(
-							cwd,
-							settingsManager.getDefaultProjectTrust(),
-							extensionsResult,
-							onTrustError,
-						);
-						return projectTrust.trusted;
-					},
+					resolveProjectTrust: resolveReloadTrust,
 				},
 				// The permission gate goes first so its tool_call handler runs before any other extension's.
 				resourceLoaderOptions: {
+					extensionFilter: deps.extensionConfig?.filter,
 					extensionFactories: [
 						permissionExtension,
 						createSandboxExtension({
@@ -297,6 +301,12 @@ export class ManagedSession {
 					],
 				},
 			});
+			// AgentSession.reload() otherwise calls loader.reload() without the startup trust callback.
+			// Preserve that public SDK option on EVERY reload: newly enabled user extensions must get
+			// their project_trust vote before any project extension is imported, not afterwards.
+			const reloadResources = services.resourceLoader.reload.bind(services.resourceLoader);
+			services.resourceLoader.reload = (options) =>
+				reloadResources({ ...options, resolveProjectTrust: resolveReloadTrust });
 			return {
 				...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
 				services,
@@ -423,6 +433,10 @@ export class ManagedSession {
 		return this.applyPendingProjectTrust();
 	}
 
+	get configRefreshPending(): boolean {
+		return this.configReloadPending || this.reloading || this.trustRefresh !== undefined;
+	}
+
 	private applyPendingProjectTrust(): Promise<void> {
 		if (this.trustRefresh) return this.trustRefresh;
 		if (!this.canRefreshProjectTrust()) return Promise.resolve();
@@ -432,7 +446,7 @@ export class ManagedSession {
 				while (this.canRefreshProjectTrust()) {
 					this.trustRefreshPending = false;
 					const settings = this.runtime.services.settingsManager;
-					const next = await this.resolveProjectTrust(
+					let next = await this.resolveProjectTrust(
 						this.runtime.cwd,
 						settings.getDefaultProjectTrust(),
 						this.trust.extensions,
@@ -442,7 +456,13 @@ export class ManagedSession {
 						this.configReloadPending = false;
 						settings.setProjectTrusted(next.trusted);
 						this.appliedProjectTrust = undefined;
-						await this.reload();
+						try {
+							await this.reload();
+							next = this.trust.decision ?? next;
+						} catch (error) {
+							this.configReloadPending = true;
+							throw error;
+						}
 					} else {
 						this.reportDiagnostics();
 					}
@@ -1042,6 +1062,10 @@ export class ManagedSession {
 			this.disposeWidgets();
 			for (const { key } of this.state.widgets) this.emit({ type: "widget_changed", key });
 			await this.session.reload();
+			if (!this.trustRefresh && this.trust.decision) {
+				this.appliedProjectTrust = this.trust.decision.trusted;
+				this.emit({ type: "project_trust_changed", trust: this.trust.decision.info });
+			}
 			this.applyToolSet(this.appliedToolPreset);
 			this.hasReloaded = true;
 			this.reportDiagnostics(true);

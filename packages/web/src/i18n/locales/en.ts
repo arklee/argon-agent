@@ -716,6 +716,27 @@ export const en = {
 			uploaded: "Installed {{tool}} from {{name}}",
 			uploadFailed: "Could not install the file: {{error}}",
 		},
+		extensions: {
+			title: "Extensions",
+			description: "Manage built-in features and globally installed extensions.",
+			scope:
+				"Global settings for all projects and conversations. Switches control loading, not tool exposure. Idle conversations reload automatically; busy ones reload when their current work finishes.",
+			builtin: "Built-in extensions",
+			user: "User extensions",
+			enable: "Enable {{name}}",
+			removeName: "Remove {{name}}",
+			empty: "No globally installed user extensions.",
+			reload: "Reload / retry",
+			refresh: "Refresh list",
+			pending: "{{count}} conversation(s) awaiting reload. If reloading failed, use Reload / retry.",
+			confirmRemove: "Remove {{name}} from Argon?",
+			removeDescription:
+				"This persistently excludes this extension from loading and hides it from this list. Source files and other resources in its package are retained. This is not a package uninstall.",
+			remove: "Remove from Argon",
+			cancel: "Cancel",
+			protected:
+				"Permissions, sandboxing, diff persistence and the GUI bridge are managed by Argon, not by these switches. Loading errors appear in each conversation's diagnostics.",
+		},
 		resources: {
 			description: "Packages, extensions, skills and prompt templates loaded into sessions.",
 			extensions: "Extensions",

@@ -37,6 +37,7 @@ export type SettingsSection =
 	| "plugins"
 	| "tools"
 	| "resources"
+	| "extensions"
 	| "archived";
 
 interface SettingsData {

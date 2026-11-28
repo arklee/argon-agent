@@ -62,6 +62,36 @@ it("aborts GC reference collection on an extra session directory scan error", as
 	await expect(scan()).rejects.toBe(error);
 });
 
+it("broadcasts global extension changes and attempts every session even if one reload fails", async () => {
+	await setup();
+	const event = vi.fn();
+	registry!.onGlobalEvent(event);
+	const failed = {
+		sessionId: "failed",
+		configRefreshPending: true,
+		refreshProjectTrust: vi.fn().mockRejectedValue(new Error("broken")),
+	};
+	const idle = {
+		sessionId: "idle",
+		configRefreshPending: false,
+		refreshProjectTrust: vi.fn().mockResolvedValue(undefined),
+	};
+	const sessions = (registry as unknown as { sessions: Map<string, unknown> }).sessions;
+	sessions.set(failed.sessionId, failed);
+	sessions.set(idle.sessionId, idle);
+	try {
+		await expect(registry!.changeExtension("builtin:mcp", { enabled: false })).rejects.toThrow("settings saved");
+		expect(failed.refreshProjectTrust).toHaveBeenCalledWith(true);
+		expect(idle.refreshProjectTrust).toHaveBeenCalledWith(true);
+		expect(event).toHaveBeenCalledWith({ type: "extensions_changed" });
+		const status = await registry!.listExtensions();
+		expect(status.pendingSessions).toEqual(["failed"]);
+		expect(status.items.find((item) => item.id === "builtin:mcp")?.enabled).toBe(false);
+	} finally {
+		sessions.clear();
+	}
+});
+
 it("only tolerates settings creation errors, not errors inspecting settings", async () => {
 	const { scan, settings } = await setup();
 	vi.mocked(listSessionFiles).mockResolvedValue([]);

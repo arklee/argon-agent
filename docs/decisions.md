@@ -403,3 +403,13 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 4. **其他情况（远程、独立运行的 backend）**：backend 启动时在后台检查，缺了就从设置的下载源下载（`ARGON_TOOLS_MIRROR` 或设置页选择，做法同 Bun 的下载源），进度和失败经 `tools_status` 推给前端。
 5. **手动上传**：远程机器连不上外网时，用户在客户端这边（比如通过代理）下载设置页列出的文件，用 `tools.upload` 传给 backend 校验后安装。平台不同由 backend 报告自己的 `platform-arch`，设置页只列出对应平台的文件。
 6. **不做的**：不在运行时由桌面端自动推送二进制（平台可能不同，协议里也不该有“写可执行文件”的通用口子）；以后做 SSH 部署时，rg / fd 随远端运行时一起上传。
+
+## D24. 全局扩展开关与安全移除
+
+**决定**：设置页新增独立的“扩展”页，仅管理全局安装项。内置功能扩展可启停，用户扩展可启停或移除；权限、沙箱等宿主 inline extension 不受管理。配置存在 `$ARGON_HOME/agent/extension-policy.json`，没有覆盖的项保持 pi 原行为，有覆盖的项优先于项目资源选择，不增加会话级配置。
+
+**实现**：后端使用 pi 的 `DefaultPackageManager.resolve(() => "skip")` 发现资源，设置页不执行扩展代码或安装缺失包。pi 1.7.0 的 `extensionsOverride` 在代码导入后才执行，inline extension 也不能阻止其他扩展导入；现有 SDK 参数不足以实现动态、含包资源的全局策略。因此按 D7 加最小补丁：`DefaultResourceLoaderOptions.extensionFilter` 在主加载和 pre-trust 两条路径按资源元数据选择扩展，宿主 inline factory 不受影响。补丁更新时要用 `extension-config.test.ts` 检查禁用文件的顶层代码确实未执行。
+
+**生命周期**：保存后自动重载空闲会话，忙碌会话沿用现有配置刷新队列，等 `agent_settled` 后应用。失败保留待重载标记，可重试；加载中的新会话用 revision 补偿并发修改。不另建前端会话状态机。旧的被禁用扩展不再参与项目信任判断；每次重载都通过 SDK 的公开 `ResourceLoader.reload` 参数重新运行 pre-trust 阶段，确保新启用扩展的信任意见在项目代码导入前生效（`AgentSession.reload()` 原本不传这个启动参数）。真实 SDK 无模型请求测试覆盖此顺序。
+
+**移除语义**：本版是持久禁止加载并隐藏条目，不删除文件或卸载共享软件包，确认框明确说明。整包卸载和图形化恢复单独规划，避免删除用户开发目录或包内其他资源。详见 [扩展管理](extensions.md)。

@@ -44,6 +44,18 @@ async function loadLlamaExtension(): Promise<ExtensionFactory | undefined> {
 
 const llamaExtension = await loadLlamaExtension();
 
+/** Shared by resource discovery and the GUI; omit optional extensions that could not be imported. */
+export const BUILTIN_EXTENSION_NAMES = [
+	"apply-patch",
+	"codex-compact",
+	"codex-web-run",
+	"codex-imagegen",
+	...(llamaExtension ? ["llama.cpp"] : []),
+	"codemode",
+	"tool-search",
+	"mcp",
+];
+
 const MCP_ENTRY = "argon.mcp_servers";
 function sessionServers(manager: Pick<SessionManager, "getEntries">): Record<string, boolean> {
 	const entry = manager.getEntries().findLast((e) => e.type === "custom" && e.customType === MCP_ENTRY);

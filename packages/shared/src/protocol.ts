@@ -468,6 +468,25 @@ export interface ProjectSettingsInfo {
 }
 
 /** Resources a scope loads (read-only view; edit with pi's own commands or the settings files). */
+/** Global extension policy. Paths are opaque backend paths, never client-side IO targets. */
+export interface ExtensionInfo {
+	id: string;
+	name: string;
+	path: string;
+	source: string;
+	builtin: boolean;
+	/** Configured permission to load, not a claim that loading succeeded. */
+	enabled: boolean;
+}
+
+export interface ExtensionsStatus {
+	items: ExtensionInfo[];
+	/** Missing packages are not installed just to populate settings. */
+	warnings: string[];
+	/** Loaded sessions still waiting for an idle reload (or retry after a failed reload). */
+	pendingSessions: string[];
+}
+
 export interface ResourceSettings {
 	scope: "global" | "project";
 	/** Backend path of the settings file. */
@@ -673,6 +692,7 @@ export interface SessionEventEnvelope {
 
 /** Backend-wide events, not tied to one session. */
 export type GlobalEvent =
+	| { type: "extensions_changed" }
 	| { type: "sessions_changed" }
 	| { type: "session_unloaded"; sessionId: string }
 	| { type: "projects_changed" }
@@ -729,6 +749,11 @@ export interface FileContent {
 }
 
 export interface Methods {
+	"extensions.list": { params: Record<string, never>; result: ExtensionsStatus };
+	"extensions.setEnabled": { params: { id: string; enabled: boolean }; result: Record<string, never> };
+	/** Remove a user extension from Argon; source files and other package resources are retained. */
+	"extensions.remove": { params: { id: string }; result: Record<string, never> };
+	"extensions.reload": { params: Record<string, never>; result: Record<string, never> };
 	"environment.info": { params: Record<string, never>; result: EnvironmentInfo };
 	"fs.listDir": {
 		params: { path?: string; dirsOnly?: boolean };

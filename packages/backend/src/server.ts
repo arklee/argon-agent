@@ -303,6 +303,19 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 			return empty;
 		},
 		"settings.get": async (params) => registry.readSettings(params.cwd),
+		"extensions.list": async () => registry.listExtensions(),
+		"extensions.setEnabled": async (params) => {
+			await registry.changeExtension(params.id, { enabled: params.enabled });
+			return empty;
+		},
+		"extensions.remove": async (params) => {
+			await registry.changeExtension(params.id, { remove: true });
+			return empty;
+		},
+		"extensions.reload": async () => {
+			await registry.reloadExtensions();
+			return empty;
+		},
 		"settings.update": async (params) => {
 			if (params.argon?.permissions?.defaultMode === "ask" && !config.environment.sandbox.supported)
 				throw new RequestError("bad_request", config.environment.sandbox.reason ?? "Sandbox unavailable");

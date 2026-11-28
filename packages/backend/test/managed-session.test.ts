@@ -165,8 +165,19 @@ describe("ManagedSession trust and diagnostics", () => {
 		await managed.refreshProjectTrust(true);
 		emit({ type: "agent_end", messages: [], willRetry: true });
 		expect(reload).not.toHaveBeenCalled();
+		expect(managed.configRefreshPending).toBe(true);
 		emit({ type: "agent_settled", aborted: false });
 		await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+		await vi.waitFor(() => expect(managed.configRefreshPending).toBe(false));
+	});
+	it("keeps a failed configuration reload pending and allows retry", async () => {
+		const { managed, reload } = await loadSession();
+		await managed.refreshProjectTrust();
+		reload.mockRejectedValueOnce(new Error("reload failed"));
+		await expect(managed.refreshProjectTrust(true)).rejects.toThrow("reload failed");
+		expect(managed.configRefreshPending).toBe(true);
+		await managed.refreshProjectTrust(true);
+		expect(managed.configRefreshPending).toBe(false);
 	});
 	it("publishes trust status changes without reloading when the effective trust is unchanged", async () => {
 		const { managed, events, reload, setTrustStatus } = await loadSession();

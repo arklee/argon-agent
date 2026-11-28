@@ -28,6 +28,7 @@ import {
 import { AuthFlows } from "./auth-flows.ts";
 import { refreshImagegenExposure } from "./codex-imagegen.ts";
 import { refreshWebSearchExposure } from "./codex-web-run.ts";
+import { ExtensionConfigStore } from "./extension-config.ts";
 import { log } from "./log.ts";
 import { MagpieHost } from "./magpie-host.ts";
 import { type ExtensionSessionHost, ManagedSession, type SessionTarget } from "./managed-session.ts";
@@ -82,6 +83,7 @@ export class SessionRegistry {
 	private trustRevision = 0;
 
 	readonly magpie: MagpieHost;
+	readonly extensionConfig: ExtensionConfigStore;
 	readonly searchTools: SearchTools;
 	readonly mcpConfig: McpConfigStore;
 	readonly modelsConfig: ModelsConfigStore;
@@ -96,6 +98,7 @@ export class SessionRegistry {
 		);
 		void this.searchTools.start().catch((error) => log.warn("Search tool startup", error));
 		this.projectTrustStore = new ProjectTrustStore(options.agentDir);
+		this.extensionConfig = new ExtensionConfigStore(options.agentDir);
 		this.prefs = new SessionPrefs(options.argonHome);
 		const sessions = this.sessions;
 		const unloading = this.unloading;
@@ -166,6 +169,28 @@ export class SessionRegistry {
 					}
 				: {}),
 		};
+	}
+
+	async listExtensions(): Promise<MethodResult<"extensions.list">> {
+		return {
+			...(await this.extensionConfig.list()),
+			pendingSessions: [...this.sessions.values()].filter((s) => s.configRefreshPending).map((s) => s.sessionId),
+		};
+	}
+
+	async changeExtension(id: string, action: { enabled: boolean } | { remove: true }): Promise<void> {
+		await this.extensionConfig.change(id, action);
+		this.broadcast({ type: "extensions_changed" });
+		await this.reloadExtensions();
+	}
+
+	async reloadExtensions(): Promise<void> {
+		await this.extensionConfig.refresh();
+		const results = await Promise.allSettled([...this.sessions.values()].map((s) => s.refreshProjectTrust(true)));
+		this.broadcast({ type: "extensions_changed" });
+		const failure = results.find((r) => r.status === "rejected");
+		if (failure?.status === "rejected")
+			throw new Error(`Extension settings saved, but a session could not reload: ${String(failure.reason)}`);
 	}
 
 	async updateSettings(update: { pi?: Partial<PiSettings>; argon?: Partial<ArgonSettings> }): Promise<void> {
@@ -505,10 +530,12 @@ export class SessionRegistry {
 
 	private async load(target: SessionTarget): Promise<ManagedSession> {
 		let revision = this.trustRevision;
+		let extensionRevision = this.extensionConfig.revision;
 		const session = await ManagedSession.load(target, {
 			agentDir: this.options.agentDir,
 			modelRuntime: this.modelRuntime,
 			settings: this.options.settings,
+			extensionConfig: this.extensionConfig,
 			sessionHost: this.sessionHost,
 			resolveProjectTrust: (cwd, defaultTrust, extensions, onError) =>
 				resolveProjectTrustWithExtensions(
@@ -516,15 +543,24 @@ export class SessionRegistry {
 					this.projectTrustStore,
 					this.sessionTrustDecisions,
 					defaultTrust,
-					extensions,
+					extensions
+						? {
+								...extensions,
+								extensions: extensions.extensions.filter((extension) =>
+									this.extensionConfig.allowsLoaded(extension.path),
+								),
+							}
+						: undefined,
 					onError,
 				),
 		});
 		try {
 			// A trust request can land while this session is loading and still absent from the registry.
-			while (revision !== this.trustRevision) {
+			while (revision !== this.trustRevision || extensionRevision !== this.extensionConfig.revision) {
+				const reload = extensionRevision !== this.extensionConfig.revision;
 				revision = this.trustRevision;
-				await session.refreshProjectTrust();
+				extensionRevision = this.extensionConfig.revision;
+				await session.refreshProjectTrust(reload);
 			}
 		} catch (error) {
 			await session.dispose();
