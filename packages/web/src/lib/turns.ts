@@ -1,12 +1,13 @@
 /**
  * Turn layout for the transcript. A turn is the run of assistant items after a user message. Its last
  * text that no tool call follows is the answer; everything before it (thinking, commentary, tool
- * calls) is the process, which folds into one line once the answer starts. This is a pure view of
+ * calls) is the process, which folds into one line by the user's preference (see `defaultOpen`). This is a pure view of
  * SessionState (no state of its own beyond the user's open/closed choices), so it never competes
  * with the shared reducer.
  */
 
 import type { AssistantBlock, FileDiff, ToolCallState, ToolDisplay, TranscriptItem } from "@argon/shared";
+import type { ProcessFold } from "@/lib/process-fold";
 
 export type AssistantItem = Extract<TranscriptItem, { kind: "assistant" }>;
 export type UserItem = Extract<TranscriptItem, { kind: "user" }>;
@@ -33,7 +34,20 @@ export interface Turn {
 
 export type TranscriptRow =
 	| { kind: "item"; key: string; item: TranscriptItem }
-	| { kind: "turnHeader"; key: string; turn: Turn; open: boolean }
+	/**
+	 * The fold line over a group of process segments: the whole process, or with `splitAtText` the
+	 * thinking and tool calls between two texts. `first` is the turn's first group.
+	 */
+	| {
+			kind: "turnHeader";
+			key: string;
+			turn: Turn;
+			groupId: string;
+			group: ProcessSegment[];
+			first: boolean;
+			live: boolean;
+			open: boolean;
+	  }
 	| { kind: "segment"; key: string; turn: Turn; segment: ProcessSegment }
 	| { kind: "answer"; key: string; turn: Turn };
 
@@ -80,11 +94,26 @@ export function buildTurn(items: AssistantItem[], user: UserItem | undefined, ru
 	};
 }
 
-/** Group the transcript into rows; `isOpen` says whether a turn's process is shown. */
+export interface ProcessGroup {
+	/** The turn id for the whole process; else the first segment's key. */
+	id: string;
+	segments: ProcessSegment[];
+	/** The turn's last group while it runs. */
+	live: boolean;
+}
+
+/** Decides whether a group is shown; `last` is the turn's last group. */
+export type IsOpen = (turn: Turn, group: ProcessGroup, last: boolean) => boolean;
+
+/**
+ * Group the transcript into rows. With `splitAtText`, texts in the process stay visible and split it
+ * into several folds (thinking and tool calls between texts); otherwise the whole process is one fold.
+ */
 export function transcriptRows(
 	items: readonly TranscriptItem[],
 	running: boolean,
-	isOpen: (turn: Turn) => boolean,
+	isOpen: IsOpen,
+	splitAtText = false,
 ): TranscriptRow[] {
 	const rows: TranscriptRow[] = [];
 	let user: UserItem | undefined;
@@ -101,20 +130,76 @@ export function transcriptRows(
 		const group: AssistantItem[] = [];
 		while (items[index]?.kind === "assistant") group.push(items[index++] as AssistantItem);
 		const turn = buildTurn(group, user, running && index === items.length);
-		if (turn.process.length > 0) {
-			const open = isOpen(turn);
-			rows.push({ kind: "turnHeader", key: `head-${turn.id}`, turn, open });
-			if (open)
-				for (const segment of turn.process) rows.push({ kind: "segment", key: `seg-${segment.key}`, turn, segment });
-		}
+		if (splitAtText) pushSplit(rows, turn, isOpen);
+		else if (turn.process.length > 0)
+			pushGroup(rows, turn, { id: turn.id, segments: turn.process, live: turn.live }, true, true, isOpen);
 		rows.push({ kind: "answer", key: `answer-${turn.id}`, turn });
 	}
 	return rows;
 }
 
-/** The process is open unless an answer has started; failures without an answer stay open. */
-export function defaultOpen(turn: Turn): boolean {
-	return turn.answer === undefined;
+function pushGroup(
+	rows: TranscriptRow[],
+	turn: Turn,
+	group: ProcessGroup,
+	first: boolean,
+	last: boolean,
+	isOpen: IsOpen,
+): void {
+	const open = isOpen(turn, group, last);
+	rows.push({
+		kind: "turnHeader",
+		key: `head-${group.id}`,
+		turn,
+		groupId: group.id,
+		group: group.segments,
+		first,
+		live: group.live,
+		open,
+	});
+	if (open)
+		for (const segment of group.segments) rows.push({ kind: "segment", key: `seg-${segment.key}`, turn, segment });
+}
+
+function pushSplit(rows: TranscriptRow[], turn: Turn, isOpen: IsOpen): void {
+	// Runs of thinking / tools, with the texts between them.
+	const parts: (ProcessSegment[] | ProcessSegment)[] = [];
+	for (const segment of turn.process) {
+		const previous = parts.at(-1);
+		if (segment.type === "text") parts.push(segment);
+		else if (Array.isArray(previous)) previous.push(segment);
+		else parts.push([segment]);
+	}
+	const lastGroup = parts.findLastIndex(Array.isArray);
+	let first = true;
+	parts.forEach((part, i) => {
+		if (!Array.isArray(part)) {
+			rows.push({ kind: "segment", key: `seg-${part.key}`, turn, segment: part });
+			return;
+		}
+		const last = i === lastGroup;
+		// Still running: the last group, unless the answer (or a text) has started after it.
+		const live = turn.live && i === parts.length - 1 && !turn.answer;
+		const only = part[0];
+		// A lone finished thought needs no fold of its own: its block already folds.
+		if (part.length === 1 && only?.type === "thinking" && !live) {
+			rows.push({ kind: "segment", key: `seg-${only.key}`, turn, segment: only });
+			return;
+		}
+		pushGroup(rows, turn, { id: only?.key ?? turn.id, segments: part, live }, first, last, isOpen);
+		first = false;
+	});
+}
+
+/**
+ * Whether a turn's process is shown before the user toggles it. While a turn runs, text after the last
+ * tool call may still be commentary (the next call is not known yet), so "auto" keeps the process open
+ * until the turn ends. A finished turn without an answer (a failure, a stop) stays open in every mode.
+ */
+export function defaultOpen(turn: Turn, fold: ProcessFold = "auto"): boolean {
+	if (fold === "expanded") return true;
+	if (!turn.live) return turn.answer === undefined;
+	return fold === "auto";
 }
 
 // ---------------------------------------------------------------------------

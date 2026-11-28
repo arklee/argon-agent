@@ -46,6 +46,58 @@ describe("buildTurn", () => {
 		expect(defaultOpen(turn)).toBe(true);
 	});
 
+	it("keeps commentary after a call open while the turn runs, folds once it ends", () => {
+		const items = [assistant("a1", [call("1"), text("Now the tests")])];
+		const live = buildTurn(items, undefined, true);
+		expect(live.answer).toBeDefined();
+		expect(defaultOpen(live, "auto")).toBe(true);
+		expect(defaultOpen(live, "collapsed")).toBe(false);
+		expect(defaultOpen(live, "expanded")).toBe(true);
+		const done = buildTurn(items, undefined, false);
+		expect(defaultOpen(done, "auto")).toBe(false);
+		expect(defaultOpen(done, "collapsed")).toBe(false);
+		expect(defaultOpen(done, "expanded")).toBe(true);
+	});
+
+	it("a finished turn without an answer stays open in every mode", () => {
+		const turn = buildTurn([assistant("a1", [call("1")])], undefined, false);
+		for (const fold of ["auto", "expanded", "collapsed"] as const) expect(defaultOpen(turn, fold)).toBe(true);
+	});
+
+	it("splits the process at texts into separate folds", () => {
+		const thought: AssistantBlock = { type: "thinking", text: "hmm" };
+		const items = [
+			user,
+			assistant("a1", [thought, text("First"), call("1"), call("2"), text("Then"), call("3"), text("Done")]),
+		];
+		const rows = transcriptRows(items, false, () => false, true);
+		expect(rows.map((r) => (r.kind === "segment" ? `seg:${r.segment.type}` : r.kind))).toEqual([
+			"item",
+			// A lone finished thought shows as its own (folding) block.
+			"seg:thinking",
+			"seg:text",
+			"turnHeader",
+			"seg:text",
+			"turnHeader",
+			"answer",
+		]);
+		const headers = rows.filter((r) => r.kind === "turnHeader");
+		expect(headers.map((r) => r.kind === "turnHeader" && [r.first, r.group.length])).toEqual([
+			[true, 1],
+			[false, 1],
+		]);
+	});
+
+	it("only the last split fold is live while the turn runs", () => {
+		const rows = transcriptRows(
+			[user, assistant("a1", [call("1"), text("Next"), call("2")], { streaming: true })],
+			true,
+			() => false,
+			true,
+		);
+		expect(rows.flatMap((r) => (r.kind === "turnHeader" ? [r.live] : []))).toEqual([false, true]);
+	});
+
 	it("a plain reply has no process rows", () => {
 		const rows = transcriptRows([user, assistant("a1", [text("Hello")])], false, () => false);
 		expect(rows.map((r) => r.kind)).toEqual(["item", "answer"]);

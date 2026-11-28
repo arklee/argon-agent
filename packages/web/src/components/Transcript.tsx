@@ -21,11 +21,13 @@ import { OpenFileButton, openFileInPanel } from "@/components/FileLink";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
+import { callState } from "@/components/ToolCallCard";
 import { ToolRun } from "@/components/ToolRun";
-import { useCountLabels } from "@/components/ToolSummary";
+import { useCountLabels, useToolVerb } from "@/components/ToolSummary";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { basename, formatElapsed, formatNumber } from "@/lib/format";
+import { useProcessFold } from "@/lib/process-fold";
 import {
 	defaultOpen,
 	flattenCalls,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
+import { displayFor } from "@/tools";
 
 type Tools = SessionState["tools"];
 
@@ -219,29 +222,54 @@ function RequestFailure({ message, retry }: { message?: string; retry?: () => vo
 // Turns
 // ---------------------------------------------------------------------------
 
-/** The fold line above a turn's process: live timer while working, a summary afterwards. */
+function groupCalls(group: readonly ProcessSegment[]): ToolCallBlock[] {
+	return group.flatMap((segment) => (segment.type === "tools" ? segment.calls : []));
+}
+
+/**
+ * The fold line above a turn's process (or one group of it): live timer and current activity while
+ * working, the turn's time and the group's counts afterwards.
+ */
 function TurnHeader({
 	turn,
+	group,
+	first,
+	live,
 	open,
 	tools,
 	onToggle,
 }: {
 	turn: Turn;
+	group: ProcessSegment[];
+	first: boolean;
+	live: boolean;
 	open: boolean;
 	tools: Tools;
 	onToggle: () => void;
 }) {
 	const { t } = useTranslation();
 	const countLabels = useCountLabels();
-	const now = useTicker(turn.live);
+	const now = useTicker(live);
 	const timing = turnTiming(turn);
-	const calls = turnCalls(turn);
+	const calls = groupCalls(group);
 	const labels = countLabels(summarize(flattenCalls(calls, tools)));
-	let title: string;
-	if (turn.live) title = t("chat.workingFor", { duration: formatElapsed(now - timing.startedAt) });
+	let title: string | undefined;
+	if (live) title = t("chat.workingFor", { duration: formatElapsed(now - timing.startedAt) });
 	else if (calls.length === 0) title = t("chat.thought");
-	else if (timing.endedAt) title = t("chat.workedFor", { duration: formatElapsed(timing.endedAt - timing.startedAt) });
-	else title = t("chat.worked");
+	else if (first && !turn.live)
+		title = timing.endedAt
+			? t("chat.workedFor", { duration: formatElapsed(timing.endedAt - timing.startedAt) })
+			: t("chat.worked");
+	// Folded while working: say what the agent is doing instead of the counts.
+	const activity = live && !open ? <GroupActivity group={group} tools={tools} /> : null;
+	const counts = !open && labels.length > 0 && (
+		<span
+			className={cn("min-w-0 truncate", title && "text-muted-foreground/70 group-hover/head:text-muted-foreground")}
+		>
+			{title && "· "}
+			{labels.join(" · ")}
+		</span>
+	);
 	return (
 		<button
 			type="button"
@@ -249,15 +277,36 @@ function TurnHeader({
 			aria-expanded={open}
 			className="group/head flex max-w-full min-w-0 items-center gap-2 py-0.5 text-left text-muted-foreground hover:text-foreground"
 		>
-			{turn.live ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : null}
-			<span className="shrink-0">{title}</span>
-			{!open && labels.length > 0 && (
-				<span className="min-w-0 truncate text-muted-foreground/70 group-hover/head:text-muted-foreground">
-					· {labels.join(" · ")}
-				</span>
-			)}
+			{live ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : null}
+			{title && <span className="shrink-0">{title}</span>}
+			{activity ?? counts}
+			{!title && open && <span className="shrink-0">{t("chat.worked")}</span>}
 			<ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
 		</button>
+	);
+}
+
+/** The running tool call, else thinking in progress; nothing while the model is between steps. */
+function GroupActivity({ group, tools }: { group: readonly ProcessSegment[]; tools: Tools }) {
+	const { t } = useTranslation();
+	const verb = useToolVerb();
+	const last = group.at(-1);
+	if (!last) return null;
+	if (last.type === "thinking" && last.streaming)
+		return <span className="min-w-0 truncate text-muted-foreground/70">· {t("chat.thinkingInProgress")}</span>;
+	if (last.type !== "tools") return null;
+	const active = last.calls.findLast((call) => {
+		const state = callState(tools[call.toolCallId]);
+		return state === "running" || state === "pending";
+	});
+	if (!active) return null;
+	const display = displayFor(active.name, active.args, active.display, active.argsText);
+	// While arguments stream in, a generic summary is raw JSON: name the tool alone.
+	const summary = display.kind === "generic" && !tools[active.toolCallId] ? "" : display.summary;
+	return (
+		<span className="min-w-0 truncate font-mono fs-code text-muted-foreground/70">
+			· {verb(display, active.name)} {summary}
+		</span>
 	);
 }
 
@@ -548,6 +597,7 @@ export function Transcript({ session }: { session: SessionState }) {
 	const idle = session.status === "idle" && !session.compacting;
 	const running = session.status === "running";
 
+	const processFold = useProcessFold();
 	const [openVersion, bumpOpen] = useReducer((n: number) => n + 1, 0);
 	const openChoices = useMemo(() => {
 		let map = turnOpenState.get(session.sessionId);
@@ -559,15 +609,24 @@ export function Transcript({ session }: { session: SessionState }) {
 	}, [session.sessionId]);
 	const rows = useMemo(() => {
 		void openVersion;
-		return transcriptRows(session.items, running, (turn) => {
-			// A call waiting for approval is never folded away.
-			if (turnCalls(turn).some((call) => pendingApprovals.has(call.toolCallId))) return true;
-			return openChoices.get(turn.id) ?? defaultOpen(turn);
-		});
-	}, [session.items, running, pendingApprovals, openChoices, openVersion]);
-	const toggleTurn = useCallback(
-		(turn: Turn, open: boolean) => {
-			openChoices.set(turn.id, !open);
+		const split = processFold === "collapsed";
+		return transcriptRows(
+			session.items,
+			running,
+			(turn, group, last) => {
+				// A call waiting for approval is never folded away.
+				if (groupCalls(group.segments).some((call) => pendingApprovals.has(call.toolCallId))) return true;
+				const choice = openChoices.get(group.id);
+				if (choice !== undefined) return choice;
+				// Split folds: only the last one may open by default (a turn that ended without an answer).
+				return last && defaultOpen(turn, processFold);
+			},
+			split,
+		);
+	}, [session.items, running, pendingApprovals, openChoices, openVersion, processFold]);
+	const toggleGroup = useCallback(
+		(groupId: string, open: boolean) => {
+			openChoices.set(groupId, !open);
 			bumpOpen();
 		},
 		[openChoices],
@@ -628,9 +687,12 @@ export function Transcript({ session }: { session: SessionState }) {
 				return (
 					<TurnHeader
 						turn={row.turn}
+						group={row.group}
+						first={row.first}
+						live={row.live}
 						open={row.open}
-						tools={rowTools(turnCalls(row.turn))}
-						onToggle={() => toggleTurn(row.turn, row.open)}
+						tools={rowTools(groupCalls(row.group))}
+						onToggle={() => toggleGroup(row.groupId, row.open)}
 					/>
 				);
 			case "segment":

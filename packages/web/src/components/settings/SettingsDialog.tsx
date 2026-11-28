@@ -41,6 +41,7 @@ import {
 	setFont,
 } from "@/lib/fonts";
 import { displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
+import { type ProcessFold, setProcessFold, useProcessFold } from "@/lib/process-fold";
 import { setThemePreference, type ThemePreference, useThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
@@ -422,6 +423,7 @@ function GeneralSection() {
 	const { t } = useTranslation();
 	const [preference, setPreference] = useState(getLanguagePreference);
 	const theme = useThemePreference();
+	const processFold = useProcessFold();
 	const scope = useSettings((s) => s.scope);
 	return (
 		<>
@@ -455,6 +457,21 @@ function GeneralSection() {
 								{ value: "dark", label: t("settings.general.themeDark") },
 							]}
 							onChange={setThemePreference}
+						/>
+					</Row>
+					<Row
+						label={t("settings.general.processFold")}
+						description={t(`settings.general.processFoldDescription.${processFold}`)}
+					>
+						<Choice<ProcessFold>
+							ariaLabel={t("settings.general.processFold")}
+							value={processFold}
+							options={[
+								{ value: "auto", label: t("settings.general.processFoldAuto") },
+								{ value: "expanded", label: t("settings.general.processFoldExpanded") },
+								{ value: "collapsed", label: t("settings.general.processFoldCollapsed") },
+							]}
+							onChange={setProcessFold}
 						/>
 					</Row>
 					{(["ui", "content", "code"] as const).map((role) => (
