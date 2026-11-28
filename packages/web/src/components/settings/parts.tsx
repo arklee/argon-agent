@@ -27,6 +27,38 @@ export function Row({ label, description, children }: { label: string; descripti
 	);
 }
 
+/** A compact select for a setting row. */
+export function Choice<T extends string>({
+	value,
+	options,
+	onChange,
+	placeholder,
+	ariaLabel,
+	disabled,
+}: {
+	value: T | undefined;
+	options: { value: T; label: string; disabled?: boolean }[];
+	onChange: (value: T) => void;
+	placeholder?: string;
+	ariaLabel?: string;
+	disabled?: boolean;
+}) {
+	return (
+		<Select value={value} onValueChange={(v) => onChange(v as T)} disabled={disabled}>
+			<SelectTrigger size="sm" className="min-w-40" aria-label={ariaLabel}>
+				<SelectValue placeholder={placeholder} />
+			</SelectTrigger>
+			<SelectContent position="popper" align="end">
+				{options.map((o) => (
+					<SelectItem key={o.value} value={o.value} disabled={o.disabled}>
+						{o.label}
+					</SelectItem>
+				))}
+			</SelectContent>
+		</Select>
+	);
+}
+
 export function Loading() {
 	const { t } = useTranslation();
 	return <p className="py-8 text-center text-sm text-muted-foreground">{t("common.loading")}</p>;

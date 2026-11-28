@@ -35,7 +35,6 @@ export type SettingsSection =
 	| "mcp"
 	| "permissions"
 	| "plugins"
-	| "tools"
 	| "resources"
 	| "extensions"
 	| "archived";
@@ -404,7 +403,7 @@ function notifyToolFailures(status: SearchToolsStatus): void {
 		id: "search-tools-failed",
 		description: t("settings.tools.failedToastDescription"),
 		duration: 15_000,
-		action: { label: t("settings.tools.openSettings"), onClick: () => openSettings("tools") },
+		action: { label: t("settings.tools.openSettings"), onClick: () => openSettings("resources") },
 	});
 }
 

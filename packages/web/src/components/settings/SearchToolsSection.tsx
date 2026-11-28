@@ -2,7 +2,7 @@ import type { SearchToolName, SearchToolStatus, SearchToolsStatus } from "@argon
 import { CircleAlert, CircleCheck, Download, Loader2, Upload } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DownloadProgress, Group, Loading, MirrorPicker } from "@/components/settings/parts";
+import { DownloadProgress, Group, MirrorPicker } from "@/components/settings/parts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/stores/settings";
@@ -177,14 +177,37 @@ function ManualGroup({ status, pending }: { status: SearchToolsStatus; pending: 
 }
 
 /**
- * rg and fd on the backend machine (pi's grep / find, @file completion). The desktop app ships them;
- * elsewhere the backend downloads pinned builds, or the user uploads one fetched on this computer.
+ * rg and fd on the backend machine (pi's grep / find, @file completion), shown on the Resources page. The
+ * desktop app ships them, so usually this is one "ready" line; elsewhere the backend downloads pinned
+ * builds, or the user uploads one fetched on this computer, and the full status and fixes appear.
  */
 export function SearchToolsSection() {
 	const { t } = useTranslation();
 	const status = useSettings((s) => s.tools);
-	if (!status) return <Loading />;
+	// Older backends have no tools.* methods: nothing to show.
+	if (!status) return null;
 	const pending = status.tools.filter((tool) => tool.state !== "ready");
+	if (pending.length === 0) {
+		return (
+			<Group title={t("settings.tools.title")}>
+				<div className="flex items-center justify-between gap-6 py-3">
+					<div className="min-w-0">
+						<div className="text-sm">{status.tools.map((tool) => NAMES[tool.tool]).join(" · ")}</div>
+						<div
+							className="mt-0.5 text-xs text-muted-foreground"
+							title={status.tools.map((tool) => `${tool.tool}: ${tool.path ?? tool.version}`).join("\n")}
+						>
+							{t("settings.tools.summary", { platform: status.platform })}
+						</div>
+					</div>
+					<Badge variant="secondary" className="shrink-0 gap-1">
+						<CircleCheck className="size-3 text-emerald-600 dark:text-emerald-400" />
+						{t("settings.tools.badgeReady")}
+					</Badge>
+				</div>
+			</Group>
+		);
+	}
 	return (
 		<>
 			<Group title={t("settings.tools.status", { platform: status.platform })}>
@@ -192,12 +215,12 @@ export function SearchToolsSection() {
 					<ToolRow key={tool.tool} tool={tool} />
 				))}
 			</Group>
-			{!status.supported && pending.length > 0 && (
-				<p className="text-xs text-muted-foreground">
+			{!status.supported && (
+				<p className="mb-6 text-xs text-muted-foreground">
 					{t("settings.tools.unsupported", { platform: status.platform })}
 				</p>
 			)}
-			{status.supported && pending.length > 0 && (
+			{status.supported && (
 				<>
 					<DownloadGroup status={status} pending={pending} />
 					<ManualGroup status={status} pending={pending} />

@@ -1,7 +1,6 @@
 import type { PermissionRule, PiSettings, ProjectPiSettings, ResourceSettings } from "@argon/shared";
 import {
 	Archive,
-	FileSearch,
 	FolderTree,
 	KeyRound,
 	type LucideIcon,
@@ -10,6 +9,7 @@ import {
 	RotateCcw,
 	ShieldCheck,
 	SlidersHorizontal,
+	Store,
 	Trash2,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -19,21 +19,20 @@ import { AccountsSection } from "@/components/settings/AccountsSection";
 import { ArchivedSection } from "@/components/settings/ArchivedSection";
 import { EnabledModelsEditor, enabledModelsSummary } from "@/components/settings/EnabledModelsEditor";
 import { ExtensionsSection } from "@/components/settings/ExtensionsSection";
+import { FontPicker } from "@/components/settings/FontPicker";
 import { McpSection } from "@/components/settings/McpSection";
 import { PluginsSection } from "@/components/settings/PluginsSection";
-import { Group, Loading, Row, ScopeSwitch } from "@/components/settings/parts";
+import { Choice, Group, Loading, Row, ScopeSwitch } from "@/components/settings/parts";
 import { SearchToolsSection } from "@/components/settings/SearchToolsSection";
 import { presetLabel } from "@/components/ToolPresetPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
 import {
 	clampFontSize,
 	DEFAULT_SIZE,
-	FONT_SUGGESTIONS,
 	type FontRole,
 	getFonts,
 	MAX_FONT_SIZE,
@@ -52,9 +51,8 @@ const SECTIONS: { id: SettingsSection; icon: LucideIcon }[] = [
 	{ id: "accounts", icon: KeyRound },
 	{ id: "mcp", icon: Plug },
 	{ id: "permissions", icon: ShieldCheck },
-	{ id: "plugins", icon: Puzzle },
+	{ id: "plugins", icon: Store },
 	{ id: "extensions", icon: Puzzle },
-	{ id: "tools", icon: FileSearch },
 	{ id: "resources", icon: FolderTree },
 	{ id: "archived", icon: Archive },
 ];
@@ -106,7 +104,6 @@ export function SettingsDialog() {
 						{section === "permissions" && <PermissionsSection />}
 						{section === "plugins" && <PluginsSection />}
 						{section === "extensions" && <ExtensionsSection />}
-						{section === "tools" && <SearchToolsSection />}
 						{section === "resources" && <ResourcesSection />}
 						{section === "archived" && <ArchivedSection />}
 					</div>
@@ -223,35 +220,6 @@ function Toggle({ settingKey }: { settingKey: BooleanSetting }) {
 	);
 }
 
-function Choice<T extends string>({
-	value,
-	options,
-	onChange,
-	placeholder,
-	ariaLabel,
-}: {
-	value: T | undefined;
-	options: { value: T; label: string; disabled?: boolean }[];
-	onChange: (value: T) => void;
-	placeholder?: string;
-	ariaLabel?: string;
-}) {
-	return (
-		<Select value={value} onValueChange={(v) => onChange(v as T)}>
-			<SelectTrigger size="sm" className="min-w-40" aria-label={ariaLabel}>
-				<SelectValue placeholder={placeholder} />
-			</SelectTrigger>
-			<SelectContent position="popper" align="end">
-				{options.map((o) => (
-					<SelectItem key={o.value} value={o.value} disabled={o.disabled}>
-						{o.label}
-					</SelectItem>
-				))}
-			</SelectContent>
-		</Select>
-	);
-}
-
 /** A text setting saved on blur or Enter. */
 function TextSetting({
 	value,
@@ -345,22 +313,14 @@ function FontInput({ role }: { role: FontRole }) {
 		setSizeDraft(String(size));
 		if (size !== pref.size) apply({ ...pref, size });
 	};
-	const listId = `font-suggestions-${role}`;
 	return (
 		<div className="flex items-center gap-1.5">
-			<Input
-				list={listId}
+			<FontPicker
+				role={role}
 				value={pref.family}
-				placeholder={t("settings.general.fontDefault")}
-				aria-label={t(`settings.general.font.${role}`)}
-				onChange={(e) => apply({ ...pref, family: e.target.value })}
-				className="h-8 w-44"
+				ariaLabel={t(`settings.general.font.${role}`)}
+				onChange={(family) => apply({ ...pref, family })}
 			/>
-			<datalist id={listId}>
-				{FONT_SUGGESTIONS[role].map((name) => (
-					<option key={name} value={name} />
-				))}
-			</datalist>
 			<Input
 				type="number"
 				inputMode="decimal"
@@ -431,7 +391,7 @@ function GeneralSection() {
 			{scope === "project" ? (
 				<ProjectScopeNote />
 			) : (
-				<Group>
+				<Group title={t("settings.general.appearance")}>
 					<Row label={t("settings.general.language")}>
 						<Choice<LanguagePreference>
 							ariaLabel={t("settings.general.language")}
@@ -539,7 +499,7 @@ function GeneralDefaults() {
 				</ScopedRow>
 			</Group>
 			{argon && (
-				<Group title={t("settings.general.tools")}>
+				<Group title={t("settings.general.toolsAndPermissions")}>
 					<OverrideRow
 						label={t("settings.general.toolPreset")}
 						description={t("settings.general.toolPresetDescription")}
@@ -554,34 +514,6 @@ function GeneralDefaults() {
 							}
 						/>
 					</OverrideRow>
-					{global && (
-						<Row
-							label={t("settings.general.gptApplyPatch")}
-							description={t("settings.general.gptApplyPatchDescription")}
-						>
-							<Switch
-								checked={argon.gptApplyPatch}
-								onCheckedChange={(gptApplyPatch) => void updateArgon({ gptApplyPatch })}
-							/>
-						</Row>
-					)}
-					{global && (
-						<Row
-							label={t("settings.general.openaiFeatures")}
-							description={t("settings.general.openaiFeaturesDescription")}
-						>
-							<Choice
-								value={argon.openaiFeatures}
-								ariaLabel={t("settings.general.openaiFeatures")}
-								options={[
-									{ value: "off", label: t("settings.general.openaiFeaturesOff") },
-									{ value: "on", label: t("settings.general.openaiFeaturesOn") },
-									{ value: "openai", label: t("settings.general.openaiFeaturesAuto") },
-								]}
-								onChange={(openaiFeatures) => void updateArgon({ openaiFeatures })}
-							/>
-						</Row>
-					)}
 					<OverrideRow
 						label={t("settings.permissions.defaultMode")}
 						description={
@@ -840,15 +772,24 @@ function ResourcesSection() {
 	const { t } = useTranslation();
 	const resources = useSettings((s) => s.settings?.resources);
 	const cwd = useSettings((s) => s.cwd);
-	if (!resources) return <Loading />;
+	// Search tools that need fixing come first (the failure toast opens this page); ready ones are one line at the end.
+	const toolsPending = useSettings((s) => s.tools?.tools.some((tool) => tool.state !== "ready") ?? false);
 	return (
 		<>
-			{resources.map((scope) => (
-				<ResourceScope key={scope.scope} scope={scope} />
-			))}
-			<p className="text-xs text-muted-foreground">
-				{cwd ? t("settings.resources.readOnly") : t("settings.resources.readOnlyAndOpenSession")}
-			</p>
+			{toolsPending && <SearchToolsSection />}
+			{resources ? (
+				<>
+					{resources.map((scope) => (
+						<ResourceScope key={scope.scope} scope={scope} />
+					))}
+					<p className="mb-6 text-xs text-muted-foreground">
+						{cwd ? t("settings.resources.readOnly") : t("settings.resources.readOnlyAndOpenSession")}
+					</p>
+				</>
+			) : (
+				<Loading />
+			)}
+			{!toolsPending && <SearchToolsSection />}
 		</>
 	);
 }

@@ -62,7 +62,7 @@
 ### pi 能力接入
 
 - [x] SDK 会话加载内置扩展：MCP、codemode、tool-search 按 CLI 的方式以 `builtin` + `replaceable` 注册（`backend/src/builtin-extensions.ts`），可用 `-builtin:<name>` 关闭；`bindExtensions` 之后（以及扩展触发 reload 后）再上报一次 diagnostics
-- [x] 全局扩展管理：设置 → 扩展，内置功能只能启停，用户扩展可启停或安全移除（保留源文件）；加载前策略覆盖项目设置，自动／延迟重载、失败重试和多客户端通知。权限与沙箱等宿主组件不开放普通开关，见 D24 和 [扩展管理](extensions.md)
+- [x] 全局扩展管理：设置 → 扩展，内置功能只能启停，用户扩展可启停或安全移除（保留源文件）；加载前策略覆盖项目设置，自动／延迟重载、失败重试和多客户端通知。权限与沙箱等宿主组件不开放普通开关，见 D24 和 [扩展管理](extensions.md)。Argon 自带扩展的设置跟着扩展走：apply-patch 行下有“GPT 模型使用 apply_patch”，三个 codex-* 扩展归入“OpenAI 专属”组，组头是三态设置；扩展停用时对应设置置灰。用户扩展的移除确认在该行内展开
 - [ ] 扩展管理后续：整包卸载及磁盘清理、图形化恢复已移除条目；当前“移除”仅持久禁止加载并隐藏，不删除文件
 - [x] MCP 状态面板：连接状态、工具列表、错误信息；重连、启用/禁用、exposure 切换、OAuth 登录/登出（pi 的 MCP 状态是私有的，靠 `patches/` 里的小补丁经 `pi.events` 暴露，见 decisions D9）
 - [ ] MCP 面板：用真实 OAuth 服务器走一遍登录（目前只验证了 stdio 服务器和失败状态）
@@ -97,7 +97,7 @@
 - [ ] 自动更新、代码签名和公证（macOS / Windows）
 - [x] GitHub Actions 自动发版：普通推送和 PR 只运行 CI；推送版本 tag 后通过 CI，再打包 Windows x64 / macOS arm64，通过冒烟后发布 Release，预发布 tag 标记为 prerelease（工作流已配置，待 GitHub 实跑验收）
 - [x] 安全：renderer 开启 sandbox + contextIsolation，禁用 Node integration；没有 preload API，外链交给系统浏览器
-- [x] 内置 rg / fd（D23）：打包时按平台取固定版本，backend 启动时校验后放进 `agent/bin`；设置页“搜索工具”显示状态，可换下载源或手动上传
+- [x] 内置 rg / fd（D23）：打包时按平台取固定版本，backend 启动时校验后放进 `agent/bin`；状态显示在设置 → 资源页底部（desktop 自带，通常只有一行“就绪”）；缺失或下载失败时展开到页首，可换下载源或手动上传
 
 ## 沙箱（权限控制的主要手段）
 
