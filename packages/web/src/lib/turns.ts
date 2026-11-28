@@ -133,9 +133,19 @@ export function transcriptRows(
 		if (splitAtText) pushSplit(rows, turn, isOpen);
 		else if (turn.process.length > 0)
 			pushGroup(rows, turn, { id: turn.id, segments: turn.process, live: turn.live }, true, true, isOpen);
-		rows.push({ kind: "answer", key: `answer-${turn.id}`, turn });
+		if (hasAnswerRow(turn)) rows.push({ kind: "answer", key: `answer-${turn.id}`, turn });
 	}
 	return rows;
+}
+
+/**
+ * A running turn gets its answer row only once there is something to show: an empty row would push the
+ * live status line down a step the moment the model's reply opens.
+ */
+function hasAnswerRow(turn: Turn): boolean {
+	if (turn.answer || !turn.live) return true;
+	const last = turn.items.at(-1);
+	return !!last && (!!last.errorMessage || last.stopReason === "error" || last.stopReason === "aborted");
 }
 
 function pushGroup(
@@ -178,8 +188,9 @@ function pushSplit(rows: TranscriptRow[], turn: Turn, isOpen: IsOpen): void {
 			return;
 		}
 		const last = i === lastGroup;
-		// Still running: the last group, unless the answer (or a text) has started after it.
-		const live = turn.live && i === parts.length - 1 && !turn.answer;
+		// The last group speaks for the running turn (its header carries the live status), even while
+		// a text after it streams.
+		const live = turn.live && last;
 		const only = part[0];
 		// A lone finished thought needs no fold of its own: its block already folds.
 		if (part.length === 1 && only?.type === "thinking" && !live) {

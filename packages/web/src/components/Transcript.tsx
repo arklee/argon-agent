@@ -23,10 +23,10 @@ import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
 import { RenderBoundary } from "@/components/RenderBoundary";
 import { ToolRun } from "@/components/ToolRun";
-import { useCountLabels, useToolVerb } from "@/components/ToolSummary";
+import { useCountLabels } from "@/components/ToolSummary";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { type Activity, liveActivity, turnStartedAt } from "@/lib/activity";
+import { type Activity, callKind, liveActivity, turnStartedAt } from "@/lib/activity";
 import { basename, formatElapsed, formatNumber } from "@/lib/format";
 import { useProcessFold } from "@/lib/process-fold";
 import {
@@ -44,7 +44,6 @@ import {
 } from "@/lib/turns";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
-import { displayFor } from "@/tools";
 
 type Tools = SessionState["tools"];
 
@@ -228,8 +227,9 @@ function groupCalls(group: readonly ProcessSegment[]): ToolCallBlock[] {
 }
 
 /**
- * The fold line above a turn's process (or one group of it): its counts while working (the live
- * activity line below the turn says what is happening), the turn's time and counts afterwards.
+ * The fold line above a turn's process (or one group of it). The running turn's last group carries the
+ * live status (what the agent is doing, for how long), so the indicator sits at the top of the work and
+ * steps grow below it; afterwards the line shows the turn's time and counts.
  */
 function TurnHeader({
 	turn,
@@ -238,6 +238,8 @@ function TurnHeader({
 	live,
 	open,
 	tools,
+	activity,
+	startedAt,
 	onToggle,
 }: {
 	turn: Turn;
@@ -246,6 +248,9 @@ function TurnHeader({
 	live: boolean;
 	open: boolean;
 	tools: Tools;
+	/** The live status, on the running turn's last group (absent while a card or banner speaks instead). */
+	activity?: Activity;
+	startedAt?: number;
 	onToggle: () => void;
 }) {
 	const { t } = useTranslation();
@@ -268,29 +273,43 @@ function TurnHeader({
 			{labels.join(" · ")}
 		</span>
 	);
+	const chevron = <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />;
+	if (live && activity)
+		return (
+			<button
+				type="button"
+				onClick={onToggle}
+				aria-expanded={open}
+				className={cn(STATUS_LINE, "group/head text-left hover:text-foreground")}
+			>
+				<LiveStatus activity={activity} startedAt={startedAt} />
+				{chevron}
+			</button>
+		);
 	return (
 		<button
 			type="button"
 			onClick={onToggle}
 			aria-expanded={open}
-			className="group/head flex max-w-full min-w-0 items-center gap-2 py-0.5 text-left text-muted-foreground hover:text-foreground"
+			className={cn(STATUS_LINE, "group/head text-left hover:text-foreground")}
 		>
 			{title && <span className="shrink-0">{title}</span>}
 			{counts}
 			{!title && !counts && open && <span className="shrink-0">{t("chat.worked")}</span>}
-			<ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+			{chevron}
 		</button>
 	);
 }
 
+/** One line of the turn's status: the live group header and the status row share it, so they line up. */
+const STATUS_LINE = "flex max-w-full min-w-0 items-center gap-2 py-0.5 text-muted-foreground";
+
 /**
- * The one live status line under a running turn: what the agent is doing and for how long. It stays
- * put for the whole turn and only changes its words, so model calls, tools and thoughts never make
- * the indicator blink in and out.
+ * What the agent is doing and for how long, in plain words (never raw commands or arguments: the step
+ * rows below show those). It only changes its words while the turn runs.
  */
-function ActivityLine({ activity, startedAt }: { activity: Activity; startedAt: number | undefined }) {
+function LiveStatus({ activity, startedAt }: { activity: Activity; startedAt: number | undefined }) {
 	const { t } = useTranslation();
-	const verb = useToolVerb();
 	const now = useTicker(startedAt !== undefined);
 	let label: React.ReactNode;
 	switch (activity.kind) {
@@ -308,30 +327,24 @@ function ActivityLine({ activity, startedAt }: { activity: Activity; startedAt: 
 				</>
 			);
 			break;
-		case "responding":
-			label = t("chat.responding");
-			break;
 		case "preparing":
 		case "tool": {
-			const { call } = activity;
-			const display = displayFor(call.name, call.args, call.display, call.argsText);
-			label = (
-				<span className="font-mono fs-code">
-					{verb(display, call.name)} {display.summary}
-				</span>
-			);
+			const kind = callKind(activity.call, activity.kind === "tool");
+			label = kind ? t(`chat.activity.${kind}`) : t("chat.activity.tool", { tool: activity.call.name });
 			break;
 		}
 	}
 	const elapsed = startedAt !== undefined ? Math.max(0, now - startedAt) : undefined;
 	return (
-		<div role="status" className="flex min-w-0 items-center gap-2 pt-1 text-muted-foreground">
+		<>
 			<Loader2 className="size-3.5 shrink-0 animate-spin" />
-			<span className="min-w-0 truncate">{label}</span>
+			<span role="status" className="min-w-0 truncate">
+				{label}
+			</span>
 			{elapsed !== undefined && elapsed >= 1000 && (
-				<span className="shrink-0 tabular-nums text-muted-foreground/70">· {formatElapsed(elapsed)}</span>
+				<span className="shrink-0 tabular-nums text-muted-foreground/70">{formatElapsed(elapsed)}</span>
 			)}
-		</div>
+		</>
 	);
 }
 
@@ -693,7 +706,10 @@ export function Transcript({ session }: { session: SessionState }) {
 
 	const activity = liveActivity(session, sendingItem !== undefined);
 	const startedAt = sendingItem ? sendingItem.timestamp : running ? turnStartedAt(session) : undefined;
-	const showStatus = !!session.retry || activity !== undefined;
+	// The running turn's last group header carries the status; the status row stands in until there is one
+	// (and for the retry banner). Both sit where the next row goes, so the indicator never jumps.
+	const liveHeader = rows.some((row) => row.kind === "turnHeader" && row.live);
+	const showStatus = !!session.retry || (activity !== undefined && !liveHeader);
 	const count = rows.length + Number(showStatus);
 	const list = useRef<VirtualizerHandle>(null);
 	const pinned = useRef(true);
@@ -741,6 +757,8 @@ export function Transcript({ session }: { session: SessionState }) {
 						live={row.live}
 						open={row.open}
 						tools={rowTools(groupCalls(row.group))}
+						activity={row.live ? activity : undefined}
+						startedAt={startedAt}
 						onToggle={() => toggleGroup(row.groupId, row.open)}
 					/>
 				);
@@ -834,7 +852,9 @@ export function Transcript({ session }: { session: SessionState }) {
 									/>
 								</div>
 							) : activity ? (
-								<ActivityLine activity={activity} startedAt={startedAt} />
+								<div className={STATUS_LINE}>
+									<LiveStatus activity={activity} startedAt={startedAt} />
+								</div>
 							) : null}
 						</div>
 					);

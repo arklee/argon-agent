@@ -98,6 +98,27 @@ describe("buildTurn", () => {
 		expect(rows.flatMap((r) => (r.kind === "turnHeader" ? [r.live] : []))).toEqual([false, true]);
 	});
 
+	it("a running turn gets no answer row until the answer shows something", () => {
+		const empty = transcriptRows([user, assistant("a1", [], { streaming: true })], true, () => true);
+		expect(empty.map((r) => r.kind)).toEqual(["item"]);
+		const failed = transcriptRows(
+			[user, assistant("a1", [], { errorMessage: "boom", stopReason: "error" })],
+			true,
+			() => true,
+		);
+		expect(failed.map((r) => r.kind)).toEqual(["item", "answer"]);
+	});
+
+	it("the last split fold stays live while a text after it streams", () => {
+		const rows = transcriptRows(
+			[user, assistant("a1", [call("1"), text("Next"), call("2"), text("Done")], { streaming: true })],
+			true,
+			() => false,
+			true,
+		);
+		expect(rows.flatMap((r) => (r.kind === "turnHeader" ? [r.live] : []))).toEqual([false, true]);
+	});
+
 	it("a plain reply has no process rows", () => {
 		const rows = transcriptRows([user, assistant("a1", [text("Hello")])], false, () => false);
 		expect(rows.map((r) => r.kind)).toEqual(["item", "answer"]);

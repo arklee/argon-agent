@@ -1,7 +1,7 @@
 import { type AssistantBlock, createEmptySessionState, type SessionState, type TranscriptItem } from "@argon/shared";
 import { describe, expect, it } from "vitest";
 import { partialArgsSummary } from "@/tools/registry";
-import { liveActivity, thoughtTitle, turnStartedAt } from "./activity";
+import { callKind, commandKind, liveActivity, thoughtTitle, turnStartedAt } from "./activity";
 
 const user: TranscriptItem = { kind: "user", id: "u", text: "hi", imageCount: 0, timestamp: 500 };
 const assistant = (blocks: AssistantBlock[], streaming: boolean): TranscriptItem => ({
@@ -38,10 +38,11 @@ describe("liveActivity", () => {
 		});
 	});
 
-	it("names thinking, responding and a call being written", () => {
+	it("names thinking and a call being written, and goes quiet while the reply's text streams", () => {
 		const thought = assistant([{ type: "thinking", text: "**Reading files**\n\nLooking around" }], true);
 		expect(liveActivity(running([user, thought]))).toEqual({ kind: "thinking", title: "Reading files" });
-		expect(liveActivity(running([user, assistant([{ type: "text", text: "Sure" }], true)]))?.kind).toBe("responding");
+		expect(liveActivity(running([user, assistant([{ type: "text", text: "Sure" }], true)]))).toBeUndefined();
+		expect(liveActivity(running([user, assistant([{ type: "text", text: "Done" }], false)]))).toBeUndefined();
 		expect(liveActivity(running([user, assistant([call], true)]))).toEqual({ kind: "preparing", call });
 	});
 
@@ -94,5 +95,51 @@ describe("partialArgsSummary", () => {
 		expect(partialArgsSummary('{"path":"src/a.ts')).toBe("src/a.ts");
 		expect(partialArgsSummary('{"command":"echo \\"hi\\" \\')).toBe('echo "hi"');
 		expect(partialArgsSummary('{"command":"a\\nb"}')).toBe("a b");
+	});
+});
+
+describe("callKind", () => {
+	it("names built-in tools before their display arrives, and nothing for other tools", () => {
+		expect(callKind({ type: "toolCall", toolCallId: "1", name: "bash", args: undefined })).toBe("shell");
+		expect(callKind({ type: "toolCall", toolCallId: "2", name: "web_run", args: undefined })).toBeUndefined();
+		expect(
+			callKind({
+				type: "toolCall",
+				toolCallId: "3",
+				name: "custom",
+				args: {},
+				display: { kind: "file_read", title: "custom", path: "a" },
+			}),
+		).toBe("file_read");
+	});
+});
+
+describe("commandKind", () => {
+	it("reads plain commands, through npx and leading cd steps", () => {
+		expect(commandKind("npm test")).toBe("test");
+		expect(commandKind("npm run typecheck")).toBe("check");
+		expect(commandKind("cd /repo && npx -y vitest run")).toBe("test");
+		expect(commandKind("pnpm install")).toBe("install");
+		expect(commandKind("git diff --stat")).toBe("changes");
+		expect(commandKind("git commit -m 'fix it'")).toBeUndefined();
+		expect(commandKind("git commit -m 'fix'")).toBe("commit");
+		expect(commandKind("tsc -b")).toBe("build");
+		expect(commandKind("cargo clippy")).toBe("check");
+	});
+
+	it("leaves anything it cannot read plainly as a generic command", () => {
+		expect(commandKind("npm test | tail")).toBeUndefined();
+		expect(commandKind("npm test > out.txt")).toBeUndefined();
+		expect(commandKind("npm run $SCRIPT")).toBeUndefined();
+		expect(commandKind("npm test && npm run build")).toBeUndefined();
+		expect(commandKind("rg -n foo src")).toBeUndefined();
+		expect(commandKind("npm run deploy")).toBeUndefined();
+	});
+
+	it("classifies a shell call only once it runs", () => {
+		const shell: AssistantBlock = { type: "toolCall", toolCallId: "1", name: "bash", args: { command: "npm test" } };
+		if (shell.type !== "toolCall") throw new Error();
+		expect(callKind(shell)).toBe("test");
+		expect(callKind(shell, false)).toBe("shell");
 	});
 });
