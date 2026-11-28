@@ -38,5 +38,8 @@
 		"@biomejs/biome": "^2.4.0",
 		"patch-package": "^8.0.1",
 		"typescript": "^5.9.0"
+	},
+	"allowScripts": {
+		"electron@45.5.0": true
 	}
 }
