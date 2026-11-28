@@ -16,6 +16,7 @@ import {
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { type CacheSnapshot, Virtualizer, type VirtualizerHandle } from "virtua";
+import { Collapse } from "@/components/Collapse";
 import { DiffStat, DiffView, diffsStats } from "@/components/DiffView";
 import { OpenFileButton, openFileInPanel } from "@/components/FileLink";
 import { SessionImages } from "@/components/Images";
@@ -77,11 +78,12 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }
 					)}
 				/>
 			</button>
-			{open && (
-				<div className="mt-1 mb-1.5 ml-1.5 border-l pl-3.5 text-[0.95em] whitespace-pre-wrap text-muted-foreground">
-					{text}
-				</div>
-			)}
+			<Collapse
+				open={open}
+				className="mt-1 mb-1.5 ml-1.5 border-l pl-3.5 text-[0.95em] whitespace-pre-wrap text-muted-foreground"
+			>
+				{text}
+			</Collapse>
 		</div>
 	);
 }
@@ -110,7 +112,11 @@ function Notice({ item }: { item: Extract<TranscriptItem, { kind: "notice" }> })
 				<span className="min-w-0 flex-1 truncate font-medium">{title}</span>
 				{text && <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />}
 			</button>
-			{open && text && <div className="mt-2 text-[0.93em] whitespace-pre-wrap">{text}</div>}
+			{text && (
+				<Collapse open={open} className="pt-2 text-[0.93em] whitespace-pre-wrap">
+					{text}
+				</Collapse>
+			)}
 		</div>
 	);
 }
@@ -673,9 +679,17 @@ export function Transcript({ session }: { session: SessionState }) {
 			split,
 		);
 	}, [items, running, pendingApprovals, openChoices, openVersion, processFold]);
+	// The fold the user just opened: its rows ease in (rows mounting as the list scrolls do not).
+	const [justOpened, setJustOpened] = useState<string>();
+	useEffect(() => {
+		if (justOpened === undefined) return;
+		const id = window.setTimeout(() => setJustOpened(undefined), 300);
+		return () => window.clearTimeout(id);
+	}, [justOpened]);
 	const toggleGroup = useCallback(
 		(groupId: string, open: boolean) => {
 			openChoices.set(groupId, !open);
+			setJustOpened(open ? undefined : groupId);
 			bumpOpen();
 		},
 		[openChoices],
@@ -830,7 +844,16 @@ export function Transcript({ session }: { session: SessionState }) {
 							)}
 						>
 							{row?.kind === "segment" ? (
-								<div className="ml-1.5 border-l pl-3.5">{renderRow(row)}</div>
+								<div
+									className={cn(
+										"ml-1.5 border-l pl-3.5",
+										row.groupId !== undefined &&
+											row.groupId === justOpened &&
+											"animate-in duration-200 ease-out fade-in slide-in-from-top-1 motion-reduce:animate-none",
+									)}
+								>
+									{renderRow(row)}
+								</div>
 							) : row ? (
 								renderRow(row)
 							) : session.retry ? (

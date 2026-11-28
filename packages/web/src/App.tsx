@@ -4,7 +4,7 @@ import { AddProjectDialog } from "@/components/AddProjectDialog";
 import { ChatView } from "@/components/ChatView";
 import { ConnectScreen } from "@/components/ConnectScreen";
 import { OfflineBanner } from "@/components/OfflineBanner";
-import { Sidebar } from "@/components/Sidebar";
+import { Sidebar, SidebarToggle } from "@/components/Sidebar";
 import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
@@ -66,6 +66,7 @@ function Shell() {
 			<KeyboardShortcuts />
 			<SettingsDialog />
 			<AddProjectDialog />
+			<SidebarToggle />
 			<Sidebar />
 			<main className="window-workspace flex min-w-0 flex-1 flex-col">
 				{(connection?.status === "disconnected" || (connection?.status === "connecting" && connection.attempt > 0)) && (
@@ -93,6 +94,7 @@ function KeyboardShortcuts() {
 					{[
 						[t("common.newSession"), shortcutLabels.newSession],
 						[t("shortcuts.switchSession"), shortcutLabels.switchSession],
+						[t("shortcuts.toggleSidebar"), shortcutLabels.toggleSidebar],
 						[t("shortcuts.stop"), "Esc"],
 						[t("shortcuts.focus"), shortcutLabels.focus],
 						[t("settings.title"), shortcutLabels.settings],

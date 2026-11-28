@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { groupByProject, visibleProjects } from "@/lib/session-order";
 import { useApp } from "@/stores/app";
 import { openSettings } from "@/stores/settings";
+import { useSidebar } from "@/stores/sidebar";
 
 const platform =
 	(navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.platform;
@@ -11,6 +12,7 @@ export const shortcutLabels = {
 	switchSession: mac ? "⌘⌥↑ / ↓" : "Ctrl+Alt+↑ / ↓",
 	focus: mac ? "⌘⇧L" : "Ctrl+Shift+L",
 	settings: mac ? "⌘," : "Ctrl+,",
+	toggleSidebar: mac ? "⌘B" : "Ctrl+B",
 };
 
 export function useGlobalShortcuts() {
@@ -32,6 +34,9 @@ export function useGlobalShortcuts() {
 			if (mod && !event.shiftKey && !event.altKey && event.key === "," && state.environment) {
 				event.preventDefault();
 				openSettings();
+			} else if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "b") {
+				event.preventDefault();
+				useSidebar.getState().toggle();
 			} else if (mod && event.shiftKey && !event.altKey) {
 				if (event.key.toLowerCase() === "o" && state.environment) {
 					event.preventDefault();

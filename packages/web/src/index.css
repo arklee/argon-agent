@@ -288,8 +288,37 @@ body {
 :root[data-window-chrome] :is(.window-sidebar-header, .window-chat-header) :is(button, a, input, [role="button"]) {
 	-webkit-app-region: no-drag;
 }
-:root[data-window-chrome="darwin"] .window-sidebar-header {
-	padding-left: 88px;
+/*
+ * The sidebar toggle stays put (after the traffic lights on macOS) whether the sidebar is shown or
+ * not; the sidebar header and, with the sidebar hidden, the chat header leave room for it.
+ */
+:root {
+	--sidebar-toggle-left: 10px;
+	--sidebar-toggle-space: calc(var(--sidebar-toggle-left) + 28px + 6px);
+}
+:root[data-window-chrome="darwin"] {
+	--sidebar-toggle-left: 74px;
+}
+.sidebar-toggle {
+	position: fixed;
+	top: 10px;
+	left: var(--sidebar-toggle-left);
+	z-index: 40;
+	-webkit-app-region: no-drag;
+}
+.window-sidebar-header {
+	padding-left: var(--sidebar-toggle-space);
+}
+.window-chat-header {
+	transition: padding-left 200ms ease-out;
+}
+:root[data-sidebar-collapsed] .window-chat-header {
+	padding-left: calc(var(--sidebar-toggle-space) + 4px);
+}
+@media (prefers-reduced-motion: reduce) {
+	.window-chat-header {
+		transition: none;
+	}
 }
 :root[data-window-chrome="win32"] {
 	--window-controls-space: max(

@@ -2,6 +2,7 @@ import type { ToolCallState } from "@argon/shared";
 import { ChevronRight, Layers } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Collapse } from "@/components/Collapse";
 import { callState, isCardCall, ToolCallCard } from "@/components/ToolCallCard";
 import { CallIcon, useCountLabels, useToolVerb } from "@/components/ToolSummary";
 import { flattenCalls, summarize, type ToolCallBlock } from "@/lib/turns";
@@ -104,13 +105,11 @@ function ToolGroup({
 					)}
 				/>
 			</button>
-			{open && (
-				<div className="mt-0.5 ml-1.5 border-l pl-3.5">
-					{calls.map((call) => (
-						<Call key={call.toolCallId} call={call} tools={tools} pending={pending} nested />
-					))}
-				</div>
-			)}
+			<Collapse open={open} className="mt-0.5 ml-1.5 border-l pl-3.5">
+				{calls.map((call) => (
+					<Call key={call.toolCallId} call={call} tools={tools} pending={pending} nested />
+				))}
+			</Collapse>
 		</div>
 	);
 }

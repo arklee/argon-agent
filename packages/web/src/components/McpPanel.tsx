@@ -157,7 +157,7 @@ function ServerRow({ server }: { server: McpServerStatus }) {
 						<ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
 						{t("mcp.tools")}
 					</CollapsibleTrigger>
-					<CollapsibleContent>
+					<CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down motion-reduce:animate-none">
 						<ul className="mt-1 space-y-1">
 							{server.tools.map((tool) => (
 								<li key={tool.name} className="text-xs">

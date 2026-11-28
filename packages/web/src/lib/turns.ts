@@ -48,7 +48,8 @@ export type TranscriptRow =
 			live: boolean;
 			open: boolean;
 	  }
-	| { kind: "segment"; key: string; turn: Turn; segment: ProcessSegment }
+	/** `groupId`: the fold it opens under, if any. */
+	| { kind: "segment"; key: string; turn: Turn; segment: ProcessSegment; groupId?: string }
 	| { kind: "answer"; key: string; turn: Turn };
 
 function isToolCall(block: AssistantBlock): block is ToolCallBlock {
@@ -168,7 +169,8 @@ function pushGroup(
 		open,
 	});
 	if (open)
-		for (const segment of group.segments) rows.push({ kind: "segment", key: `seg-${segment.key}`, turn, segment });
+		for (const segment of group.segments)
+			rows.push({ kind: "segment", key: `seg-${segment.key}`, turn, segment, groupId: group.id });
 }
 
 function pushSplit(rows: TranscriptRow[], turn: Turn, isOpen: IsOpen): void {

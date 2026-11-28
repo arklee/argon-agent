@@ -390,7 +390,7 @@ export function ProviderEditor({
 							<ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
 							{t("settings.providerEditor.advanced")}
 						</CollapsibleTrigger>
-						<CollapsibleContent className="space-y-4 pt-3">
+						<CollapsibleContent className="-mx-1 space-y-4 px-1 pt-3 overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down motion-reduce:animate-none">
 							{!builtin && (
 								<div className="flex items-center justify-between gap-6">
 									<div>

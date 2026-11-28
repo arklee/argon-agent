@@ -2,6 +2,7 @@ import type { ToolCallState, ToolDisplay } from "@argon/shared";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Collapse } from "@/components/Collapse";
 import { DiffStat } from "@/components/DiffView";
 import { OpenFileButton } from "@/components/FileLink";
 import { CallIcon, type CallState, useCountLabels, useToolVerb } from "@/components/ToolSummary";
@@ -151,16 +152,18 @@ export function ToolCallCard(props: ToolCallProps) {
 	) : (
 		toggle
 	);
-	const body = open && (
-		<div
-			className={cn(
-				"space-y-2",
-				card ? "border-t bg-muted/30 px-3 py-2" : "mt-1 mb-1.5 ml-5.5 rounded-lg border bg-muted/30 px-3 py-2",
-			)}
-		>
-			<renderer.Body view={view} />
-			{!renderer.placesChildren && renderChildren()}
-		</div>
+	const body = (
+		<Collapse open={open}>
+			<div
+				className={cn(
+					"space-y-2",
+					card ? "border-t bg-muted/30 px-3 py-2" : "mt-1 mb-1.5 ml-5.5 rounded-lg border bg-muted/30 px-3 py-2",
+				)}
+			>
+				<renderer.Body view={view} />
+				{!renderer.placesChildren && renderChildren()}
+			</div>
+		</Collapse>
 	);
 
 	if (!card)
