@@ -1,8 +1,9 @@
 import type { SessionSummary } from "@argon/shared";
 import { Archive, FolderOpen, FolderPlus, PanelLeft, Pin, Plus, Server, Settings, SquarePen } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Collapse } from "@/components/Collapse";
+import { ResizeHandle } from "@/components/ResizeHandle";
 import { SessionContextMenu, SessionNameInput, useSessionActions } from "@/components/SessionMenu";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,72 +55,37 @@ export function SidebarToggle() {
 }
 
 /** The sidebar's right edge: drag to resize (far enough left hides it), double-click for the default width. */
-function ResizeHandle() {
+function SidebarResizeHandle() {
 	const { t } = useTranslation();
 	const width = useSidebar((s) => s.width);
 	const collapsed = useSidebar((s) => s.collapsed);
-	const resizing = useSidebar((s) => s.resizing);
 	const { setWidth, setCollapsed, setResizing } = useSidebar.getState();
+	// The width when the drag started, restored when the drag hides the sidebar.
+	const before = useRef(width);
 	return (
-		<div className={cn("relative z-20 w-0 shrink-0", collapsed && !resizing && "pointer-events-none")}>
-			{/* biome-ignore lint/a11y/useSemanticElements: a focusable separator is the ARIA window splitter pattern. */}
-			<div
-				role="separator"
-				aria-orientation="vertical"
-				aria-label={t("sidebar.resize")}
-				aria-valuemin={SIDEBAR_MIN_WIDTH}
-				aria-valuenow={collapsed ? 0 : width}
-				tabIndex={collapsed ? -1 : 0}
-				className={cn(
-					"absolute inset-y-0 -left-1 w-2 cursor-col-resize outline-none",
-					"after:absolute after:inset-y-0 after:left-[3px] after:w-0.5 after:transition-colors hover:after:bg-ring/50 focus-visible:after:bg-ring",
-					resizing && "after:bg-ring/50",
-				)}
-				onDoubleClick={() => setWidth(SIDEBAR_DEFAULT_WIDTH)}
-				onKeyDown={(event) => {
-					if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-					event.preventDefault();
-					setWidth(width + (event.key === "ArrowRight" ? 16 : -16));
-				}}
-				onPointerDown={(event) => {
-					if (event.button !== 0) return;
-					event.preventDefault();
-					const handle = event.currentTarget;
-					handle.setPointerCapture(event.pointerId);
-					const startX = event.clientX;
-					const startWidth = collapsed ? 0 : width;
-					setResizing(true);
-					const body = document.body.style;
-					const restore = { cursor: body.cursor, userSelect: body.userSelect };
-					body.cursor = "col-resize";
-					body.userSelect = "none";
-					const onMove = (move: PointerEvent) => {
-						const next = startWidth + move.clientX - startX;
-						if (next < COLLAPSE_DRAG_THRESHOLD) {
-							if (!useSidebar.getState().collapsed) {
-								// Reopening restores the width from before this drag.
-								if (startWidth > 0) setWidth(startWidth);
-								setCollapsed(true);
-							}
-							return;
-						}
-						if (useSidebar.getState().collapsed) setCollapsed(false);
-						setWidth(next);
-					};
-					const onEnd = () => {
-						handle.removeEventListener("pointermove", onMove);
-						handle.removeEventListener("pointerup", onEnd);
-						handle.removeEventListener("pointercancel", onEnd);
-						body.cursor = restore.cursor;
-						body.userSelect = restore.userSelect;
-						setResizing(false);
-					};
-					handle.addEventListener("pointermove", onMove);
-					handle.addEventListener("pointerup", onEnd);
-					handle.addEventListener("pointercancel", onEnd);
-				}}
-			/>
-		</div>
+		<ResizeHandle
+			label={t("sidebar.resize")}
+			width={width}
+			min={SIDEBAR_MIN_WIDTH}
+			direction={1}
+			disabled={collapsed}
+			onResizingChange={(resizing) => {
+				if (resizing) before.current = useSidebar.getState().width;
+				setResizing(resizing);
+			}}
+			onReset={() => setWidth(SIDEBAR_DEFAULT_WIDTH)}
+			onResize={(next) => {
+				if (next < COLLAPSE_DRAG_THRESHOLD) {
+					if (!useSidebar.getState().collapsed) {
+						setWidth(before.current);
+						setCollapsed(true);
+					}
+					return;
+				}
+				if (useSidebar.getState().collapsed) setCollapsed(false);
+				setWidth(next);
+			}}
+		/>
 	);
 }
 
@@ -443,7 +409,7 @@ export function Sidebar() {
 					</div>
 				</div>
 			</aside>
-			<ResizeHandle />
+			<SidebarResizeHandle />
 		</>
 	);
 }

@@ -187,6 +187,7 @@ export const en = {
 		notFound: "File not found",
 		open: "Open file",
 		panel: "File",
+		resize: "Resize file panel",
 		pathCopied: "Path copied",
 		preview: "Preview",
 		refresh: "Refresh",

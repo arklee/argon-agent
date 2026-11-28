@@ -188,6 +188,7 @@ export const zhCN = {
 		notFound: "文件不存在",
 		open: "打开文件",
 		panel: "文件",
+		resize: "调整文件面板宽度",
 		pathCopied: "已复制路径",
 		preview: "预览",
 		refresh: "刷新",

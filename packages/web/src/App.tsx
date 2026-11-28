@@ -66,7 +66,6 @@ function Shell() {
 			<KeyboardShortcuts />
 			<SettingsDialog />
 			<AddProjectDialog />
-			<SidebarToggle />
 			<Sidebar />
 			<main className="window-workspace flex min-w-0 flex-1 flex-col">
 				{(connection?.status === "disconnected" || (connection?.status === "connecting" && connection.attempt > 0)) && (
@@ -79,6 +78,8 @@ function Shell() {
 				)}
 				{active ? <ChatView session={active} /> : <Welcome />}
 			</main>
+			{/* Last in the DOM: Electron resolves app-region overlaps in document order, not by z-index. */}
+			<SidebarToggle />
 		</div>
 	);
 }

@@ -304,6 +304,8 @@ body {
 	top: 10px;
 	left: var(--sidebar-toggle-left);
 	z-index: 40;
+}
+:root[data-window-chrome] :is(.sidebar-toggle, .window-no-drag) {
 	-webkit-app-region: no-drag;
 }
 .window-sidebar-header {

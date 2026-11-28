@@ -7,12 +7,13 @@ import { toast } from "sonner";
 import { VList, type VListHandle } from "virtua";
 import { DiffStat, DiffView } from "@/components/DiffView";
 import { Markdown } from "@/components/Markdown";
+import { ResizeHandle } from "@/components/ResizeHandle";
 import { Button } from "@/components/ui/button";
 import { formatBytes, isMarkdownPath, languageFor } from "@/lib/file-links";
 import { basename, displayPath } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getClient, useApp } from "@/stores/app";
-import { type OpenFile, useFilePanel } from "@/stores/file-panel";
+import { FILE_PANEL_CHAT_MIN_WIDTH, FILE_PANEL_MIN_WIDTH, type OpenFile, useFilePanel } from "@/stores/file-panel";
 
 /** Above this many characters the file is shown without highlighting (Shiki runs on the main thread). */
 const MAX_HIGHLIGHT_CHARS = 300_000;
@@ -31,6 +32,9 @@ function FilePanelContent({ file }: { file: OpenFile }) {
 	const { t } = useTranslation();
 	const homeDir = useApp((s) => s.environment?.homeDir);
 	const close = useFilePanel((s) => s.close);
+	const width = useFilePanel((s) => s.width);
+	const setWidth = useFilePanel((s) => s.setWidth);
+	const panel = useRef<HTMLElement>(null);
 	const [load, setLoad] = useState<Load>({ status: "loading" });
 	const [tab, setTab] = useState<"file" | "changes">("file");
 	const [preview, setPreview] = useState(true);
@@ -65,114 +69,142 @@ function FilePanelContent({ file }: { file: OpenFile }) {
 		);
 
 	return (
-		<aside
-			aria-label={t("files.panel")}
-			className="flex w-[min(44rem,50%)] min-w-80 shrink-0 flex-col border-l bg-background"
-			onKeyDown={(e) => {
-				if (e.key === "Escape" && !e.nativeEvent.isComposing) close();
-			}}
-		>
-			<div className="flex h-10 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
-				<FileText className="size-4 shrink-0 text-muted-foreground" />
-				<div className="flex min-w-0 flex-1 items-baseline gap-2" title={path}>
-					<span className="shrink-0 truncate text-sm font-medium">{basename(path)}</span>
-					<span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{displayPath(path, homeDir)}</span>
-				</div>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("files.refresh")}
-					title={t("files.refresh")}
-					onClick={() => void fetchFile()}
-				>
-					<RotateCw />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("files.copyPath")}
-					title={t("files.copyPath")}
-					onClick={copyPath}
-				>
-					<Copy />
-				</Button>
-				<Button variant="ghost" size="icon-xs" aria-label={t("common.close")} title={t("common.close")} onClick={close}>
-					<X />
-				</Button>
-			</div>
-			{(diffs || markdown || content?.truncated) && (
-				<div className="flex shrink-0 items-center gap-1 border-b px-2 py-1 text-xs">
-					{diffs && (
-						<>
-							<TabButton active={tab === "file"} onClick={() => setTab("file")}>
-								{t("files.file")}
-							</TabButton>
-							<TabButton active={tab === "changes"} onClick={() => setTab("changes")}>
-								{t("files.changes")}
-								<DiffStat diffs={diffs} />
-							</TabButton>
-						</>
-					)}
-					<div className="flex-1" />
-					{content?.truncated && tab === "file" && (
-						<span className="truncate px-1 text-muted-foreground">
-							{t("files.truncated", { size: formatBytes(content.size) })}
+		<>
+			<ResizeHandle
+				label={t("files.resize")}
+				width={width ?? 0}
+				min={FILE_PANEL_MIN_WIDTH}
+				direction={-1}
+				measure={() => panel.current?.getBoundingClientRect().width ?? 0}
+				onReset={() => setWidth(undefined)}
+				onResize={(next) => {
+					const room =
+						(panel.current?.parentElement?.clientWidth ?? Number.POSITIVE_INFINITY) - FILE_PANEL_CHAT_MIN_WIDTH;
+					setWidth(Math.round(Math.max(FILE_PANEL_MIN_WIDTH, Math.min(room, next))));
+				}}
+			/>
+			<aside
+				ref={panel}
+				aria-label={t("files.panel")}
+				style={width === undefined ? undefined : { width }}
+				className={cn(
+					"flex max-w-[calc(100%-22.5rem)] min-w-80 shrink-0 flex-col border-l bg-background",
+					width === undefined && "w-[min(44rem,50%)]",
+				)}
+				onKeyDown={(e) => {
+					if (e.key === "Escape" && !e.nativeEvent.isComposing) close();
+				}}
+			>
+				<div className="flex h-10 shrink-0 items-center gap-2 border-b pr-1.5 pl-3">
+					<FileText className="size-4 shrink-0 text-muted-foreground" />
+					<div className="flex min-w-0 flex-1 items-baseline gap-2" title={path}>
+						<span className="shrink-0 truncate text-sm font-medium">{basename(path)}</span>
+						<span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+							{displayPath(path, homeDir)}
 						</span>
-					)}
-					{markdown && tab === "file" && (
-						<>
-							<TabButton active={preview} onClick={() => setPreview(true)}>
-								{t("files.preview")}
-							</TabButton>
-							<TabButton active={!preview} onClick={() => setPreview(false)}>
-								{t("files.source")}
-							</TabButton>
-						</>
-					)}
-				</div>
-			)}
-			<div className="flex min-h-0 flex-1 flex-col">
-				{tab === "changes" && diffs ? (
-					<div className="space-y-3 overflow-auto p-3">
-						{diffs.map((diff, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a patch may name the same path twice
-							<div key={i} className="space-y-1">
-								{diffs.length > 1 && (
-									<div className="truncate font-mono text-xs text-muted-foreground">{diff.path}</div>
-								)}
-								<DiffView diff={diff.diff} />
-							</div>
-						))}
 					</div>
-				) : load.status === "loading" ? (
-					<Message>{t("common.loading")}</Message>
-				) : load.status === "error" ? (
-					<Message tone="error">{load.message}</Message>
-				) : content?.kind === "image" ? (
-					content.image ? (
-						<div className="flex flex-1 items-center justify-center overflow-auto bg-muted/30 p-4">
-							<img
-								alt={basename(content.path)}
-								src={`data:${content.image.mimeType};base64,${content.image.data}`}
-								className="max-w-full object-contain"
-							/>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						aria-label={t("files.refresh")}
+						title={t("files.refresh")}
+						onClick={() => void fetchFile()}
+					>
+						<RotateCw />
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						aria-label={t("files.copyPath")}
+						title={t("files.copyPath")}
+						onClick={copyPath}
+					>
+						<Copy />
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						aria-label={t("common.close")}
+						title={t("common.close")}
+						onClick={close}
+					>
+						<X />
+					</Button>
+				</div>
+				{(diffs || markdown || content?.truncated) && (
+					<div className="flex shrink-0 items-center gap-1 border-b px-2 py-1 text-xs">
+						{diffs && (
+							<>
+								<TabButton active={tab === "file"} onClick={() => setTab("file")}>
+									{t("files.file")}
+								</TabButton>
+								<TabButton active={tab === "changes"} onClick={() => setTab("changes")}>
+									{t("files.changes")}
+									<DiffStat diffs={diffs} />
+								</TabButton>
+							</>
+						)}
+						<div className="flex-1" />
+						{content?.truncated && tab === "file" && (
+							<span className="truncate px-1 text-muted-foreground">
+								{t("files.truncated", { size: formatBytes(content.size) })}
+							</span>
+						)}
+						{markdown && tab === "file" && (
+							<>
+								<TabButton active={preview} onClick={() => setPreview(true)}>
+									{t("files.preview")}
+								</TabButton>
+								<TabButton active={!preview} onClick={() => setPreview(false)}>
+									{t("files.source")}
+								</TabButton>
+							</>
+						)}
+					</div>
+				)}
+				<div className="flex min-h-0 flex-1 flex-col">
+					{tab === "changes" && diffs ? (
+						<div className="space-y-3 overflow-auto p-3">
+							{diffs.map((diff, i) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: a patch may name the same path twice
+								<div key={i} className="space-y-1">
+									{diffs.length > 1 && (
+										<div className="truncate font-mono text-xs text-muted-foreground">{diff.path}</div>
+									)}
+									<DiffView diff={diff.diff} />
+								</div>
+							))}
 						</div>
-					) : (
-						<Message>{t("files.imageTooLarge", { size: formatBytes(content.size) })}</Message>
-					)
-				) : content?.kind === "text" && content.text !== undefined ? (
-					markdown && preview ? (
-						<div className="overflow-auto px-5 py-4">
-							<Markdown text={content.text} cwd={parentOf(content.path)} />
-						</div>
-					) : (
-						<CodeLines content={content} text={content.text} nonce={file.nonce} />
-					)
-				) : content ? (
-					<Message>{t("files.binary", { size: formatBytes(content.size) })}</Message>
-				) : null}
-			</div>
-		</aside>
+					) : load.status === "loading" ? (
+						<Message>{t("common.loading")}</Message>
+					) : load.status === "error" ? (
+						<Message tone="error">{load.message}</Message>
+					) : content?.kind === "image" ? (
+						content.image ? (
+							<div className="flex flex-1 items-center justify-center overflow-auto bg-muted/30 p-4">
+								<img
+									alt={basename(content.path)}
+									src={`data:${content.image.mimeType};base64,${content.image.data}`}
+									className="max-w-full object-contain"
+								/>
+							</div>
+						) : (
+							<Message>{t("files.imageTooLarge", { size: formatBytes(content.size) })}</Message>
+						)
+					) : content?.kind === "text" && content.text !== undefined ? (
+						markdown && preview ? (
+							<div className="overflow-auto px-5 py-4">
+								<Markdown text={content.text} cwd={parentOf(content.path)} />
+							</div>
+						) : (
+							<CodeLines content={content} text={content.text} nonce={file.nonce} />
+						)
+					) : content ? (
+						<Message>{t("files.binary", { size: formatBytes(content.size) })}</Message>
+					) : null}
+				</div>
+			</aside>
+		</>
 	);
 }
 
