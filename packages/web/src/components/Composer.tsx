@@ -243,7 +243,7 @@ export function Composer({ session }: { session: SessionState }) {
 					}}
 					rows={1}
 					placeholder={running ? t("composer.queueFollowUp") : t("composer.placeholder")}
-					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-(length:--chat-font-size) outline-none placeholder:text-muted-foreground"
+					className="field-sizing-content max-h-64 min-h-14 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 font-(family-name:--content-font) text-(length:--content-font-size) outline-none placeholder:text-muted-foreground"
 					autoFocus
 				/>
 				<div className="@container/toolbar flex items-center gap-2 px-2 pb-2">

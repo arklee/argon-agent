@@ -68,7 +68,14 @@ import { effectiveMode, SandboxPolicy } from "./sandbox-policy.ts";
 import { type ArgonSettingsStore, suggestRule } from "./settings.ts";
 import { describeToolCall } from "./tool-display.ts";
 import { resolveToolPreset, type ToolPreset } from "./tool-presets.ts";
-import { contentToText, messageToItem, projectHistory, toolResultOutput } from "./translate.ts";
+import {
+	contentToText,
+	MESSAGE_TIMING_ENTRY,
+	type MessageTiming,
+	messageToItem,
+	projectHistory,
+	toolResultOutput,
+} from "./translate.ts";
 import { createUIBridge } from "./ui-bridge.ts";
 import { createWriteDiffExtension } from "./write-diff.ts";
 
@@ -154,6 +161,7 @@ export class ManagedSession {
 	private unsubscribe: (() => void) | undefined;
 	private liveItemCounter = 0;
 	private currentAssistantItemId: string | undefined;
+	private firstAssistantDeltaAt: number | undefined;
 	private disposed = false;
 	private appliedProjectTrust: boolean | undefined;
 	private configReloadPending = false;
@@ -1310,6 +1318,36 @@ export class ManagedSession {
 		return { allow: false, reason };
 	}
 
+	private persistMessageTiming(
+		message: Extract<AgentSessionEvent, { type: "message_end" }>["message"],
+		timing: MessageTiming,
+	): void {
+		const manager = this.session.sessionManager;
+		// pi 1.7 emits message_end BEFORE synchronously appending its message. A microtask
+		// runs after that append, before the agent loop resumes. Capture the manager and
+		// match the message object, not just the leaf: another listener may append metadata.
+		// Plain custom entries advance the parent chain but never enter model context;
+		// getBranch/fork retain them and compaction preserves the original history.
+		queueMicrotask(() => {
+			try {
+				const leaf = manager.getLeafEntry();
+				const entry =
+					leaf?.type === "message" && leaf.message === message
+						? leaf
+						: manager
+								.getBranch()
+								.findLast((candidate) => candidate.type === "message" && candidate.message === message);
+				if (!entry) {
+					log.warn("could not persist assistant timing: message entry not found");
+					return;
+				}
+				manager.appendCustomEntry(MESSAGE_TIMING_ENTRY, { messageEntryId: entry.id, ...timing });
+			} catch (error) {
+				log.error("could not persist assistant timing", error);
+			}
+		});
+	}
+
 	private handlePiEvent(event: AgentSessionEvent): void {
 		try {
 			this.translate(event);
@@ -1325,6 +1363,7 @@ export class ManagedSession {
 				return;
 			case "agent_settled":
 				this.currentAssistantItemId = undefined;
+				this.firstAssistantDeltaAt = undefined;
 				this.emit({ type: "run_settled", aborted: event.aborted });
 				this.emitContextUsage();
 				this.emitBranches();
@@ -1337,7 +1376,10 @@ export class ManagedSession {
 				const id = this.nextItemId();
 				const item = messageToItem(message, id, message.role === "assistant");
 				if (!item) return;
-				if (message.role === "assistant") this.currentAssistantItemId = id;
+				if (message.role === "assistant") {
+					this.currentAssistantItemId = id;
+					this.firstAssistantDeltaAt = undefined;
+				}
 				this.emit({ type: "item_added", item });
 				return;
 			}
@@ -1345,6 +1387,9 @@ export class ManagedSession {
 				const itemId = this.currentAssistantItemId;
 				if (!itemId) return;
 				const update = event.assistantMessageEvent;
+				if (["text_delta", "thinking_delta", "toolcall_start", "toolcall_delta"].includes(update.type)) {
+					this.firstAssistantDeltaAt ??= Date.now();
+				}
 				switch (update.type) {
 					case "text_delta":
 						this.emit({
@@ -1396,11 +1441,23 @@ export class ManagedSession {
 				const id = message.role === "assistant" ? this.currentAssistantItemId : this.lastItemIdOfRole(message.role);
 				if (!id) return;
 				const resolveToolSource = message.role === "assistant" ? this.toolSourceResolver() : undefined;
-				const item = messageToItem(message, id, false, resolveToolSource);
+				let timing: MessageTiming | undefined;
+				if (message.role === "assistant") {
+					const completedAt = Date.now();
+					timing = {
+						completedAt,
+						...(this.firstAssistantDeltaAt === undefined
+							? {}
+							: { generationMs: Math.max(0, completedAt - this.firstAssistantDeltaAt) }),
+					};
+					this.persistMessageTiming(event.message, timing);
+				}
+				const item = messageToItem(message, id, false, resolveToolSource, timing);
 				if (item) this.emit({ type: "item_replaced", item });
 				if (message.role === "user") this.emitBranches();
 				if (message.role === "assistant") {
 					this.currentAssistantItemId = undefined;
+					this.firstAssistantDeltaAt = undefined;
 					this.emitContextUsage();
 				}
 				return;

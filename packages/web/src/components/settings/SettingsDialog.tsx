@@ -25,8 +25,17 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { getLanguagePreference, type LanguagePreference, setLanguagePreference, t } from "@/i18n";
+import {
+	clampFontSize,
+	DEFAULT_SIZE,
+	FONT_SUGGESTIONS,
+	type FontRole,
+	getFonts,
+	MAX_FONT_SIZE,
+	MIN_FONT_SIZE,
+	setFont,
+} from "@/lib/fonts";
 import { displayPath, formatNumber, thinkingLevelLabel } from "@/lib/format";
-import { clampTextSize, getTextSize, MAX_TEXT_SIZE, MIN_TEXT_SIZE, setTextSize } from "@/lib/text-size";
 import { setThemePreference, type ThemePreference, useThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/stores/app";
@@ -309,42 +318,54 @@ function EnabledModels() {
 	);
 }
 
-/** Conversation text size in px: typed directly, applied on Enter or blur, clamped to the supported range. */
-function TextSizeInput() {
+/** One font role: a family (any installed font, with suggestions) and a size in px, applied as you type. */
+function FontInput({ role }: { role: FontRole }) {
 	const { t } = useTranslation();
-	const [size, setSize] = useState(getTextSize);
-	const [draft, setDraft] = useState(String(size));
-	const commit = () => {
-		const typed = Number(draft);
-		// Empty or non-numeric input restores the current size.
-		const next = draft.trim() === "" || !Number.isFinite(typed) ? size : clampTextSize(typed);
-		setDraft(String(next));
-		if (next === size) return;
-		setSize(next);
-		setTextSize(next);
+	const [pref, setPref] = useState(() => getFonts()[role]);
+	const [sizeDraft, setSizeDraft] = useState(String(pref.size));
+	const apply = (next: typeof pref) => {
+		setPref(next);
+		setFont(role, next);
 	};
+	const commitSize = () => {
+		const typed = Number(sizeDraft);
+		const size = sizeDraft.trim() === "" ? DEFAULT_SIZE[role] : clampFontSize(typed, pref.size);
+		setSizeDraft(String(size));
+		if (size !== pref.size) apply({ ...pref, size });
+	};
+	const listId = `font-suggestions-${role}`;
 	return (
 		<div className="flex items-center gap-1.5">
 			<Input
+				list={listId}
+				value={pref.family}
+				placeholder={t("settings.general.fontDefault")}
+				aria-label={t(`settings.general.font.${role}`)}
+				onChange={(e) => apply({ ...pref, family: e.target.value })}
+				className="h-8 w-44"
+			/>
+			<datalist id={listId}>
+				{FONT_SUGGESTIONS[role].map((name) => (
+					<option key={name} value={name} />
+				))}
+			</datalist>
+			<Input
 				type="number"
-				inputMode="numeric"
-				min={MIN_TEXT_SIZE}
-				max={MAX_TEXT_SIZE}
-				step={1}
-				value={draft}
-				aria-label={t("settings.general.textSize")}
+				inputMode="decimal"
+				min={MIN_FONT_SIZE}
+				max={MAX_FONT_SIZE}
+				step={0.5}
+				value={sizeDraft}
+				aria-label={t("settings.general.fontSize", { role: t(`settings.general.font.${role}`) })}
 				onChange={(e) => {
-					setDraft(e.target.value);
-					// Valid sizes apply while typing or using the arrows; out-of-range input is clamped on commit.
+					setSizeDraft(e.target.value);
+					// Valid sizes apply while typing or using the arrows; anything else is clamped on commit.
 					const value = Number(e.target.value);
-					if (e.target.value !== "" && value === clampTextSize(value)) {
-						setSize(value);
-						setTextSize(value);
-					}
+					if (e.target.value !== "" && value === clampFontSize(value, pref.size)) apply({ ...pref, size: value });
 				}}
-				onBlur={commit}
+				onBlur={commitSize}
 				onKeyDown={(e) => {
-					if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
+					if (e.key === "Enter" && !e.nativeEvent.isComposing) commitSize();
 				}}
 				className="h-8 w-20 text-right tabular-nums"
 			/>
@@ -425,9 +446,15 @@ function GeneralSection() {
 							onChange={setThemePreference}
 						/>
 					</Row>
-					<Row label={t("settings.general.textSize")} description={t("settings.general.textSizeDescription")}>
-						<TextSizeInput />
-					</Row>
+					{(["ui", "content", "code"] as const).map((role) => (
+						<Row
+							key={role}
+							label={t(`settings.general.font.${role}`)}
+							description={t(`settings.general.fontDescription.${role}`)}
+						>
+							<FontInput role={role} />
+						</Row>
+					))}
 				</Group>
 			)}
 			<GeneralDefaults />

@@ -17,7 +17,7 @@ import { webSearchSources } from "./web-search";
 
 type DisplayOf<K extends ToolDisplay["kind"]> = Extract<ToolDisplay, { kind: K }>;
 
-const codeBlock = "max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap break-all";
+const codeBlock = "max-h-48 overflow-auto font-mono fs-code whitespace-pre-wrap break-all";
 
 function ArgsJson({ args }: { args: unknown }) {
 	if (args === undefined) return null;
@@ -35,7 +35,7 @@ function Output({ view, hideWhenDone = false }: { view: ToolView; hideWhenDone?:
 			{tool.output && !(hideWhenDone && status === "done") && (
 				<pre
 					className={cn(
-						"max-h-80 overflow-auto rounded-md bg-background p-2 font-mono text-xs whitespace-pre-wrap break-all",
+						"max-h-80 overflow-auto rounded-md bg-background p-2 font-mono fs-code whitespace-pre-wrap break-all",
 						(status === "error" || status === "blocked") && "text-destructive",
 					)}
 				>

@@ -47,7 +47,7 @@ export function diffsStats(diffs: readonly FileDiff[]): { added: number; removed
 export function DiffStat({ diffs }: { diffs: readonly FileDiff[] }) {
 	const { added, removed } = useMemo(() => diffsStats(diffs), [diffs]);
 	return (
-		<span className="shrink-0 font-mono text-xs tabular-nums">
+		<span className="shrink-0 font-mono fs-code tabular-nums">
 			<span className="text-emerald-600 dark:text-emerald-400">+{added}</span>{" "}
 			<span className="text-red-600 dark:text-red-400">-{removed}</span>
 		</span>
@@ -57,7 +57,7 @@ export function DiffStat({ diffs }: { diffs: readonly FileDiff[] }) {
 export function DiffView({ diff, className }: { diff: string; className?: string }) {
 	const lines = useMemo(() => parse(diff), [diff]);
 	return (
-		<div className={cn("overflow-auto rounded-md border bg-background font-mono text-xs leading-5", className)}>
+		<div className={cn("overflow-auto rounded-md border bg-background font-mono fs-code leading-5", className)}>
 			<table className="w-full border-collapse">
 				<tbody>
 					{lines.map((line, i) => (

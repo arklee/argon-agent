@@ -164,6 +164,17 @@
 - [ ] pi-codex-conversion 的预设（Structured、Code、TS Notebook、VM Code）：设计上已预留，暂不实现；先按 [tool-modes-comparison.md](tool-modes-comparison.md) 的计划与 pi 传统模式、codemode 做对比
 - 已知限制：重新打开会话后看不到子调用的输出（pi 只记录名字、参数、状态、耗时，不记录结果）；diff 已由 `argon-nested-diffs` 保存
 
+## 对话界面打磨（设计见 decisions D21）
+
+- [x] 按轮折叠：回答开始时把过程折叠成一行汇总；运行中显示实时计时
+- [x] 工具行：连续调用合并、codemode 按子调用汇总、文件修改和待审批的调用保留卡片样式
+- [x] 轮次页脚：耗时、输出速度、改动文件（点开看各文件 diff）；backend 记录 `completedAt` / `generationMs`（`argon.message_timing`）
+- [x] 字体：界面、内容、代码分开设置字体和字号
+- [ ] Markdown 排版细节（等用户给出具体问题）
+- [ ] 便捷功能（待选）：跳到上一条/下一条用户消息、回到底部按钮、长用户消息折叠、一键展开/折叠所有过程
+- [ ] 运行中底部的"正在处理…"状态行和轮次标题的计时有些重复，考虑合并
+- [ ] pi-codex-conversion 的 `exec` / `wait`（旧会话里有）目前按通用工具显示；做那个预设时在 presenter 里映射成 `script`
+
 ## 阶段 4：对 pi 的深度定制（按需）
 
 按 D7 的优先级处理，先确认官方是否已有等价入口。

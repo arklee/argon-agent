@@ -64,6 +64,16 @@ export function formatDuration(ms: number): string {
 	return t("format.minutesAndSeconds", { minutes: Math.floor(rounded / 60), seconds: rounded % 60 });
 }
 
+/** Elapsed wall time in whole units: 42s, 3m 05s, 1h 02m. */
+export function formatElapsed(ms: number): string {
+	const total = Math.max(0, Math.floor(ms / 1000));
+	if (total < 60) return t("format.seconds", { value: String(total) });
+	const hours = Math.floor(total / 3600);
+	const minutes = Math.floor((total % 3600) / 60);
+	if (hours > 0) return t("format.hoursAndMinutes", { hours, minutes });
+	return t("format.minutesAndSeconds", { minutes, seconds: total % 60 });
+}
+
 const thinkingKeys = new Map<string, `thinking.${"off" | "minimal" | "low" | "medium" | "high" | "xhigh"}`>([
 	["off", "thinking.off"],
 	["minimal", "thinking.minimal"],

@@ -48,6 +48,33 @@ function compactionContent(details: unknown, summary: string): { remoteCheckpoin
 		: { text: summary };
 }
 
+export const MESSAGE_TIMING_ENTRY = "argon.message_timing";
+
+export interface MessageTiming {
+	completedAt: number;
+	generationMs?: number;
+}
+
+function readMessageTiming(data: unknown): (MessageTiming & { messageEntryId: string }) | undefined {
+	if (typeof data !== "object" || data === null) return undefined;
+	const value = data as Record<string, unknown>;
+	if (
+		typeof value.messageEntryId !== "string" ||
+		!value.messageEntryId ||
+		typeof value.completedAt !== "number" ||
+		!Number.isFinite(value.completedAt) ||
+		value.completedAt < 0 ||
+		(value.generationMs !== undefined &&
+			(typeof value.generationMs !== "number" || !Number.isFinite(value.generationMs) || value.generationMs < 0))
+	)
+		return undefined;
+	return {
+		messageEntryId: value.messageEntryId,
+		completedAt: value.completedAt,
+		...(value.generationMs === undefined ? {} : { generationMs: value.generationMs as number }),
+	};
+}
+
 type ToolSourceResolver = (name: string) => string | undefined;
 
 export function toAssistantBlocks(
@@ -84,6 +111,7 @@ export function messageToItem(
 	id: string,
 	streaming = false,
 	resolveToolSource?: ToolSourceResolver,
+	timing?: MessageTiming,
 ): TranscriptItem | undefined {
 	const timestamp = typeof message.timestamp === "number" ? message.timestamp : Date.now();
 	switch (message.role) {
@@ -103,6 +131,7 @@ export function messageToItem(
 				usage: toUsage(message.usage),
 				streaming,
 				timestamp,
+				...timing,
 			};
 		case "toolResult":
 			return undefined;
@@ -174,7 +203,15 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 	const toolResults: HistoryProjection["toolResults"] = [];
 	const blockedTools = new Map<string, string>();
 	const callArgs = new Map<string, unknown>();
+	const timings = new Map<string, MessageTiming>();
 	for (const entry of entries) {
+		if (entry.type === "custom" && entry.customType === MESSAGE_TIMING_ENTRY) {
+			const timing = readMessageTiming(entry.data);
+			if (timing) {
+				const { messageEntryId, ...fields } = timing;
+				timings.set(messageEntryId, fields);
+			}
+		}
 		if (entry.type === "message" && entry.message.role === "assistant")
 			for (const block of entry.message.content) if (block.type === "toolCall") callArgs.set(block.id, block.arguments);
 	}
@@ -223,7 +260,7 @@ export function projectHistory(entries: SessionEntry[], resolveToolSource?: Tool
 					}
 					break;
 				}
-				const item = messageToItem(message, entry.id, false, resolveToolSource);
+				const item = messageToItem(message, entry.id, false, resolveToolSource, timings.get(entry.id));
 				if (item) items.push(item);
 				break;
 			}

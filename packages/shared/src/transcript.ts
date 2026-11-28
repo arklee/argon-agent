@@ -106,7 +106,15 @@ export type TranscriptItem =
 			errorMessage?: string;
 			usage?: UsageInfo;
 			streaming: boolean;
+			/** When the request started (pi's message timestamp). */
 			timestamp: number;
+			/** When the message finished streaming. Absent while streaming and for history recorded before Argon kept it. */
+			completedAt?: number;
+			/**
+			 * Milliseconds from the first streamed token to the end of the message, for output speed
+			 * (usage.output / generationMs). Absent when unknown.
+			 */
+			generationMs?: number;
 	  }
 	| {
 			/** Non-chat entries such as compaction summaries, user bash runs, extension messages. */
