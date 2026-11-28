@@ -10,7 +10,8 @@
 		"build": "electron-vite build",
 		"pack": "npm run build && electron-builder --dir",
 		"dist": "npm run build && electron-builder",
-		"typecheck": "tsc -p tsconfig.json"
+		"typecheck": "tsc -p tsconfig.json",
+		"icons": "electron scripts/icons.mjs"
 	},
 	"dependencies": {
 		"@argon/backend": "*",
@@ -26,7 +27,8 @@
 		"productName": "Argon",
 		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
 		"directories": {
-			"output": "dist"
+			"output": "dist",
+			"buildResources": "build"
 		},
 		"files": [
 			"out/**/*",
@@ -41,6 +43,7 @@
 		],
 		"npmRebuild": false,
 		"mac": {
+			"icon": "build/Argon.icon",
 			"target": [
 				"dmg"
 			],

@@ -33,7 +33,12 @@ main 与 renderer 在 app.asar 内。backend 入口、动态 chunk 与 node_modu
 
 2026-11-26 验证：macOS arm64 `.app` / DMG、离线打包冒烟、`openai-codex/gpt-6-luna` 真实回复和 bash 审批均通过；typecheck、178 个测试及 lint 通过（lint 保留既有警告）。
 
-当前只验证 macOS arm64。签名、公证、自动更新、应用图标和 Windows/Linux 实机验证仍待完成。
+当前只验证 macOS arm64。签名、公证、自动更新和 Windows/Linux 实机验证仍待完成。
+
+应用图标（氩原子 2·8·8 电子壳层画成霓虹分段环，薰衣草紫）由 `packages/desktop/scripts/icons.mjs` 参数化生成：`npm run icons -w @argon/desktop` 会重写 `build/Argon.icon`、`build/icon.{svg,icns,ico,png}`、`resources/tray*.png` 以及 web 的 `favicon.svg` / `apple-touch-icon.png`。不要手改这些产物，改脚本里的 `themes` 等参数后重新生成。≤32px 用只保留最外层 8 个电子的简化版。
+
+- macOS 用 Icon Composer 文档 `build/Argon.icon`（`mac.icon`）：系统按图标外观切换浅色/深色版，染色和透明模式由深色版派生；旧版 macOS 用的 `.icns` 由 electron-builder 从同一文件生成。编译需要 Xcode 26+ 的 `actool`：本机 `xcode-select` 指向 Command Line Tools 时，打包前设 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`；CI 用 `macos-26` runner。可以用 Icon Composer 自带的 `ictool --export-image --rendition Default|Dark|TintedLight|…` 预览各模式。
+- Windows / Linux 和 apple-touch-icon 用深色版；favicon 是同时包含两套的 SVG，跟随 `prefers-color-scheme` 切换。
 
 ## Windows（原生桌面）
 

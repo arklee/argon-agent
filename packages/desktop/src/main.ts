@@ -204,6 +204,8 @@ void app
 	.whenReady()
 	.then(() => {
 		if (!primary) return;
+		// Packaged builds get the icon from the bundle; in dev the Dock would show Electron's.
+		if (!app.isPackaged) app.dock?.setIcon(resolve(directory, "../../build/icon.png"));
 		if (integratedChrome) {
 			const resources = resolve(app.isPackaged ? app.getAppPath() : resolve(directory, "../.."), "resources");
 			const icon = nativeImage.createFromPath(

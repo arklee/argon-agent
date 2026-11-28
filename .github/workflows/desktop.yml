@@ -16,7 +16,7 @@ jobs:
           - platform: windows-x64
             runner: windows-latest
           - platform: macos-arm64
-            runner: macos-15
+            runner: macos-26
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
@@ -30,6 +30,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm exec -w @argon/backend -- vitest run test/file-completion.test.ts test/server.test.ts
+      - name: Check actool (Icon Composer icon needs Xcode 26+)
+        if: runner.os == 'macOS'
+        run: xcrun actool --version
       - run: npm run dist -w @argon/desktop -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
