@@ -6,6 +6,7 @@ import {
 	CircleAlert,
 	CircleStop,
 	Clock,
+	FileSearch,
 	GitFork,
 	Info,
 	Layers,
@@ -16,6 +17,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, use
 import { Trans, useTranslation } from "react-i18next";
 import { type CacheSnapshot, Virtualizer, type VirtualizerHandle } from "virtua";
 import { DiffStat, DiffView, diffsStats } from "@/components/DiffView";
+import { OpenFileButton, openFileInPanel } from "@/components/FileLink";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
@@ -308,9 +310,21 @@ function sameTools(a: Tools, b: Tools): boolean {
 function ChangesButton({ changes }: { changes: FileDiff[] }) {
 	const { t } = useTranslation();
 	const [file, setFile] = useState<string>();
+	const [open, setOpen] = useState(false);
 	const shown = changes.find((change) => change.path === file);
+	const openFile = (change: FileDiff) => {
+		setOpen(false);
+		setFile(undefined);
+		openFileInPanel(change.path, { diffs: [change] });
+	};
 	return (
-		<Popover onOpenChange={(open) => !open && setFile(undefined)}>
+		<Popover
+			open={open}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setFile(undefined);
+			}}
+		>
 			<PopoverTrigger className="flex items-center gap-1.5 rounded-md px-1 hover:bg-muted hover:text-foreground">
 				{t("chat.filesChanged", { count: changes.length })}
 				<DiffStat diffs={changes} />
@@ -319,23 +333,29 @@ function ChangesButton({ changes }: { changes: FileDiff[] }) {
 			<PopoverContent align="end" className="w-[min(36rem,90vw)] p-1.5">
 				{shown ? (
 					<div className="space-y-1.5">
-						<button
-							type="button"
-							onClick={() => setFile(undefined)}
-							className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-sm hover:bg-muted"
-						>
-							<ChevronLeft className="size-3.5" />
-							<span className="min-w-0 flex-1 truncate font-mono fs-code" title={shown.path}>
-								{shown.path}
-							</span>
-							<DiffStat diffs={[shown]} />
-						</button>
+						<div className="flex items-center gap-1">
+							<button
+								type="button"
+								onClick={() => setFile(undefined)}
+								className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1.5 py-1 text-left text-sm hover:bg-muted"
+							>
+								<ChevronLeft className="size-3.5" />
+								<span className="min-w-0 flex-1 truncate font-mono fs-code" title={shown.path}>
+									{shown.path}
+								</span>
+								<DiffStat diffs={[shown]} />
+							</button>
+							<Button variant="ghost" size="xs" onClick={() => openFile(shown)}>
+								<FileSearch />
+								{t("files.open")}
+							</Button>
+						</div>
 						<DiffView diff={shown.diff} className="max-h-96" />
 					</div>
 				) : (
 					<ul className="max-h-80 overflow-auto">
 						{changes.map((change) => (
-							<li key={change.path}>
+							<li key={change.path} className="group/change flex items-center">
 								<button
 									type="button"
 									onClick={() => setFile(change.path)}
@@ -346,6 +366,15 @@ function ChangesButton({ changes }: { changes: FileDiff[] }) {
 									<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{change.path}</span>
 									<DiffStat diffs={[change]} />
 								</button>
+								<OpenFileButton
+									target={change.path}
+									diffs={[change]}
+									onOpen={() => {
+										setOpen(false);
+										setFile(undefined);
+									}}
+									className="opacity-0 group-hover/change:opacity-100 focus-visible:opacity-100"
+								/>
 							</li>
 						))}
 					</ul>

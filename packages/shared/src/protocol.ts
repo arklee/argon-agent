@@ -671,6 +671,26 @@ export interface DirEntry {
 	isDir: boolean;
 }
 
+/**
+ * A file read for display (decisions D22). `path` is absolute on the backend machine; `line` /
+ * `endLine` come from an anchor in the requested target (`a.ts:12`, `a.ts#L12-L20`).
+ */
+export interface FileContent {
+	path: string;
+	line?: number;
+	endLine?: number;
+	size: number;
+	/** Modification time, ms since the epoch. */
+	modifiedAt: number;
+	/** "text": UTF-8 without NUL bytes; "image": png/jpeg/gif/webp/svg; anything else is "binary". */
+	kind: "text" | "image" | "binary";
+	/** For "text": at most 1 MiB, cut at a line break when longer (`truncated`). */
+	text?: string;
+	truncated?: boolean;
+	/** For "image" up to 10 MiB; larger images come back without it (shown as too large). */
+	image?: ImageData;
+}
+
 export interface Methods {
 	"environment.info": { params: Record<string, never>; result: EnvironmentInfo };
 	"fs.listDir": {
@@ -723,6 +743,12 @@ export interface Methods {
 	 * for referencing it in a prompt as @"path".
 	 */
 	"files.upload": { params: { name: string; data: string }; result: { path: string } };
+	/**
+	 * Read a file for the in-app viewer. `target` is a path as a model or tool wrote it: absolute,
+	 * relative to `cwd`, `~/…` or `file://…`, possibly wrapped in quotes / backticks / brackets, with an
+	 * optional line anchor. not_found when it does not exist; bad_request for a directory or empty target.
+	 */
+	"fs.readFile": { params: { target: string; cwd?: string }; result: FileContent };
 	/**
 	 * Re-send a user message with new text: the conversation branches off before that message (the old
 	 * branch stays in the session tree). The client gets a `reset` event with the new history, then the

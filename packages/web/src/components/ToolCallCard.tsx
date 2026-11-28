@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DiffStat } from "@/components/DiffView";
+import { OpenFileButton } from "@/components/FileLink";
 import { CallIcon, type CallState, useCountLabels, useToolVerb } from "@/components/ToolSummary";
 import { formatDuration } from "@/lib/format";
 import { flattenCalls, summarize } from "@/lib/turns";
@@ -96,7 +97,8 @@ export function ToolCallCard(props: ToolCallProps) {
 	const hasDetails = Boolean(tool?.output) || view.args !== undefined || children.length > 0;
 	const state = callState(tool, awaitingApproval);
 
-	const header = (
+	const fileTarget = primaryFile(view.display);
+	const toggle = (
 		<button
 			type="button"
 			onClick={() => hasDetails && setOpen(!open)}
@@ -136,6 +138,19 @@ export function ToolCallCard(props: ToolCallProps) {
 			)}
 		</button>
 	);
+	// The file button sits beside the toggle (a button cannot nest in a button).
+	const header = fileTarget ? (
+		<div className="group/file flex min-w-0 items-center">
+			{toggle}
+			<OpenFileButton
+				target={fileTarget}
+				diffs={diffs}
+				className={cn("opacity-0 group-hover/file:opacity-100 focus-visible:opacity-100", card ? "mr-1.5" : "ml-1")}
+			/>
+		</div>
+	) : (
+		toggle
+	);
 	const body = open && (
 		<div
 			className={cn(
@@ -162,4 +177,14 @@ export function ToolCallCard(props: ToolCallProps) {
 			{body}
 		</div>
 	);
+}
+
+/** The one file a read or single-file change is about. */
+function primaryFile(display: ToolDisplay): string | undefined {
+	if (display.kind === "file_read") return display.path;
+	if (display.kind === "file_change" && display.files.length === 1) {
+		const file = display.files[0];
+		return file?.op === "delete" ? undefined : (file?.movePath ?? file?.path);
+	}
+	return undefined;
 }

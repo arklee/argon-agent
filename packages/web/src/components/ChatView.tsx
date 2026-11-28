@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Composer } from "@/components/Composer";
 import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
+import { FilePanel } from "@/components/FilePanel";
 import { InteractionCard } from "@/components/InteractionCard";
 import { McpPanel } from "@/components/McpPanel";
 import { ProjectTrustBanner, ProjectTrustIndicator } from "@/components/ProjectTrust";
@@ -48,33 +49,40 @@ export function ChatView({ session }: { session: SessionState }) {
 			</header>
 			<ProjectTrustBanner session={session} />
 
-			{session.items.length === 0 && !session.retry ? (
-				<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
-					<p className="text-lg font-medium">{t("chat.welcome")}</p>
-					<p className="font-mono text-xs text-muted-foreground">{displayPath(session.cwd, environment?.homeDir)}</p>
-				</div>
-			) : (
-				<Transcript key={`transcript:${session.sessionId}`} session={session} />
-			)}
+			<div className="flex min-h-0 flex-1">
+				<div className="flex min-w-0 flex-1 flex-col">
+					{session.items.length === 0 && !session.retry ? (
+						<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+							<p className="text-lg font-medium">{t("chat.welcome")}</p>
+							<p className="font-mono text-xs text-muted-foreground">
+								{displayPath(session.cwd, environment?.homeDir)}
+							</p>
+						</div>
+					) : (
+						<Transcript key={`transcript:${session.sessionId}`} session={session} />
+					)}
 
-			{session.pendingInteractions.length > 0 && (
-				<div className="mx-auto w-full max-w-3xl space-y-2 px-6 pb-2">
-					{session.pendingInteractions.map((interaction) => (
-						<InteractionCard
-							key={interaction.id}
-							interaction={interaction}
-							toolCall={
-								interaction.kind === "tool_approval"
-									? findToolCallBlock(session.items, interaction.toolCallId)
-									: undefined
-							}
-							onRespond={(response) => void respond(interaction.id, response)}
-						/>
-					))}
-				</div>
-			)}
+					{session.pendingInteractions.length > 0 && (
+						<div className="mx-auto w-full max-w-3xl space-y-2 px-6 pb-2">
+							{session.pendingInteractions.map((interaction) => (
+								<InteractionCard
+									key={interaction.id}
+									interaction={interaction}
+									toolCall={
+										interaction.kind === "tool_approval"
+											? findToolCallBlock(session.items, interaction.toolCallId)
+											: undefined
+									}
+									onRespond={(response) => void respond(interaction.id, response)}
+								/>
+							))}
+						</div>
+					)}
 
-			<Composer key={`composer:${session.sessionId}`} session={session} />
+					<Composer key={`composer:${session.sessionId}`} session={session} />
+				</div>
+				<FilePanel sessionId={session.sessionId} />
+			</div>
 		</>
 	);
 }

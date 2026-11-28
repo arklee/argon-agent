@@ -1,0 +1,10 @@
+{
+	"source": "github:Jaxton07/percho",
+	"ref": "HEAD",
+	"version": "e45824bd8974043fc573c9fcc219bf97756936cc",
+	"license": "LICENSE",
+	"files": {
+		"src/path-target.ts": "packages/backend/src/path-target.ts"
+	},
+	"notes": "Unmodified path target parser (D18). Argon preserves line anchors and supplies the home-directory fallback in its own wrapper."
+}

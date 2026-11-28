@@ -7,6 +7,7 @@ import type { FileDiff, ToolDisplay } from "@argon/shared";
 import { Globe, ImageIcon, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DiffStat, DiffView } from "@/components/DiffView";
+import { FileLink } from "@/components/FileLink";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { cn } from "@/lib/utils";
@@ -51,14 +52,18 @@ function Output({ view, hideWhenDone = false }: { view: ToolView; hideWhenDone?:
 
 type FileEntry = DisplayOf<"file_change">["files"][number];
 
-function FileHeader({ path, file }: { path: string; file: FileEntry | undefined }) {
+function FileHeader({ path, file, diff }: { path: string; file: FileEntry | undefined; diff?: FileDiff }) {
 	const { t } = useTranslation();
 	const op = file?.op === "add" || file?.op === "delete" ? file.op : undefined;
 	return (
 		<span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono">
-			<span className="truncate" title={path}>
-				{path}
-			</span>
+			{file?.op === "delete" || file?.movePath ? (
+				<span className="truncate" title={path}>
+					{path}
+				</span>
+			) : (
+				<FileLink target={path} diffs={diff && [diff]} />
+			)}
 			{file?.movePath && (
 				<span className="truncate text-muted-foreground" title={file.movePath}>
 					→ {file.movePath}
@@ -86,7 +91,7 @@ function Diffs({ diffs, view }: { diffs: FileDiff[]; view: ToolView }) {
 				// biome-ignore lint/suspicious/noArrayIndexKey: a patch may name the same path twice
 				<div key={i} className={cn("space-y-1", dim)}>
 					<div className="flex items-center gap-2 text-xs">
-						<FileHeader path={file.path} file={files.find((f) => f.path === file.path)} />
+						<FileHeader path={file.path} file={files.find((f) => f.path === file.path)} diff={file} />
 						<DiffStat diffs={[file]} />
 					</div>
 					<DiffView diff={file.diff} className="max-h-72" />

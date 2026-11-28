@@ -378,3 +378,15 @@ SDK 参数无法统一修改项目资源、MCP、信任记录的 CONFIG_DIR_NAME
 3. **工具按语义归类汇总**：沿用 D13 的显示类型（`file_read` → 读取、`search` → 搜索、`shell` → 命令、`file_change` → 编辑，其余按工具标题计数）；`script` 按它的子调用计数，所以各种 codemode 不需要单独设计。连续两个以上的普通调用合成一行，点开后逐行显示；文件修改、等待审批、带内联内容（图片、搜索来源）的调用保留卡片样式，不并入合并行。
 4. **轮次耗时和输出速度由 backend 记录**：assistant 条目加上 `completedAt`（结束时间）和 `generationMs`（从第一个流式 delta 到结束）。持久化方式沿用 `argon.tool_blocked` 的先例，用 pi 的 custom entry `argon.message_timing`（不进模型上下文，不影响分支和压缩）。早于这一改动的历史没有这两个字段，页脚就不显示时间和速度。
 5. **字体分界面、内容、代码三种**，各有字体和字号（默认 13 / 13 / 12.5 px，0.5 px 步进），像界面语言一样存在浏览器的 localStorage 里（D12），并通过 CSS 变量生效。界面字号覆盖 Tailwind 的 `--text-sm` / `--text-xs`，不缩放 rem，所以间距不会跟着变。默认字体改成系统字体栈（Geist 没有中文字形），Geist 仍可在设置里选用。
+
+## D22. 会话里的文件路径可点击，在应用内面板查看
+
+**背景**：Codex、Claude Code 等工具里，改动或提到的文件可以直接点开。终端工具靠 OSC 8 超链接交给系统打开（pi 也是这样），GUI 靠结构化的工具参数和 Markdown 链接。Argon 的 backend 可能在远程，前端不能自己读文件，也不能假设系统能打开 backend 机器上的路径。参考了 percho（同为 pi 的 GUI）：它用 `shell.openPath` 交给系统默认程序，远程只能复制路径，并且丢弃行号。
+
+**决定**：
+
+1. **在应用内查看，内容经 backend 读取**：新增 `fs.readFile { target, cwd? } → FileContent`。`target` 是模型或工具写出来的原样路径，由 backend 解析：相对 cwd、`~`、`file://`、percent 编码、成对包裹符、行号锚点（`:12`、`:12:5`、`#L12-L20`）。文本最多 1 MiB（在换行处截断），图片最多 10 MiB，其余按二进制处理。远程 backend 也能用。
+2. **路径解析借用 percho**：`vendor/percho-path-target`（MIT，D18）原样引入；percho 会丢掉行号，Argon 在自己的 `backend/src/path-target.ts` 里先取出行号再交给它。
+3. **链接来源**：结构化路径优先（读取、单文件修改的工具行，多文件 diff 的文件名，轮次页脚的改动文件列表），再加上回答里的 Markdown 链接。Markdown 的 sanitize/harden 会丢掉 `a.ts:42`、`file://` 和不带 `./` 的相对路径，所以先用一个 rehype 插件把文件链接包成哨兵 https URL，再在 `a` 组件里拆开，打开面板而不是外部链接对话框。不从普通文字或行内代码里猜路径。
+4. **面板**：在对话区右侧（会话标题栏之下，避开 Windows 的窗口按钮），按会话保存。行号、跳到并高亮锚点行、Shiki 高亮（超过 30 万字符不高亮）、虚拟列表；Markdown 可在预览和源码间切换，预览里的相对链接按该文件所在目录解析；从改动处打开时多一个"更改"标签显示 diff。
+5. **不做的**：不用 `shell.openPath`（会执行 `.command`、`.app` 等文件）。"在编辑器中打开 / 在访达中显示"留给桌面版，并且只在 backend 是本机时提供，编辑器走 URL scheme 白名单。提示词里约定链接格式也留到后面再定。

@@ -20,7 +20,7 @@ import {
 } from "@argon/shared";
 import { type WebSocket, WebSocketServer } from "ws";
 import type { BackendConfig } from "./config.ts";
-import { listDir, saveUpload } from "./fs-api.ts";
+import { listDir, readFileForDisplay, saveUpload } from "./fs-api.ts";
 import { log } from "./log.ts";
 import { canonicalProjectPath, projectTrustParent } from "./project-trust.ts";
 import { NotFoundError, type SessionRegistry } from "./registry.ts";
@@ -113,6 +113,7 @@ export function createHandlers(registry: SessionRegistry, config: BackendConfig)
 	return {
 		"environment.info": async () => config.environment,
 		"fs.listDir": async (params) => listDir(params.path, params.dirsOnly ?? true),
+		"fs.readFile": async (params) => readFileForDisplay(params.target, params.cwd),
 		"files.upload": async (params) => saveUpload(config.argonHome, params.name, params.data),
 		"sessions.getImages": async (params) => ({
 			images: registry.require(params.sessionId).getImages({ toolCallId: params.toolCallId, itemId: params.itemId }),
