@@ -110,10 +110,13 @@ function SessionRow({ session, showProject = false }: { session: SessionSummary;
 					<button
 						type="button"
 						onClick={() => void openSession(session)}
-						title={showProject ? `${title}\n${session.cwd}` : undefined}
+						title={[title, showProject && session.cwd, relativeTime(session.modifiedAt)].filter(Boolean).join("\n")}
 						className={cn(
-							"flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent",
-							session.sessionId === activeSessionId && "bg-sidebar-accent font-medium",
+							"flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/60 data-[state=open]:bg-sidebar-accent/60",
+							// Rows under a project line up with its name, past the folder icon.
+							showProject ? "pl-2" : "pl-7.5",
+							session.sessionId === activeSessionId &&
+								"bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent",
 						)}
 					>
 						<span className="min-w-0 flex-1 truncate">{title}</span>
@@ -128,11 +131,7 @@ function SessionRow({ session, showProject = false }: { session: SessionSummary;
 								session.sessionPath && "group-hover/row:invisible group-focus-within/row:invisible",
 							)}
 						>
-							{session.running ? (
-								<span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-							) : (
-								<span className="text-xs font-normal text-muted-foreground">{relativeTime(session.modifiedAt)}</span>
-							)}
+							{session.running && <span className="size-2 animate-pulse rounded-full bg-emerald-500" />}
 						</span>
 					</button>
 				</SessionContextMenu>
@@ -190,7 +189,6 @@ export function Sidebar() {
 				style={{ width: collapsed ? 0 : width }}
 				className={cn(
 					"shrink-0 overflow-hidden bg-sidebar text-sidebar-foreground",
-					!collapsed && "border-r",
 					!resizing && "transition-[width] duration-200 ease-out motion-reduce:transition-none",
 				)}
 			>
@@ -292,14 +290,14 @@ export function Sidebar() {
 								<section key={group.cwd} className="mb-3">
 									<ContextMenu>
 										<ContextMenuTrigger asChild>
-											<div className="group/project flex items-center justify-between rounded-md px-2 py-1 data-[state=open]:bg-sidebar-accent">
+											<div className="group/project flex items-center justify-between rounded-md py-1 pr-1 pl-2 data-[state=open]:bg-sidebar-accent/60">
 												<span
-													className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground"
+													className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-sidebar-foreground/80"
 													title={group.cwd}
 												>
-													{group.pinned && <Pin className="size-3 shrink-0" />}
-													<FolderOpen className="size-3.5 shrink-0" />
+													<FolderOpen className="size-4 shrink-0 text-muted-foreground" />
 													<span className="truncate">{basename(group.cwd) || group.cwd}</span>
+													{group.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
 												</span>
 												<Button
 													variant="ghost"
@@ -334,7 +332,7 @@ export function Sidebar() {
 										</ContextMenuContent>
 									</ContextMenu>
 									{group.sessions.length === 0 && !pinned.some((session) => session.cwd === group.cwd) && (
-										<p className="px-2 pb-1 text-xs text-muted-foreground/70">{t("sidebar.noSessions")}</p>
+										<p className="py-1 pr-2 pl-7.5 text-xs text-muted-foreground/70">{t("sidebar.noSessions")}</p>
 									)}
 									<ul>
 										{head.map((session) => (
@@ -362,7 +360,7 @@ export function Sidebar() {
 											type="button"
 											aria-expanded={open}
 											onClick={() => toggleExpanded(group.cwd)}
-											className="w-full rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+											className="w-full rounded-md py-1 pr-2 pl-7.5 text-left text-xs text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
 										>
 											{open
 												? t("sidebar.showLess")
