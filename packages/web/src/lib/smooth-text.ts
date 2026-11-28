@@ -7,17 +7,20 @@ import { useEffect, useRef, useState } from "react";
  * - Small backlog: drain it within TARGET_LATENCY_MS, never slower than MIN_CPS (a crisp typing pace).
  * - Large backlog (a long burst, or the tab was hidden): drain it within CATCH_UP_LATENCY_MS, capped at MAX_CPS,
  *   so the display never falls further and further behind.
+ * - Stream ended: drain what is left within DRAIN_LATENCY_MS, so the reply is complete when its turn says done.
  * - Commits are throttled to ~30 fps; every commit re-renders the Markdown tree.
  */
 const MIN_CPS = 80;
 const MAX_CPS = 1500;
-const TARGET_LATENCY_MS = 900;
+const TARGET_LATENCY_MS = 500;
 const CATCH_UP_THRESHOLD = 600;
 const CATCH_UP_LATENCY_MS = 350;
+const DRAIN_LATENCY_MS = 200;
 const COMMIT_INTERVAL_MS = 33;
 
-/** Characters per second for the current backlog. */
-export function revealRate(backlog: number): number {
+/** Characters per second for the current backlog; `draining` once the stream has ended. */
+export function revealRate(backlog: number, draining = false): number {
+	if (draining) return Math.max(MIN_CPS, (backlog * 1000) / DRAIN_LATENCY_MS);
 	if (backlog > CATCH_UP_THRESHOLD) return Math.min(MAX_CPS, (backlog * 1000) / CATCH_UP_LATENCY_MS);
 	return Math.max(MIN_CPS, (backlog * 1000) / TARGET_LATENCY_MS);
 }
@@ -28,10 +31,11 @@ export function advance(
 	shown: number,
 	carry: number,
 	elapsedMs: number,
+	draining = false,
 ): { shown: number; carry: number } {
 	const backlog = text.length - shown;
 	if (backlog <= 0) return { shown: text.length, carry: 0 };
-	const budget = carry + (revealRate(backlog) * elapsedMs) / 1000;
+	const budget = carry + (revealRate(backlog, draining) * elapsedMs) / 1000;
 	const step = Math.min(backlog, Math.floor(budget));
 	let next = shown + step;
 	if (next < text.length && isHighSurrogate(text.charCodeAt(next - 1))) next++;
@@ -48,13 +52,14 @@ const reducedMotion = () =>
 /**
  * Reveal `text` gradually while it grows. Pacing is decided once, at mount: only a message that mounts while
  * streaming is paced, and the text it already has is shown at once (switching sessions or remounting never
- * replays a message). After streaming ends the remaining backlog keeps draining instead of jumping.
+ * replays a message). After streaming ends the remaining backlog drains quickly instead of jumping.
  * Returns the visible text and whether it is still catching up.
  */
 export function useSmoothText(text: string, streaming: boolean): { text: string; pending: boolean } {
 	const [enabled] = useState(() => streaming && !reducedMotion());
 	const [shown, setShown] = useState(text.length);
-	const state = useRef({ text, shown: text.length, carry: 0, last: 0, frame: 0 });
+	const state = useRef({ text, shown: text.length, carry: 0, last: 0, frame: 0, streaming });
+	state.current.streaming = streaming;
 
 	useEffect(() => {
 		if (!enabled) return;
@@ -71,7 +76,7 @@ export function useSmoothText(text: string, streaming: boolean): { text: string;
 		const tick = (now: number) => {
 			const elapsed = now - s.last;
 			if (elapsed >= COMMIT_INTERVAL_MS) {
-				const next = advance(s.text, s.shown, s.carry, elapsed);
+				const next = advance(s.text, s.shown, s.carry, elapsed, !s.streaming);
 				s.shown = next.shown;
 				s.carry = next.carry;
 				s.last = now;

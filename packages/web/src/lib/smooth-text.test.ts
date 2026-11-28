@@ -7,13 +7,19 @@ describe("revealRate", () => {
 	});
 
 	it("drains a moderate backlog within the target latency", () => {
-		expect(revealRate(450)).toBeCloseTo(500);
+		expect(revealRate(450)).toBeCloseTo(900);
 	});
 
 	it("speeds up for a large backlog, capped", () => {
-		expect(revealRate(420)).toBeCloseTo(466.67);
+		expect(revealRate(420)).toBeCloseTo(840);
 		expect(revealRate(700)).toBe(1500);
 		expect(revealRate(100_000)).toBe(1500);
+	});
+
+	it("drains the rest quickly once the stream has ended", () => {
+		expect(revealRate(100, true)).toBe(500);
+		expect(revealRate(2000, true)).toBe(10_000);
+		expect(revealRate(1, true)).toBe(80);
 	});
 });
 

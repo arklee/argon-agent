@@ -80,6 +80,11 @@ interface AppState {
 	editMessage(itemId: string, text: string): Promise<void>;
 	renameSession(name: string, summary?: SessionSummary): Promise<void>;
 	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp", images?: ImageData[]): Promise<void>;
+	/**
+	 * A new turn's prompt on its way to the backend, shown at once instead of after the round trip. It is
+	 * shown only while the session still has `userCount` user messages: the real one replaces it.
+	 */
+	sendingPrompt: { sessionId: string; text: string; userCount: number } | undefined;
 	abort(): Promise<void>;
 	respond(interactionId: string, response: InteractionResponse): Promise<void>;
 	setModel(model: ModelRef): Promise<void>;
@@ -147,7 +152,12 @@ async function activatePath(path: string, draft?: string, fromSessionId?: string
 	if (fromSessionId) toast(t("notifications.switchedSession"));
 }
 
+function clearSending(sending: AppState["sendingPrompt"]): void {
+	if (sending && useApp.getState().sendingPrompt === sending) useApp.setState({ sendingPrompt: undefined });
+}
+
 export const useApp = create<AppState>((set, get) => ({
+	sendingPrompt: undefined,
 	addProjectOpen: false,
 	setAddProjectOpen: (addProjectOpen) => set({ addProjectOpen }),
 	async addProject(cwd) {
@@ -525,13 +535,27 @@ export const useApp = create<AppState>((set, get) => ({
 			const sessionId = await activeLoadedSessionId(true);
 			if (client?.connection.status !== "connected" || !sessionId) throw new Error(t("notifications.connectToSend"));
 			const clientMessageId = crypto.randomUUID();
-			await client.request("sessions.prompt", {
-				sessionId,
-				clientMessageId,
-				text,
-				streamingBehavior,
-				images: images?.length ? images : undefined,
-			});
+			const state = get().sessionStates[sessionId];
+			// Queued prompts (steer / follow-up) show in the queue, and commands may never become a message.
+			const sending =
+				state && state.status === "idle" && !text.startsWith("/")
+					? { sessionId, text, userCount: state.items.filter((item) => item.kind === "user").length }
+					: undefined;
+			if (sending) set({ sendingPrompt: sending });
+			try {
+				const { disposition } = await client.request("sessions.prompt", {
+					sessionId,
+					clientMessageId,
+					text,
+					streamingBehavior,
+					images: images?.length ? images : undefined,
+				});
+				// Handled by an extension command or queued: no user message will come.
+				if (disposition !== "started") clearSending(sending);
+			} catch (error) {
+				clearSending(sending);
+				throw error;
+			}
 		} catch (error) {
 			toast.error(errorMessage(error));
 			throw error;

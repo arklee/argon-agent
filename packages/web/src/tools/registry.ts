@@ -74,7 +74,34 @@ export function displayFor(
 	argsText?: string,
 ): ToolDisplay {
 	if (display) return display;
-	return { kind: "generic", title: name, summary: compactArgs(args) || (argsText ?? "").slice(0, 120) };
+	// Arguments still streaming: the raw JSON is noise, show what it says so far.
+	const summary = compactArgs(args) || (argsText === undefined ? "" : partialArgsSummary(argsText));
+	return { kind: "generic", title: name, summary };
+}
+
+/** Keys whose value describes a call best, in order of preference. */
+const SUMMARY_KEYS = ["command", "path", "file_path", "pattern", "query", "url", "code"];
+
+/**
+ * The most telling string value in incomplete JSON arguments (`{"command":"ls -l`), or "" until one
+ * appears. Never shows the raw JSON.
+ */
+export function partialArgsSummary(argsText: string): string {
+	for (const key of SUMMARY_KEYS) {
+		const match = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(argsText);
+		if (match?.[1] !== undefined) return unescapeJson(match[1]).replace(/\s+/g, " ").trim().slice(0, 120);
+	}
+	return "";
+}
+
+function unescapeJson(value: string): string {
+	// A trailing lone backslash is an escape cut in half.
+	const whole = value.replace(/(^|[^\\])(\\\\)*\\$/, "$1$2");
+	try {
+		return JSON.parse(`"${whole}"`) as string;
+	} catch {
+		return whole;
+	}
 }
 
 export function compactArgs(args: unknown): string {

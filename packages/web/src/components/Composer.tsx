@@ -99,16 +99,18 @@ export function Composer({ session }: { session: SessionState }) {
 			return;
 		}
 		setSending(true);
+		// The message shows in the transcript at once, so it leaves the composer at once too.
+		setText("");
 		try {
 			await sendPrompt(
 				value,
 				running ? (behavior ?? "followUp") : undefined,
 				images.map(({ mimeType, data }) => ({ mimeType, data })),
 			);
-			setText("");
 			attachments.clear();
 		} catch {
-			// toast shown by the store; keep the text so nothing is lost
+			// toast shown by the store; put the text back (unless something new was typed) so nothing is lost
+			setText((current) => current || text);
 		} finally {
 			setSending(false);
 			ref.current?.focus();

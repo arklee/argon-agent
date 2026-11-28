@@ -6,6 +6,7 @@ import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { type Components, defaultComponents, defaultRehypePlugins, Streamdown } from "streamdown";
 import { openFileInPanel } from "@/components/FileLink";
+import { RenderBoundary } from "@/components/RenderBoundary";
 import { fileLinkTarget, rehypeFileLinks } from "@/lib/file-links";
 import { normalizeMath } from "@/lib/math-delimiters";
 import { useSmoothText } from "@/lib/smooth-text";
@@ -43,16 +44,23 @@ function linkComponents(cwd: string | undefined): Components {
 	};
 }
 
-export const Markdown = memo(function Markdown({
-	text,
-	streaming,
-	cwd,
-}: {
+interface MarkdownProps {
 	text: string;
 	streaming?: boolean;
 	/** Base for relative file links; the active session's cwd when absent. */
 	cwd?: string;
-}) {
+}
+
+/** Markdown that falls back to plain text if rendering fails (it never takes the transcript down with it). */
+export const Markdown = memo(function Markdown(props: MarkdownProps) {
+	return (
+		<RenderBoundary fallback={() => <p className="argon-markdown whitespace-pre-wrap">{props.text}</p>}>
+			<MarkdownContent {...props} />
+		</RenderBoundary>
+	);
+});
+
+function MarkdownContent({ text, streaming, cwd }: MarkdownProps) {
 	const { t } = useTranslation();
 	const smooth = useSmoothText(text, Boolean(streaming));
 	const source = useMemo(() => normalizeMath(smooth.text), [smooth.text]);
@@ -85,4 +93,4 @@ export const Markdown = memo(function Markdown({
 			{source}
 		</Streamdown>
 	);
-});
+}

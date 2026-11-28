@@ -18,6 +18,10 @@ export function ChatView({ session }: { session: SessionState }) {
 	const environment = useApp((s) => s.environment);
 	const summary = useApp((s) => s.sessions.find((x) => x.sessionId === session.sessionId));
 	const respond = useApp((s) => s.respond);
+	const sending = useApp((s) => s.sendingPrompt?.sessionId === session.sessionId);
+	// A first message on its way (or a run without one) already shows in the transcript.
+	const empty =
+		session.items.length === 0 && !session.retry && !sending && session.status === "idle" && !session.compacting;
 
 	const [renaming, setRenaming] = useState<string>();
 	const firstUser = session.items.find((i) => i.kind === "user");
@@ -51,7 +55,7 @@ export function ChatView({ session }: { session: SessionState }) {
 
 			<div className="flex min-h-0 flex-1">
 				<div className="flex min-w-0 flex-1 flex-col">
-					{session.items.length === 0 && !session.retry ? (
+					{empty ? (
 						<div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
 							<p className="text-lg font-medium">{t("chat.welcome")}</p>
 							<p className="font-mono text-xs text-muted-foreground">

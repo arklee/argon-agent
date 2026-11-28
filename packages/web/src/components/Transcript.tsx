@@ -21,11 +21,12 @@ import { OpenFileButton, openFileInPanel } from "@/components/FileLink";
 import { SessionImages } from "@/components/Images";
 import { Markdown } from "@/components/Markdown";
 import { assistantText, CopyButton, IconAction, MessageEditor, Pencil, RotateCcw } from "@/components/MessageActions";
-import { callState } from "@/components/ToolCallCard";
+import { RenderBoundary } from "@/components/RenderBoundary";
 import { ToolRun } from "@/components/ToolRun";
 import { useCountLabels, useToolVerb } from "@/components/ToolSummary";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { type Activity, liveActivity, turnStartedAt } from "@/lib/activity";
 import { basename, formatElapsed, formatNumber } from "@/lib/format";
 import { useProcessFold } from "@/lib/process-fold";
 import {
@@ -227,8 +228,8 @@ function groupCalls(group: readonly ProcessSegment[]): ToolCallBlock[] {
 }
 
 /**
- * The fold line above a turn's process (or one group of it): live timer and current activity while
- * working, the turn's time and the group's counts afterwards.
+ * The fold line above a turn's process (or one group of it): its counts while working (the live
+ * activity line below the turn says what is happening), the turn's time and counts afterwards.
  */
 function TurnHeader({
 	turn,
@@ -249,20 +250,17 @@ function TurnHeader({
 }) {
 	const { t } = useTranslation();
 	const countLabels = useCountLabels();
-	const now = useTicker(live);
 	const timing = turnTiming(turn);
 	const calls = groupCalls(group);
 	const labels = countLabels(summarize(flattenCalls(calls, tools)));
 	let title: string | undefined;
-	if (live) title = t("chat.workingFor", { duration: formatElapsed(now - timing.startedAt) });
+	if (live) title = labels.length ? undefined : t("chat.inProgress");
 	else if (calls.length === 0) title = t("chat.thought");
 	else if (first && !turn.live)
 		title = timing.endedAt
 			? t("chat.workedFor", { duration: formatElapsed(timing.endedAt - timing.startedAt) })
 			: t("chat.worked");
-	// Folded while working: say what the agent is doing instead of the counts.
-	const activity = live && !open ? <GroupActivity group={group} tools={tools} /> : null;
-	const counts = !open && labels.length > 0 && (
+	const counts = (!open || live) && labels.length > 0 && (
 		<span
 			className={cn("min-w-0 truncate", title && "text-muted-foreground/70 group-hover/head:text-muted-foreground")}
 		>
@@ -277,36 +275,63 @@ function TurnHeader({
 			aria-expanded={open}
 			className="group/head flex max-w-full min-w-0 items-center gap-2 py-0.5 text-left text-muted-foreground hover:text-foreground"
 		>
-			{live ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : null}
 			{title && <span className="shrink-0">{title}</span>}
-			{activity ?? counts}
-			{!title && open && <span className="shrink-0">{t("chat.worked")}</span>}
+			{counts}
+			{!title && !counts && open && <span className="shrink-0">{t("chat.worked")}</span>}
 			<ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
 		</button>
 	);
 }
 
-/** The running tool call, else thinking in progress; nothing while the model is between steps. */
-function GroupActivity({ group, tools }: { group: readonly ProcessSegment[]; tools: Tools }) {
+/**
+ * The one live status line under a running turn: what the agent is doing and for how long. It stays
+ * put for the whole turn and only changes its words, so model calls, tools and thoughts never make
+ * the indicator blink in and out.
+ */
+function ActivityLine({ activity, startedAt }: { activity: Activity; startedAt: number | undefined }) {
 	const { t } = useTranslation();
 	const verb = useToolVerb();
-	const last = group.at(-1);
-	if (!last) return null;
-	if (last.type === "thinking" && last.streaming)
-		return <span className="min-w-0 truncate text-muted-foreground/70">· {t("chat.thinkingInProgress")}</span>;
-	if (last.type !== "tools") return null;
-	const active = last.calls.findLast((call) => {
-		const state = callState(tools[call.toolCallId]);
-		return state === "running" || state === "pending";
-	});
-	if (!active) return null;
-	const display = displayFor(active.name, active.args, active.display, active.argsText);
-	// While arguments stream in, a generic summary is raw JSON: name the tool alone.
-	const summary = display.kind === "generic" && !tools[active.toolCallId] ? "" : display.summary;
+	const now = useTicker(startedAt !== undefined);
+	let label: React.ReactNode;
+	switch (activity.kind) {
+		case "compacting":
+			label = t("chat.compacting");
+			break;
+		case "waiting":
+			label = activity.message ?? t("chat.working");
+			break;
+		case "thinking":
+			label = (
+				<>
+					{t("chat.thinkingInProgress")}
+					{activity.title && <span className="text-muted-foreground/70"> · {activity.title}</span>}
+				</>
+			);
+			break;
+		case "responding":
+			label = t("chat.responding");
+			break;
+		case "preparing":
+		case "tool": {
+			const { call } = activity;
+			const display = displayFor(call.name, call.args, call.display, call.argsText);
+			label = (
+				<span className="font-mono fs-code">
+					{verb(display, call.name)} {display.summary}
+				</span>
+			);
+			break;
+		}
+	}
+	const elapsed = startedAt !== undefined ? Math.max(0, now - startedAt) : undefined;
 	return (
-		<span className="min-w-0 truncate font-mono fs-code text-muted-foreground/70">
-			· {verb(display, active.name)} {summary}
-		</span>
+		<div role="status" className="flex min-w-0 items-center gap-2 pt-1 text-muted-foreground">
+			<Loader2 className="size-3.5 shrink-0 animate-spin" />
+			<span className="min-w-0 truncate">{label}</span>
+			{elapsed !== undefined && elapsed >= 1000 && (
+				<span className="shrink-0 tabular-nums text-muted-foreground/70">· {formatElapsed(elapsed)}</span>
+			)}
+		</div>
 	);
 }
 
@@ -588,7 +613,18 @@ export function Transcript({ session }: { session: SessionState }) {
 		}
 		return points;
 	}, [session.items, session.userBranches]);
-	const lastItem = session.items.at(-1);
+	// The prompt just sent, until its real message arrives (it ends the previous turn at once, too).
+	const sending = useApp((s) => s.sendingPrompt);
+	const sendingItem = useMemo((): TranscriptItem | undefined => {
+		if (sending?.sessionId !== session.sessionId) return undefined;
+		const users = session.items.reduce((n, item) => n + Number(item.kind === "user"), 0);
+		if (users !== sending.userCount) return undefined;
+		return { kind: "user", id: "sending", text: sending.text, imageCount: 0, timestamp: Date.now() };
+	}, [sending, session.sessionId, session.items]);
+	const items = useMemo(
+		() => (sendingItem ? [...session.items, sendingItem] : session.items),
+		[session.items, sendingItem],
+	);
 	const pendingApprovals = useMemo(
 		() => new Set(session.pendingInteractions.flatMap((i) => (i.kind === "tool_approval" ? [i.toolCallId] : []))),
 		[session.pendingInteractions],
@@ -611,7 +647,7 @@ export function Transcript({ session }: { session: SessionState }) {
 		void openVersion;
 		const split = processFold === "collapsed";
 		return transcriptRows(
-			session.items,
+			items,
 			running,
 			(turn, group, last) => {
 				// A call waiting for approval is never folded away.
@@ -623,7 +659,7 @@ export function Transcript({ session }: { session: SessionState }) {
 			},
 			split,
 		);
-	}, [session.items, running, pendingApprovals, openChoices, openVersion, processFold]);
+	}, [items, running, pendingApprovals, openChoices, openVersion, processFold]);
 	const toggleGroup = useCallback(
 		(groupId: string, open: boolean) => {
 			openChoices.set(groupId, !open);
@@ -655,9 +691,9 @@ export function Transcript({ session }: { session: SessionState }) {
 		return tools;
 	};
 
-	const waitingForFirstToken =
-		session.compacting || (running && (lastItem?.kind !== "assistant" || !lastItem.streaming));
-	const showStatus = !!session.retry || (waitingForFirstToken && session.pendingInteractions.length === 0);
+	const activity = liveActivity(session, sendingItem !== undefined);
+	const startedAt = sendingItem ? sendingItem.timestamp : running ? turnStartedAt(session) : undefined;
+	const showStatus = !!session.retry || activity !== undefined;
 	const count = rows.length + Number(showStatus);
 	const list = useRef<VirtualizerHandle>(null);
 	const pinned = useRef(true);
@@ -679,10 +715,23 @@ export function Transcript({ session }: { session: SessionState }) {
 	}, [count]);
 	useLayoutEffect(follow, [follow]);
 
-	const renderRow = (row: TranscriptRow) => {
+	const renderRow = (row: TranscriptRow) => (
+		<RenderBoundary
+			fallback={() => (
+				<div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+					<CircleAlert className="size-3.5" />
+					{t("chat.renderFailed")}
+				</div>
+			)}
+		>
+			{renderRowContent(row)}
+		</RenderBoundary>
+	);
+	const renderRowContent = (row: TranscriptRow) => {
 		switch (row.kind) {
 			case "item":
-				return <ItemRow item={row.item} idle={idle} branch={branches.get(row.item.id)} />;
+				// The message being sent cannot be edited until it is real.
+				return <ItemRow item={row.item} idle={idle && row.item !== sendingItem} branch={branches.get(row.item.id)} />;
 			case "turnHeader":
 				return (
 					<TurnHeader
@@ -784,12 +833,9 @@ export function Transcript({ session }: { session: SessionState }) {
 										components={{ emphasis: <strong /> }}
 									/>
 								</div>
-							) : (
-								<div className="flex items-center gap-2 pt-1 text-muted-foreground">
-									<span className="size-2 animate-pulse rounded-full bg-foreground/60" />
-									{session.compacting ? t("chat.compacting") : (session.workingMessage ?? t("chat.working"))}
-								</div>
-							)}
+							) : activity ? (
+								<ActivityLine activity={activity} startedAt={startedAt} />
+							) : null}
 						</div>
 					);
 				}}
