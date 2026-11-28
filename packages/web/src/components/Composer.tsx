@@ -157,8 +157,10 @@ export function Composer({ session }: { session: SessionState }) {
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for files; the textarea and attach button are the accessible inputs */}
 			<div
 				className={cn(
-					"relative rounded-2xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/30",
-					dragging && "ring-2 ring-primary/40",
+					// One hairline border that darkens slightly on focus — no outer focus ring, which read as a grey
+					// halo around the border (ChatGPT / Claude style).
+					"relative rounded-2xl border bg-background shadow-[0_2px_8px_-2px_rgb(0_0_0/0.06)] transition-[border-color,box-shadow] focus-within:border-foreground/20 focus-within:shadow-[0_4px_16px_-4px_rgb(0_0_0/0.1)]",
+					dragging && "border-primary/50",
 				)}
 				onDragOver={(e) => {
 					if (!e.dataTransfer.types.includes("Files")) return;
