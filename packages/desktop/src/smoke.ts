@@ -69,21 +69,36 @@ export async function smoke(
 		console.error("DESKTOP_CLIPBOARD_OK: text copy succeeds, clipboard read denied");
 		// Exercise the renderer's storage synchronization path so its preference and native chrome agree.
 		// Calling the native bridge alone leaves the renderer on system, which can reset the native theme.
-		for (const theme of ["light", "dark", "system"] as const) {
+		for (const theme of ["light", "dark", "system", "dark", "light", "system"] as const) {
 			await getWindow()!.webContents.executeJavaScript(`
 				localStorage.setItem('argon.theme', ${JSON.stringify(theme)});
 				window.dispatchEvent(new StorageEvent('storage', { key: 'argon.theme' }));
 			`);
 			const themeDeadline = Date.now() + 5_000;
-			while (nativeTheme.themeSource !== theme && Date.now() < themeDeadline) await delay(50);
-			assert.equal(nativeTheme.themeSource, theme, "Renderer theme reaches native chrome");
-			// Allow the media-query feedback to settle before checking both sides again.
-			await delay(200);
-			assert.equal(nativeTheme.themeSource, theme, "Native theme remains synchronized");
-			const rendererDark = await getWindow()!.webContents.executeJavaScript(
-				"document.documentElement.classList.contains('dark')",
-			);
-			assert.equal(rendererDark, nativeTheme.shouldUseDarkColors, "Renderer and native colors agree");
+			// IPC, Chromium's media query update and the page's change handler settle independently.
+			// Wait for the complete state, not a fixed delay after only the main process has updated.
+			let stableSince: number | undefined;
+			while (true) {
+				const renderer = await getWindow()!.webContents.executeJavaScript(`({
+					dark: document.documentElement.classList.contains('dark'),
+					mediaDark: matchMedia('(prefers-color-scheme: dark)').matches
+				})`);
+				const nativeDark = nativeTheme.shouldUseDarkColors;
+				const agrees =
+					nativeTheme.themeSource === theme &&
+					renderer.dark === nativeDark &&
+					renderer.mediaDark === nativeDark &&
+					(theme === "system" || nativeDark === (theme === "dark"));
+				if (agrees) {
+					stableSince ??= Date.now();
+					if (Date.now() - stableSince >= 200) break;
+				} else stableSince = undefined;
+				assert(
+					Date.now() < themeDeadline,
+					`Theme ${theme} did not settle: ${JSON.stringify({ source: nativeTheme.themeSource, nativeDark, ...renderer })}`,
+				);
+				await delay(50);
+			}
 		}
 		console.error("DESKTOP_THEME_OK: light, dark and system stay synchronized");
 		if (process.platform === "darwin" || process.platform === "win32") {
