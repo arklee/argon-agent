@@ -4,7 +4,7 @@
 
 评估依据：
 
-- 本机 pi 1.6.1 自带的文档：`docs/rpc.md`、`rpc-commands.md`、`rpc-extension-ui.md`、`sdk.md`、`security.md`。
+- 本机 pi 1.7.0 自带的文档：`docs/rpc.md`、`rpc-commands.md`、`rpc-extension-ui.md`、`sdk.md`、`security.md`。
 - pi 的类型定义。
 - [percho](https://github.com/Jaxton07/percho) 的架构文档和踩坑记录。
 - 第一版的实际冒烟测试结果。
@@ -44,7 +44,7 @@
 - 本机装的 `pi` 不是二进制，而是一个 shell 启动脚本，最终用 Node 跑 npm 包。真正的单文件二进制要靠 Bun 编译（`build:binary`），需要按平台分别打包和分发。
 - 如果以后需要 RPC，可以用 `utilityProcess.fork()` 跑 pi 包导出的 `./rpc-entry`，直接用 Electron 自带的 Node，不必附带额外的二进制。
 
-**决定**：选 SDK。pi 版本钉死（当前是 1.6.1），所有 pi 类型只在 backend 的适配层出现（见 CLAUDE.md 边界第 3 条）。等协议稳定后，RPC 可以作为另一种传输方式接入，但不是主路线。
+**决定**：选 SDK。pi 版本钉死（当前是 1.7.0），所有 pi 类型只在 backend 的适配层出现（见 CLAUDE.md 边界第 3 条）。等协议稳定后，RPC 可以作为另一种传输方式接入，但不是主路线。
 
 ---
 

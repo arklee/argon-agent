@@ -33,7 +33,7 @@ packages/web      React 19 + Vite + Tailwind v4 + shadcn/ui（radix-nova）+ zus
 8. **改 pi 的优先级：** inline extension（例如 `backend/src/permissions.ts`）> SDK 参数 > patch-package > fork。能用扩展解决的，就不要打补丁。
 9. **只用第三方代码的一部分时，放进 `packages/backend/vendor/`**（见 D18 和 `vendor/README.md`）：只取用到的文件，改动越少越好，用 `npm run vendor -- sync` 跟随上游。不要为了一个功能整包安装，也不要按 Argon 风格重写上游代码。
 
-## pi SDK 注意事项（当前钉在 1.6.1）
+## pi SDK 注意事项（当前钉在 1.7.0）
 
 - 用 `createAgentSessionRuntime`，不要直接用 `createAgentSession`。原因是 `runtime.dispose()` 会发出 `session_shutdown`，MCP 等扩展靠这个事件关闭子进程；单独调用 `session.dispose()` 不会发。
 - 先 `subscribe` 再 `bindExtensions`，否则 `session_start` 阶段产生的事件会丢。
@@ -43,7 +43,7 @@ packages/web      React 19 + Vite + Tailwind v4 + shadcn/ui（radix-nova）+ zus
 - 所有会话共用同一个 `ModelRuntime`（由 `SessionRegistry` 创建），它读写 `$ARGON_HOME/agent/auth.json`，配置、登录状态、会话均与 pi CLI 隔离。项目配置使用 `.argon/`。
 - `patches/` 里有 patch-package 补丁（`postinstall` 自动应用）：给内置 MCP 扩展加了 `argon:mcp:*` 事件通道（由 `backend/src/mcp-bridge.ts` 使用），以及 `registeredServerConfig` / `updateRegisteredConfig` 两个选项（扩展注册的服务器也能按会话启停，见 D16）。改 pi 文件后补丁要手动用 `git diff --no-index` 重新生成（patch-package 自己生成会失败）。
 - MCP 扩展通过 `loadConfig` / `updateConfig` 实现会话级启停（见 D16）；MCP 配置辅助函数按文件 URL 导入，升级 pi 时需核对路径和接口。
-- 升级 pi 时：先看 CHANGELOG，确认补丁还能应用（或官方已提供等价接口，可以删掉补丁），再检查 `translate.ts` / `managed-session.ts` 依赖的事件结构，跑一遍真实会话冒烟（发消息、工具审批、重连）。
+- 升级 pi 时：先看 CHANGELOG，确认补丁还能应用（或官方已提供等价接口，可以删掉补丁），再检查 `translate.ts` / `managed-session.ts` 依赖的事件结构，跑一遍真实会话冒烟（发消息、工具审批、重连）。`magpie-pi` 的 peer 依赖钉在旧的 pi 小版本上，根 `package.json` 的 `overrides` 要同步改成新版本；装完用 `npm ls @earendil-works/pi-coding-agent` 确认只有一份（有两份时补丁会打在旧的那份上）。
 
 ## 安全
 

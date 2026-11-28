@@ -28,6 +28,12 @@
 		"dist:desktop": "npm run dist -w @argon/desktop",
 		"smoke:desktop": "node scripts/desktop-smoke.mjs"
 	},
+	"overrides": {
+		"magpie-pi": {
+			"@earendil-works/pi-ai": "1.7.0",
+			"@earendil-works/pi-coding-agent": "1.7.0"
+		}
+	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.0",
 		"patch-package": "^8.0.1",

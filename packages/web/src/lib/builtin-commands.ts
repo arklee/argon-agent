@@ -1,7 +1,7 @@
 /**
  * pi's built-in slash commands (`/compact`, `/model`, ...) live in its TUI, not in the SDK's
  * `prompt()`: sent to the backend they would reach the model as plain text. The composer handles the
- * ones Argon supports and stops the others. Names follow pi 1.6.1 (core/slash-commands.ts).
+ * ones Argon supports and stops the others. Names follow pi 1.7.0 (core/slash-commands.ts).
  *
  * An extension command with the same name wins (it is sent to pi, which runs it).
  */

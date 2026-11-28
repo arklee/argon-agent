@@ -146,6 +146,15 @@ async function welcome(client: WebSocketAgentClient, signal: AbortSignal) {
 
 type Prompt = MethodParams<"sessions.prompt">;
 
+/** The "Write diff" step's file change (write, or apply_patch for GPT models) carries its diff. */
+function hasWriteDiff(state: SessionState): boolean {
+	return Object.values(state.tools).some(
+		(tool) =>
+			(tool.name === "write" || tool.name === "apply_patch") &&
+			(tool.diffs ?? []).some(({ diff }) => diff.includes("hello argon")),
+	);
+}
+
 async function checkCredentialLifetime() {
 	// pi refreshes OAuth credentials with less than five minutes remaining and persists the result.
 	const auth = JSON.parse((await readFile(AUTH_PATH, "utf8")).replace(/^\uFEFF/, "")) as Record<
@@ -389,7 +398,8 @@ async function main() {
 					{
 						sessionId,
 						clientMessageId: randomUUID(),
-						text: "Use the write tool to create notes.txt in the current project directory containing exactly the line: hello argon",
+						// GPT models get apply_patch instead of write (decisions D17).
+						text: "Create notes.txt in the current project directory containing exactly the line: hello argon. Use your file-writing tool (write or apply_patch), not bash.",
 					},
 					signal,
 				);
@@ -397,9 +407,7 @@ async function main() {
 				await client().request("sessions.setPermissionMode", { sessionId, mode: SESSION_MODE });
 			}
 			assert.match(await readFile(join(cwd, "notes.txt"), "utf8"), /hello argon/);
-			const state = await snapshot(client(), sessionId);
-			const write = Object.values(state.tools).find((tool) => tool.name === "write");
-			assert(write?.diff?.includes("hello argon"), "Write call has no diff");
+			assert(hasWriteDiff(await snapshot(client(), sessionId)), "Write call has no diff");
 		});
 
 		await check("Reconnect", async (signal) => {
@@ -436,8 +444,7 @@ async function main() {
 				itemId: withImage.id,
 			});
 			assert.equal(images.length, 1, "Reopened session could not load the image");
-			const write = Object.values(state.tools).find((tool) => tool.name === "write");
-			assert(write?.diff?.includes("hello argon"), "Reopened session lost the write diff");
+			assert(hasWriteDiff(state), "Reopened session lost the write diff");
 		});
 
 		await check("Cleanup", async () => {

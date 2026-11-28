@@ -225,3 +225,8 @@
 - [ ] Windows 验收：运行新增 CI，并实机验证中文/空格路径、Git Bash 工具审批、OAuth 回调、MCP 子进程退出、安装/卸载、托盘点击切换及关机/注销时不阻塞（`session-end`）；Windows CI 尚未在本轮运行
 
 - [x] 社区插件开关：设置 → 插件 里启用/停用，首次启用时下载 Bun（进度、失败 URL、换源重试）；下载源可选 GitHub / npmmirror / npmmirror CDN / 自定义 HTTPS 地址，`ARGON_BUN_MIRROR` 可在 backend 固定；保留 SHA-256 校验。可选用 backend 机器上已安装的兼容 Bun（≥ 1.3.14）而不下载。依赖 magpie-pi 0.3.2（`prepareBun` / `bunReady` / `findBun`）。
+
+- [x] 升级 pi 到 1.7.0：补丁原样可用；`magpie-pi` 的 peer 依赖钉在 `~1.6.0`，会让 npm 再装一份 1.6.1 并把补丁打在旧的那份上，根 `package.json` 用 `overrides` 统一到 1.7.0
+- [x] `npm run smoke` 的 "Write diff" 步骤还在读 D17 之前的 `ToolCallState.diff`，GPT 模型下也不会用 write：改为检查 `diffs`，并接受 write 或 apply_patch
+- [ ] `scripts/*.ts` 不在任何 typecheck 里（tsx 直接运行），协议改字段时冒烟脚本不会报错，上面的 `diff` → `diffs` 就是这样漏掉的
+- [ ] `npm run smoke` 直接使用真实的 `~/.argon`，会继承用户设置（例如默认工具预设为 codemode_only 时 "Sandboxed bash" 会失败）；可以让冒烟使用临时 `ARGON_HOME`，只复制凭据和 environment.json
