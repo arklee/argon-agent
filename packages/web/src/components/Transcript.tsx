@@ -726,7 +726,18 @@ export function Transcript({ session }: { session: SessionState }) {
 	const showStatus = !!session.retry || (activity !== undefined && !liveHeader);
 	const count = rows.length + Number(showStatus);
 	const list = useRef<VirtualizerHandle>(null);
+	// Whether the list follows new output. Only the user unpins it (scrolling up); reaching the bottom again,
+	// End or sending a message pins it. Judging by distance alone loses to streaming: small wheel steps stay
+	// within the threshold and the next resize pulls the view back down.
 	const pinned = useRef(true);
+	const lastOffset = useRef(0);
+	const touchY = useRef<number>(undefined);
+	const unpin = () => {
+		pinned.current = false;
+	};
+	useLayoutEffect(() => {
+		if (sending?.sessionId === session.sessionId) pinned.current = true;
+	}, [sending, session.sessionId]);
 	const cache = useMemo(() => rowCaches.get(session.sessionId), [session.sessionId]);
 	useLayoutEffect(() => {
 		const handle = list.current;
@@ -802,6 +813,7 @@ export function Transcript({ session }: { session: SessionState }) {
 			onKeyDown={(event) => {
 				const target = event.target;
 				if (target instanceof HTMLElement && (target.closest("input, textarea") || target.isContentEditable)) return;
+				if (event.key === "ArrowUp" || event.key === "PageUp" || (event.key === " " && event.shiftKey)) unpin();
 				if (event.key !== "Home" && event.key !== "End") return;
 				event.preventDefault();
 				pinned.current = event.key === "End";
@@ -812,6 +824,17 @@ export function Transcript({ session }: { session: SessionState }) {
 			}}
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can focus and scroll the transcript.
 			tabIndex={0}
+			onWheel={(event) => {
+				if (event.deltaY < 0) unpin();
+			}}
+			onTouchStart={(event) => {
+				touchY.current = event.touches[0]?.clientY;
+			}}
+			onTouchMove={(event) => {
+				const y = event.touches[0]?.clientY;
+				if (y !== undefined && touchY.current !== undefined && y > touchY.current) unpin();
+				touchY.current = y;
+			}}
 			className="argon-chat min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]"
 		>
 			<Virtualizer
@@ -822,7 +845,13 @@ export function Transcript({ session }: { session: SessionState }) {
 				onResize={follow}
 				onScroll={(offset: number) => {
 					const handle = list.current;
-					if (handle) pinned.current = handle.scrollSize - offset - handle.viewportSize < 80;
+					if (!handle) return;
+					const distance = handle.scrollSize - offset - handle.viewportSize;
+					// Moving up away from the bottom (e.g. dragging the scrollbar) unpins; the content shrinking under
+					// a pinned view also moves up, but leaves it at the bottom. Moving down near the bottom pins again.
+					if (offset < lastOffset.current && distance > 1) unpin();
+					else if (offset > lastOffset.current && distance < 80) pinned.current = true;
+					lastOffset.current = offset;
 				}}
 			>
 				{(_: unknown, index: number) => {
